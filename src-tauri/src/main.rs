@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    thai_htay_lib::run()
+    sine_shin_lib::run()
 }

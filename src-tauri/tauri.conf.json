@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "thai-htay",
+  "productName": "sine-shin",
   "version": "0.1.0",
-  "identifier": "com.bkthomas.thai-htay",
+  "identifier": "com.bkthomas.sine-shin",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "thai-htay",
+        "title": "sine-shin",
         "width": 800,
         "height": 600,
         "fullscreen": true
