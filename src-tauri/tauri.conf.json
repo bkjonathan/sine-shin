@@ -12,10 +12,14 @@
   "app": {
     "windows": [
       {
-        "title": "sine-shin",
-        "width": 800,
-        "height": 600,
-        "fullscreen": true
+        "title": "Sine Shin",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": false,
+        "transparent": true,
+        "titleBarStyle": "Overlay"
       }
     ],
     "security": {

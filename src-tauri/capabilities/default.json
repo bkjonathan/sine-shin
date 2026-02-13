@@ -8,6 +8,8 @@
     "opener:default",
     "sql:default",
     "dialog:default",
-    "fs:default"
+    "dialog:allow-open",
+    "fs:default",
+    "fs:allow-read"
   ]
 }
