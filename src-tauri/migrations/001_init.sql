@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS orders (
   order_id TEXT,
   customer_id INTEGER,
   order_from TEXT,
+  product_url TEXT,
   product_qty INTEGER,
   price REAL,
   exchange_rate REAL,

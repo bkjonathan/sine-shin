@@ -14,6 +14,7 @@ export const createOrder = async (
   return await invoke("create_order", {
     customerId: order.customer_id,
     orderFrom: order.order_from,
+    productUrl: order.product_url,
     productQty: order.product_qty,
     price: order.price,
     exchangeRate: order.exchange_rate,
@@ -35,6 +36,7 @@ export const updateOrder = async (
     id: order.id,
     customerId: order.customer_id,
     orderFrom: order.order_from,
+    productUrl: order.product_url,
     productQty: order.product_qty,
     price: order.price,
     exchangeRate: order.exchange_rate,

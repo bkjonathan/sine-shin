@@ -3,6 +3,7 @@ export interface Order {
   order_id?: string;
   customer_id?: number;
   order_from?: string;
+  product_url?: string;
   product_qty?: number;
   price?: number;
   exchange_rate?: number;

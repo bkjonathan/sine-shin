@@ -11,6 +11,22 @@ use tokio::sync::Mutex;
 // Shared database pool state
 pub struct AppDb(pub Arc<Mutex<Pool<Sqlite>>>);
 
+async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error>> {
+    const INIT_SQL: &str = include_str!("../migrations/001_init.sql");
+    
+    // Execute SQL commands from the migration file
+    // We split by semicolon to execute multiple statements individually
+    for statement in INIT_SQL.split(';') {
+        if !statement.trim().is_empty() {
+             sqlx::query(statement)
+                .execute(pool)
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 struct ShopSettings {
     id: i64,
@@ -51,6 +67,7 @@ struct Order {
     order_id: Option<String>,
     customer_id: Option<i64>,
     order_from: Option<String>,
+    product_url: Option<String>,
     product_qty: Option<i64>,
     price: Option<f64>,
     exchange_rate: Option<f64>,
@@ -72,6 +89,7 @@ struct OrderWithCustomer {
     customer_id: Option<i64>,
     customer_name: Option<String>,
     order_from: Option<String>,
+    product_url: Option<String>,
     product_qty: Option<i64>,
     price: Option<f64>,
     exchange_rate: Option<f64>,
@@ -330,12 +348,12 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    sqlx::query("DROP TABLE IF EXISTS customers")
+    sqlx::query("DROP TABLE IF EXISTS orders")
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    sqlx::query("DROP TABLE IF EXISTS orders")
+    sqlx::query("DROP TABLE IF EXISTS customers")
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -355,25 +373,10 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
     }
 
     // 3. Re-run migrations
-    // Since we cleared migration history, we can just run the init sql manually 
-    // or let the migration framework handle it on restart.
-    // Ideally we re-run the init script to make the app usable immediately without restart.
-    sqlx::query(include_str!("../migrations/001_init.sql"))
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Re-insert migration record to keep state consistent?
-    // Or just rely on the fact that running the SQL created the tables.
-    // If we want the migration system to know about it, we'd need to insert into _sqlx_migrations.
-    // But simplified approach for "Reset": just run the schema creation.
-    // When app restarts, migration logic will see tables exist and might try to run migration again if not recorded.
-    // So let's record it manually to be safe, matching tauri-plugin-sql logic if possible.
-    // Actually, tauri-plugin-sql creates the _sqlx_migrations table.
-    // By dropping it, we force a re-check on next startup. 
-    // If we run `001_init.sql` now, tables exist. Next startup, plugin sees migration 1 not applied (because table dropped), tries to run it.
-    // `001_init.sql` uses `CREATE TABLE IF NOT EXISTS`, so it should be safe to run again on startup.
-    // So current approach is fine.
+    // 3. Re-run migrations explicitly
+    if let Err(e) = init_db(&*pool).await {
+        return Err(e.to_string());
+    }
 
     Ok(())
 }
@@ -489,6 +492,7 @@ async fn create_order(
     app: AppHandle,
     customer_id: i64,
     order_from: Option<String>,
+    product_url: Option<String>,
     product_qty: Option<i64>,
     price: Option<f64>,
     exchange_rate: Option<f64>,
@@ -505,10 +509,11 @@ async fn create_order(
     let pool = db.0.lock().await;
 
     let id = sqlx::query(
-        "INSERT INTO orders (customer_id, order_from, product_qty, price, exchange_rate, shipping_fee, delivery_fee, cargo_fee, product_weight, order_date, arrived_date, shipment_date, user_withdraw_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO orders (customer_id, order_from, product_url, product_qty, price, exchange_rate, shipping_fee, delivery_fee, cargo_fee, product_weight, order_date, arrived_date, shipment_date, user_withdraw_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(customer_id)
     .bind(order_from)
+    .bind(product_url)
     .bind(product_qty)
     .bind(price)
     .bind(exchange_rate)
@@ -564,6 +569,7 @@ async fn update_order(
     id: i64,
     customer_id: i64,
     order_from: Option<String>,
+    product_url: Option<String>,
     product_qty: Option<i64>,
     price: Option<f64>,
     exchange_rate: Option<f64>,
@@ -580,10 +586,11 @@ async fn update_order(
     let pool = db.0.lock().await;
 
     sqlx::query(
-        "UPDATE orders SET customer_id = ?, order_from = ?, product_qty = ?, price = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, product_weight = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ? WHERE id = ?",
+        "UPDATE orders SET customer_id = ?, order_from = ?, product_url = ?, product_qty = ?, price = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, product_weight = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ? WHERE id = ?",
     )
     .bind(customer_id)
     .bind(order_from)
+    .bind(product_url)
     .bind(product_qty)
     .bind(price)
     .bind(exchange_rate)
@@ -703,11 +710,15 @@ pub fn run() {
             let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
 
             let pool = tauri::async_runtime::block_on(async {
-                SqlitePoolOptions::new()
+                let pool = SqlitePoolOptions::new()
                     .max_connections(5)
                     .connect(&db_url)
                     .await
-                    .expect("Failed to create database pool")
+                    .expect("Failed to create database pool");
+                
+                init_db(&pool).await.expect("Failed to initialize database");
+                
+                pool
             });
 
 

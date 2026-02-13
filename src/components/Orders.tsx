@@ -45,7 +45,8 @@ export default function Orders() {
   // Form State
   const initialFormState = {
     customer_id: "",
-    order_from: "",
+    order_from: "Facebook",
+    product_url: "",
     product_qty: "",
     price: "",
     exchange_rate: "",
@@ -114,7 +115,8 @@ export default function Orders() {
       setEditingOrder(order);
       setFormData({
         customer_id: order.customer_id?.toString() || "",
-        order_from: order.order_from || "",
+        order_from: order.order_from || "Facebook",
+        product_url: order.product_url || "",
         product_qty: order.product_qty?.toString() || "",
         price: order.price?.toString() || "",
         exchange_rate: order.exchange_rate?.toString() || "",
@@ -150,6 +152,7 @@ export default function Orders() {
       const payload: any = {
         customer_id: parseInt(formData.customer_id),
         order_from: formData.order_from || undefined,
+        product_url: formData.product_url || undefined,
         product_qty: formData.product_qty
           ? parseInt(formData.product_qty)
           : undefined,
@@ -386,6 +389,17 @@ export default function Orders() {
                         {order.order_from || "-"}
                       </span>
                     </p>
+                    {order.product_url && (
+                      <a
+                        href={order.product_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-[var(--color-accent-blue)] hover:underline mb-2 block truncate"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Product Link
+                      </a>
+                    )}
 
                     <div className="grid grid-cols-2 gap-2 text-sm text-[var(--color-text-secondary)] mb-4 bg-[var(--color-glass-white)]/50 p-2 rounded-lg border border-[var(--color-glass-border)]/50">
                       <div>
@@ -518,8 +532,7 @@ export default function Orders() {
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                         Order From
                       </label>
-                      <input
-                        type="text"
+                      <select
                         className="input-liquid w-full"
                         value={formData.order_from}
                         onChange={(e) =>
@@ -528,6 +541,27 @@ export default function Orders() {
                             order_from: e.target.value,
                           })
                         }
+                      >
+                        <option value="Facebook">Facebook</option>
+                        <option value="TikTok">TikTok</option>
+                        <option value="Others">Others</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                        Product URL (Optional)
+                      </label>
+                      <input
+                        type="url"
+                        className="input-liquid w-full"
+                        value={formData.product_url}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            product_url: e.target.value,
+                          })
+                        }
+                        placeholder="https://..."
                       />
                     </div>
                     <div>
