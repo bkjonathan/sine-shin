@@ -6,19 +6,26 @@
    ═══════════════════════════════════════════════ */
 
 @theme {
-  /* ── Core Palette ── */
-  --color-liquid-bg: #0a0a1a;
-  --color-liquid-bg-warm: #0e0c1d;
+  /* 
+     We define generic tokens here that map to CSS variables.
+     The CSS variables themselves will change based on [data-theme].
+  */
+
+  /* ── Core Backgrounds ── */
+  --color-liquid-bg: var(--bg-app);
+  --color-liquid-bg-warm: var(--bg-app-warm);
 
   /* ── Glass Surfaces ── */
-  --color-glass-white: rgba(255, 255, 255, 0.08);
-  --color-glass-white-hover: rgba(255, 255, 255, 0.12);
-  --color-glass-border: rgba(255, 255, 255, 0.12);
-  --color-glass-border-light: rgba(255, 255, 255, 0.2);
+  --color-glass-white: var(--glass-surface);
+  --color-glass-white-hover: var(--glass-surface-hover);
+  --color-glass-border: var(--glass-border);
+  --color-glass-border-light: var(--glass-border-light);
 
-  /* ── Accent Colors ── */
-  --color-accent-blue: #5b7fff;
-  --color-accent-purple: #a855f7;
+  /* ── Dynamic Accent ── */
+  /* These now point to a single dynamic accent variable set by JS/Context */
+  --color-accent-blue: var(--color-accent-primary);
+  --color-accent-purple: var(--color-accent-secondary);
+  /* Keeping specific names for legacy support if needed, but they will map to current theme accent */
   --color-accent-pink: #ec4899;
   --color-accent-cyan: #06b6d4;
 
@@ -28,24 +35,58 @@
   --color-warning: #fbbf24;
 
   /* ── Text ── */
-  --color-text-primary: #f0f0f8;
-  --color-text-secondary: #a0a0c0;
-  --color-text-muted: #606080;
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
 
-  /* ── Shadows (colored, not black) ── */
-  --shadow-glass:
-    0 8px 32px rgba(100, 80, 200, 0.08), 0 2px 8px rgba(0, 0, 0, 0.15);
-  --shadow-glow-blue: 0 0 20px rgba(91, 127, 255, 0.3);
-  --shadow-glow-purple: 0 0 20px rgba(168, 85, 247, 0.3);
-  --shadow-glow-pink: 0 0 20px rgba(236, 72, 153, 0.3);
+  /* ── Shadows ── */
+  --shadow-glass: var(--shadow-glass);
 
   /* ── Typography ── */
   --font-family-sans:
     "Inter", -apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
 
-  /* ── Spacing for layout ── */
+  /* ── Spacing ── */
   --sidebar-width: 240px;
   --titlebar-height: 36px;
+}
+
+:root {
+  /* Default (Dark Implementation) */
+  --bg-app: #0a0a1a;
+  --bg-app-warm: #0e0c1d;
+
+  --glass-surface: rgba(255, 255, 255, 0.08);
+  --glass-surface-hover: rgba(255, 255, 255, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-border-light: rgba(255, 255, 255, 0.2);
+
+  --text-primary: #f0f0f8;
+  --text-secondary: #a0a0c0;
+  --text-muted: #606080;
+
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+
+  /* Default Accent (Blue) */
+  --color-accent-primary: #5b7fff;
+  --color-accent-secondary: #4c66cc;
+}
+
+[data-theme="light"] {
+  --bg-app: #f4f5fa;
+  --bg-app-warm: #ffffff;
+
+  --glass-surface: rgba(255, 255, 255, 0.65);
+  --glass-surface-hover: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(200, 200, 230, 0.4);
+  --glass-border-light: rgba(180, 180, 220, 0.5);
+
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a6e;
+  --text-muted: #8080a0;
+
+  --shadow-glass:
+    0 8px 32px rgba(100, 100, 200, 0.1), 0 2px 8px rgba(100, 100, 200, 0.05);
 }
 
 /* ═══════════════════════════════════════════════

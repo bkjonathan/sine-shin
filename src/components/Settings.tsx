@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useTheme } from "../context/ThemeContext";
 
 // ── Settings Categories ──
 const categories = [
@@ -82,7 +83,7 @@ function ToggleSetting({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between py-4 border-b border-white/5 last:border-b-0">
+    <div className="flex items-center justify-between py-4 border-b border-[var(--color-glass-border)] last:border-b-0">
       <div className="flex-1 mr-4">
         <p className="text-sm font-medium text-[var(--color-text-primary)]">
           {label}
@@ -114,13 +115,22 @@ const fadeVariants = {
 export default function Settings() {
   const [activeCategory, setActiveCategory] = useState("general");
 
-  // Toggle states
+  // Global Theme Context
+  const {
+    theme,
+    toggleTheme,
+    accentColor,
+    setAccentColor,
+    animations,
+    setAnimations,
+    compactMode,
+    setCompactMode,
+  } = useTheme();
+
+  // Local state for non-theme settings
   const [notifications, setNotifications] = useState(true);
   const [orderAlerts, setOrderAlerts] = useState(true);
   const [soundEffects, setSoundEffects] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
-  const [animations, setAnimations] = useState(true);
-  const [compactMode, setCompactMode] = useState(false);
   const [autoBackup, setAutoBackup] = useState(true);
 
   return (
@@ -161,8 +171,8 @@ export default function Settings() {
                   transition-all duration-200 text-left
                   ${
                     activeCategory === cat.id
-                      ? "bg-white/10 text-white shadow-[0_0_12px_rgba(91,127,255,0.1)]"
-                      : "text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-[var(--color-text-primary)]"
+                      ? "bg-[var(--color-glass-white-hover)] text-[var(--color-text-primary)] shadow-[0_0_12px_rgba(0,0,0,0.1)] border border-[var(--color-glass-border)]"
+                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-glass-white)] hover:text-[var(--color-text-primary)] border border-transparent"
                   }
                 `}
               >
@@ -288,8 +298,8 @@ export default function Settings() {
               <ToggleSetting
                 label="Dark Mode"
                 description="Use dark color scheme throughout the app"
-                checked={darkMode}
-                onChange={setDarkMode}
+                checked={theme === "dark"}
+                onChange={() => toggleTheme()}
               />
               <ToggleSetting
                 label="Smooth Animations"
@@ -305,30 +315,28 @@ export default function Settings() {
               />
 
               {/* Theme preview */}
-              <div className="mt-6 pt-4 border-t border-white/5">
+              <div className="mt-6 pt-4 border-t border-[var(--color-glass-border)]">
                 <p className="text-sm font-medium text-[var(--color-text-primary)] mb-3">
                   Accent Color
                 </p>
                 <div className="flex items-center gap-3">
                   {[
-                    { color: "bg-[var(--color-accent-blue)]", name: "Blue" },
-                    {
-                      color: "bg-[var(--color-accent-purple)]",
-                      name: "Purple",
-                    },
-                    { color: "bg-[var(--color-accent-pink)]", name: "Pink" },
-                    { color: "bg-[var(--color-accent-cyan)]", name: "Cyan" },
-                    { color: "bg-emerald-500", name: "Green" },
-                  ].map((theme) => (
+                    { id: "blue", color: "bg-[#5b7fff]", name: "Blue" },
+                    { id: "purple", color: "bg-[#a855f7]", name: "Purple" },
+                    { id: "pink", color: "bg-[#ec4899]", name: "Pink" },
+                    { id: "cyan", color: "bg-[#06b6d4]", name: "Cyan" },
+                    { id: "green", color: "bg-[#10b981]", name: "Green" },
+                  ].map((themeItem) => (
                     <button
-                      key={theme.name}
+                      key={themeItem.id}
+                      onClick={() => setAccentColor(themeItem.id as any)}
                       className={`
-                        w-8 h-8 rounded-full ${theme.color}
-                        ring-2 ring-transparent hover:ring-white/30
+                        w-8 h-8 rounded-full ${themeItem.color}
+                        ring-2 ring-transparent
                         transition-all duration-200 hover:scale-110
-                        ${theme.name === "Blue" ? "ring-white/50 scale-110" : ""}
+                        ${accentColor === themeItem.id ? "ring-[var(--color-text-primary)] scale-110" : ""}
                       `}
-                      title={theme.name}
+                      title={themeItem.name}
                     />
                   ))}
                 </div>

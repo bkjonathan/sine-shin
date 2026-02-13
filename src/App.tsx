@@ -5,6 +5,7 @@ import AppLayout from "./components/AppLayout";
 import OnboardingForm from "./components/OnboardingForm";
 import Dashboard from "./components/Dashboard";
 import Settings from "./components/Settings";
+import { ThemeProvider } from "./context/ThemeContext";
 import "./index.css";
 
 function App() {
@@ -52,7 +53,7 @@ function App() {
           <div className="liquid-blob-3" />
         </div>
         <div className="relative z-10 flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-white/10 border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
+          <div className="w-10 h-10 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
           <p className="text-[var(--color-text-muted)] text-sm">Loading...</p>
         </div>
       </div>
@@ -60,42 +61,44 @@ function App() {
   }
 
   return (
-    <Routes>
-      {/* Onboarding — Full screen, no layout shell */}
-      <Route path="/onboarding" element={<OnboardingForm />} />
+    <ThemeProvider>
+      <Routes>
+        {/* Onboarding — Full screen, no layout shell */}
+        <Route path="/onboarding" element={<OnboardingForm />} />
 
-      {/* App shell with sidebar */}
-      <Route element={<AppLayout />}>
-        <Route path="/dashboard" element={<Dashboard />} />
+        {/* App shell with sidebar */}
+        <Route element={<AppLayout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route
+            path="/orders"
+            element={
+              <PlaceholderPage
+                title="Orders"
+                description="Order management coming soon"
+              />
+            }
+          />
+          <Route
+            path="/customers"
+            element={
+              <PlaceholderPage
+                title="Customers"
+                description="Customer management coming soon"
+              />
+            }
+          />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+
+        {/* Fallback */}
         <Route
-          path="/orders"
+          path="*"
           element={
-            <PlaceholderPage
-              title="Orders"
-              description="Order management coming soon"
-            />
+            <Navigate to={isOnboarded ? "/dashboard" : "/onboarding"} replace />
           }
         />
-        <Route
-          path="/customers"
-          element={
-            <PlaceholderPage
-              title="Customers"
-              description="Customer management coming soon"
-            />
-          }
-        />
-        <Route path="/settings" element={<Settings />} />
-      </Route>
-
-      {/* Fallback */}
-      <Route
-        path="*"
-        element={
-          <Navigate to={isOnboarded ? "/dashboard" : "/onboarding"} replace />
-        }
-      />
-    </Routes>
+      </Routes>
+    </ThemeProvider>
   );
 }
 
