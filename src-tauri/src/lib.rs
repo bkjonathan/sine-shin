@@ -711,6 +711,23 @@ async fn get_customer_orders(app: AppHandle, customer_id: i64) -> Result<Vec<Ord
     Ok(orders)
 }
 
+#[tauri::command]
+async fn get_order(app: AppHandle, id: i64) -> Result<OrderWithCustomer, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let order = sqlx::query_as::<_, OrderWithCustomer>(
+        "SELECT o.*, c.name as customer_name FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = ?"
+    )
+    .bind(id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or("Order not found".to_string())?;
+
+    Ok(order)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -777,6 +794,7 @@ pub fn run() {
             delete_customer,
             create_order,
             get_orders,
+            get_order, // Added
             get_customer_orders, // Added
             update_order,
             delete_order

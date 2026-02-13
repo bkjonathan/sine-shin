@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   getOrders,
@@ -36,6 +37,7 @@ export default function Orders() {
   const [searchTerm, setSearchTerm] = useState("");
   const { playSound } = useSound();
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -331,7 +333,8 @@ export default function Orders() {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="glass-panel p-5 group hover:border-[var(--color-accent-blue)]/30 transition-all duration-300 hover:shadow-lg hover:shadow-[var(--color-accent-blue)]/5 relative overflow-hidden"
+                  className="glass-panel p-5 group hover:border-[var(--color-accent-blue)]/30 transition-all duration-300 hover:shadow-lg hover:shadow-[var(--color-accent-blue)]/5 relative overflow-hidden cursor-pointer"
+                  onClick={() => navigate(`/orders/${order.id}`)}
                 >
                   <div className="relative z-10">
                     <div className="flex justify-between items-start mb-3">
@@ -341,7 +344,10 @@ export default function Orders() {
 
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
                         <button
-                          onClick={() => handleOpenModal(order)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenModal(order);
+                          }}
                           className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-accent-blue)] hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors"
                         >
                           <svg
@@ -359,7 +365,8 @@ export default function Orders() {
                           </svg>
                         </button>
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setOrderToDelete(order);
                             setIsDeleteModalOpen(true);
                           }}

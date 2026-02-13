@@ -7,6 +7,7 @@ import Dashboard from "./components/Dashboard";
 import Orders from "./components/Orders";
 import Customers from "./components/Customers";
 import CustomerDetail from "./components/CustomerDetail";
+import OrderDetail from "./components/OrderDetail";
 import Settings from "./components/Settings.tsx";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
@@ -109,6 +110,7 @@ function AppRoutes() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
+        <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
 

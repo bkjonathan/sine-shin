@@ -5,6 +5,10 @@ export const getOrders = async (): Promise<OrderWithCustomer[]> => {
   return await invoke("get_orders");
 };
 
+export const getOrderById = async (id: number): Promise<OrderWithCustomer> => {
+  return await invoke("get_order", { id });
+};
+
 export const createOrder = async (
   order: Omit<
     OrderWithCustomer,
