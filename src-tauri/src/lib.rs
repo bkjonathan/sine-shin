@@ -383,6 +383,23 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
 
 
 #[tauri::command]
+async fn backup_database(app: AppHandle, dest_path: String) -> Result<u64, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db_path = app_data_dir.join("shop.db");
+
+    if !db_path.exists() {
+        return Err("Database file not found".to_string());
+    }
+
+    let dest = PathBuf::from(&dest_path);
+    
+    // Copy the file
+    let bytes_copied = fs::copy(&db_path, &dest).map_err(|e| format!("Failed to copy database: {}", e))?;
+
+    Ok(bytes_copied)
+}
+
+#[tauri::command]
 async fn create_customer(
     app: AppHandle,
     name: String,
@@ -784,6 +801,7 @@ pub fn run() {
             get_shop_settings, 
             update_shop_settings,
             reset_app_data,
+            backup_database,
             register_user,
             login_user,
             get_db_status,

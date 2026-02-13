@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select } from "./ui/Select";
@@ -461,7 +461,9 @@ function DataSettings() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
   const { playSound } = useSound();
   const { t } = useTranslation();
 
@@ -487,6 +489,38 @@ function DataSettings() {
     }
   };
 
+  const handleBackup = async () => {
+    try {
+      const filePath = await save({
+        filters: [
+          {
+            name: "SQLite Database",
+            extensions: ["db", "sqlite"],
+          },
+        ],
+        defaultPath: `sine_shin_backup_${new Date().toISOString().split("T")[0]}.db`,
+      });
+
+      if (!filePath) return;
+
+      setBackingUp(true);
+      setSuccessMsg(null);
+      setError(null);
+
+      await invoke("backup_database", { destPath: filePath });
+
+      playSound("success");
+      setSuccessMsg(t("settings.data_mgmt.backup_success"));
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      console.error("Backup failed:", err);
+      setError(t("settings.data_mgmt.backup_error"));
+      playSound("error");
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
   return (
     <motion.div
       key="data"
@@ -504,6 +538,57 @@ function DataSettings() {
       <DbStatus />
 
       <div className="space-y-6">
+        {/* Backup Section */}
+        <div className="p-4 rounded-xl border border-[var(--color-glass-border)] bg-[var(--color-glass-white)]">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-1">
+                {t("settings.data_mgmt.backup_title")}
+              </h3>
+              <p className="text-xs text-[var(--color-text-muted)] mb-4">
+                {t("settings.data_mgmt.backup_desc")}
+              </p>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleBackup}
+                  disabled={backingUp}
+                  className="px-4 py-2 btn-liquid btn-liquid-primary text-xs font-semibold flex items-center gap-2"
+                >
+                  {backingUp ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      {t("settings.data_mgmt.backing_up")}
+                    </>
+                  ) : (
+                    t("settings.data_mgmt.backup_btn")
+                  )}
+                </button>
+
+                {successMsg && (
+                  <span className="text-xs text-green-500">{successMsg}</span>
+                )}
+                {error && <span className="text-xs text-red-500">{error}</span>}
+              </div>
+            </div>
+          </div>
+        </div>
         <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5">
           <div className="flex items-start gap-4">
             <div className="p-2 rounded-lg bg-red-500/10 text-red-500">
