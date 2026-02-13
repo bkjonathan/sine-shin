@@ -376,7 +376,7 @@ export default function OnboardingForm() {
                     {logoPreview ? (
                       <img
                         src={logoPreview}
-                        alt="Logo preview"
+                        alt={t("auth.onboarding.logo_preview")}
                         className="w-full h-full object-cover rounded-full"
                       />
                     ) : (

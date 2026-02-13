@@ -569,7 +569,6 @@ export default function Customers() {
                     </label>
                     <div className="relative z-20">
                       <Select
-                        label={t("customers.form.platform")}
                         options={[
                           { value: "Facebook", label: "Facebook" },
                           { value: "TikTok", label: "TikTok" },
