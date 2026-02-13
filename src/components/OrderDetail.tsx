@@ -4,7 +4,9 @@ import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { getOrderById } from "../api/orderApi";
 import { getShopSettings, ShopSettings } from "../api/settingApi";
+import { getCustomerById } from "../api/customerApi";
 import { OrderDetail as OrderDetailType } from "../types/order";
+import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import html2canvas from "html2canvas";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -19,6 +21,7 @@ export default function OrderDetail() {
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const [orderDetail, setOrderDetail] = useState<OrderDetailType | null>(null);
+  const [customerDetail, setCustomerDetail] = useState<Customer | null>(null);
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,12 +36,22 @@ export default function OrderDetail() {
   const loadData = async (orderId: number) => {
     try {
       setLoading(true);
+      setCustomerDetail(null);
       const [orderData, settingsData] = await Promise.all([
         getOrderById(orderId),
         getShopSettings(),
       ]);
       setOrderDetail(orderData);
       setShopSettings(settingsData);
+
+      if (orderData.order.customer_id) {
+        try {
+          const customerData = await getCustomerById(orderData.order.customer_id);
+          setCustomerDetail(customerData);
+        } catch (customerErr) {
+          console.error("Failed to fetch customer details:", customerErr);
+        }
+      }
     } catch (err) {
       console.error("Failed to fetch data:", err);
       setError(t("orders.detail.error_loading"));
@@ -163,6 +176,20 @@ export default function OrderDetail() {
   }
 
   const { order, items } = orderDetail;
+  const customerName = customerDetail?.name || order.customer_name || "N/A";
+  const customerCode =
+    customerDetail?.customer_id || order.customer_id?.toString() || "-";
+  const customerPhone = customerDetail?.phone || "-";
+  const customerCity = customerDetail?.city || "-";
+  const customerAddress = customerDetail?.address || "-";
+  const customerPlatform = customerDetail?.platform || order.order_from || "-";
+  const orderTotal =
+    (order.total_price || 0) +
+    (order.shipping_fee || 0) +
+    (order.delivery_fee || 0) +
+    (order.cargo_fee || 0);
+  const exchangeRate = order.exchange_rate || 1;
+  const totalWithExchange = orderTotal * exchangeRate;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -241,9 +268,12 @@ export default function OrderDetail() {
             style={{
               width: "800px",
               backgroundColor: "#ffffff",
-              color: "#000000",
-              padding: "40px",
-              fontFamily: "'Inter', sans-serif",
+              color: "#0f172a",
+              padding: "36px",
+              fontFamily: "'Poppins', 'Noto Sans Myanmar', sans-serif",
+              borderRadius: "20px",
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 24px 44px -30px rgba(15, 23, 42, 0.45)",
             }}
           >
             {/* Invoice Header */}
@@ -253,7 +283,7 @@ export default function OrderDetail() {
                 justifyContent: "space-between",
                 alignItems: "flex-start",
                 marginBottom: "40px",
-                borderBottom: "2px solid #f1f5f9",
+                borderBottom: "2px solid #dbeafe",
                 paddingBottom: "32px",
               }}
             >
@@ -280,6 +310,7 @@ export default function OrderDetail() {
                       fontWeight: "bold",
                       color: "#0f172a",
                       marginBottom: "8px",
+                      letterSpacing: "0.01em",
                     }}
                   >
                     {shopSettings?.shop_name || "Sine Shin"}
@@ -316,7 +347,7 @@ export default function OrderDetail() {
                   style={{
                     fontSize: "36px",
                     fontWeight: "900",
-                    color: "#f1f5f9",
+                    color: "#dbeafe",
                     marginBottom: "8px",
                     textTransform: "uppercase",
                     letterSpacing: "0.1em",
@@ -344,72 +375,78 @@ export default function OrderDetail() {
             <div
               style={{
                 marginBottom: "40px",
-                backgroundColor: "#f8fafc",
-                padding: "24px",
-                borderRadius: "12px",
-                border: "1px solid #f1f5f9",
+                padding: "0",
               }}
             >
               <h3
                 style={{
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  color: "#94a3b8",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  color: "#64748b",
                   textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  marginBottom: "16px",
-                  margin: "0 0 16px 0",
+                  letterSpacing: "0.08em",
+                  margin: "0 0 14px 0",
                 }}
               >
                 {t("orders.invoice.bill_to")}
               </h3>
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "32px",
+                  border: "1px solid #dbeafe",
+                  borderRadius: "16px",
+                  background:
+                    "linear-gradient(140deg, #f8fbff 0%, #eff6ff 62%, #ecfeff 100%)",
+                  padding: "18px 20px",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
                 }}
               >
-                <div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                  }}
+                >
                   <p
                     style={{
-                      fontSize: "18px",
-                      fontWeight: "bold",
+                      fontSize: "20px",
+                      fontWeight: "700",
                       color: "#0f172a",
-                      marginBottom: "4px",
-                      marginTop: 0,
+                      margin: 0,
+                      letterSpacing: "0.01em",
                     }}
                   >
-                    {order.customer_name}
+                    {customerName}
                   </p>
-                  <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>
-                    {t("customers.id_label")}: {order.customer_id}
+                  <p
+                    style={{
+                      fontSize: "12px",
+                      color: "#334155",
+                      margin: "5px 0 0",
+                      fontWeight: "600",
+                    }}
+                  >
+                    {t("customers.id_label")}: {customerCode}
                   </p>
-                </div>
-                {order.order_from && (
-                  <div>
-                    <p
-                      style={{
-                        fontSize: "14px",
-                        color: "#64748b",
-                        marginBottom: "4px",
-                        marginTop: 0,
-                      }}
-                    >
-                      {t("orders.invoice.platform")}
-                    </p>
-                    <p
-                      style={{
-                        fontSize: "16px",
-                        fontWeight: "600",
-                        color: "#0f172a",
-                        margin: 0,
-                      }}
-                    >
-                      {order.order_from}
-                    </p>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "110px 1fr",
+                      rowGap: "6px",
+                      columnGap: "8px",
+                      marginTop: "16px",
+                    }}
+                  >
+                    <span style={{ color: "#64748b" }}>{t("customers.form.phone")}</span>
+                    <span style={{ color: "#0f172a", fontWeight: "500" }}>{customerPhone}</span>
+                    <span style={{ color: "#64748b" }}>{t("customers.form.city")}</span>
+                    <span style={{ color: "#0f172a", fontWeight: "500" }}>{customerCity}</span>
+                    <span style={{ color: "#64748b" }}>{t("customers.form.address")}</span>
+                    <span style={{ color: "#0f172a", fontWeight: "500" }}>
+                      {customerAddress}
+                    </span>
+                    <span style={{ color: "#64748b" }}>{t("orders.invoice.platform")}</span>
+                    <span style={{ color: "#0f172a", fontWeight: "500" }}>{customerPlatform}</span>
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
@@ -505,7 +542,7 @@ export default function OrderDetail() {
                       </td>
                       <td style={{ padding: "16px 0", fontWeight: "500" }}>
                         {t("orders.detail.product_order_from", {
-                          platform: order.order_from || "Online",
+                          platform: customerPlatform || "Online",
                         })}
                         {item.product_url && (
                           <div
@@ -657,14 +694,28 @@ export default function OrderDetail() {
                     paddingBottom: "16px",
                     borderBottom: "1px solid #e2e8f0",
                   }}
-                >
-                  <span>{t("orders.invoice.total_fees")}</span>
-                  <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                    {(
-                      (order.shipping_fee || 0) +
+                  >
+                    <span>{t("orders.invoice.total_fees")}</span>
+                    <span style={{ fontWeight: "500", color: "#0f172a" }}>
+                      {(
+                        (order.shipping_fee || 0) +
                       (order.delivery_fee || 0) +
                       (order.cargo_fee || 0)
                     ).toLocaleString()}
+                    </span>
+                  </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: "12px",
+                    fontSize: "14px",
+                    color: "#64748b",
+                  }}
+                >
+                  <span>{t("orders.form.exchange_rate")}</span>
+                  <span style={{ fontWeight: "500", color: "#0f172a" }}>
+                    {exchangeRate.toLocaleString()}
                   </span>
                 </div>
                 <div
@@ -678,12 +729,24 @@ export default function OrderDetail() {
                 >
                   <span>{t("orders.invoice.total")}</span>
                   <span>
-                    {(
-                      (order.total_price || 0) +
-                      (order.shipping_fee || 0) +
-                      (order.delivery_fee || 0) +
-                      (order.cargo_fee || 0)
-                    ).toLocaleString()}
+                    {orderTotal.toLocaleString()}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: "10px",
+                    paddingTop: "10px",
+                    borderTop: "1px dashed #cbd5e1",
+                    fontSize: "14px",
+                    color: "#334155",
+                    fontWeight: "600",
+                  }}
+                >
+                  <span>{t("orders.invoice.total_with_exchange")}</span>
+                  <span>
+                    {totalWithExchange.toLocaleString()} Kyats
                   </span>
                 </div>
               </div>
@@ -720,22 +783,56 @@ export default function OrderDetail() {
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
                 {t("orders.detail.customer_info")}
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                    {t("customers.name")}
-                  </label>
-                  <p className="text-[var(--color-text-primary)] font-medium">
-                    {order.customer_name || "N/A"}
+              <div className="grid grid-cols-1 md:grid-cols-[1.45fr_1fr] gap-4">
+                <div
+                  className="rounded-2xl p-5 border"
+                  style={{
+                    borderColor: "#d6c08a",
+                    background:
+                      "linear-gradient(140deg, #0f172a 0%, #1e293b 62%, #111827 100%)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <p className="text-[22px] font-bold text-slate-50 m-0 tracking-wide">
+                    {customerName}
                   </p>
+                  <p className="text-xs font-semibold text-amber-200 mt-1 mb-0">
+                    {t("customers.id_label")}: {customerCode}
+                  </p>
+                  <div className="grid grid-cols-[110px_1fr] gap-y-1.5 gap-x-2 mt-4 text-sm">
+                    <span className="text-[#c9b07a]">{t("customers.form.phone")}</span>
+                    <span className="text-slate-50 font-medium">{customerPhone}</span>
+                    <span className="text-[#c9b07a]">{t("customers.form.city")}</span>
+                    <span className="text-slate-50 font-medium">{customerCity}</span>
+                    <span className="text-[#c9b07a]">{t("customers.form.address")}</span>
+                    <span className="text-slate-50 font-medium break-words">
+                      {customerAddress}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                    {t("orders.form.order_from")}
-                  </label>
-                  <p className="text-[var(--color-text-primary)]">
-                    {order.order_from || "N/A"}
+                <div
+                  className="rounded-2xl p-5 border"
+                  style={{
+                    borderColor: "#e7dcc2",
+                    background:
+                      "linear-gradient(165deg, #fffdf7 0%, #fff8e8 100%)",
+                  }}
+                >
+                  <p className="mt-0 mb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#7c5a1f]">
+                    {t("orders.invoice.title")}
                   </p>
+                  <div className="grid grid-cols-[90px_1fr] gap-y-2 gap-x-2 text-sm">
+                    <span className="text-[#9a7a3f]">{t("orders.form.order_from")}</span>
+                    <span className="font-bold text-slate-900">{customerPlatform}</span>
+                    <span className="text-[#9a7a3f]">Order</span>
+                    <span className="font-bold text-slate-900">
+                      #{order.order_id || order.id}
+                    </span>
+                    <span className="text-[#9a7a3f]">{t("orders.form.order_date")}</span>
+                    <span className="font-bold text-slate-900">
+                      {order.order_date || "-"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -935,12 +1032,15 @@ export default function OrderDetail() {
                     {t("orders.total")}
                   </span>
                   <span className="font-bold text-xl text-[var(--color-accent-green)]">
-                    {(
-                      (order.total_price || 0) +
-                      (order.shipping_fee || 0) +
-                      (order.delivery_fee || 0) +
-                      (order.cargo_fee || 0)
-                    ).toLocaleString()}
+                    {orderTotal.toLocaleString()}
+                  </span>
+                </div>
+                <div className="pt-3 mt-2 border-t border-[var(--color-border)] flex justify-between items-center">
+                  <span className="font-semibold text-[var(--color-text-primary)]">
+                    {t("orders.invoice.total_with_exchange")}
+                  </span>
+                  <span className="font-bold text-xl text-[var(--color-accent-blue)]">
+                    {totalWithExchange.toLocaleString()}
                   </span>
                 </div>
               </div>

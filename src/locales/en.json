@@ -170,6 +170,7 @@
       "subtotal": "Subtotal",
       "total_fees": "Total Fees",
       "total": "Total",
+      "total_with_exchange": "Total x Exchange Rate",
       "shipping_fee": "Shipping Fee",
       "delivery_fee": "Delivery Fee",
       "cargo_fee": "Cargo Fee",
