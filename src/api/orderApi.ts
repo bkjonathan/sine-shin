@@ -31,6 +31,8 @@ export const createOrder = async (
     arrivedDate: order.arrived_date,
     shipmentDate: order.shipment_date,
     userWithdrawDate: order.user_withdraw_date,
+    serviceFee: order.service_fee,
+    serviceFeeType: order.service_fee_type,
   });
 };
 
@@ -50,6 +52,8 @@ export const updateOrder = async (
     arrivedDate: order.arrived_date,
     shipmentDate: order.shipment_date,
     userWithdrawDate: order.user_withdraw_date,
+    serviceFee: order.service_fee,
+    serviceFeeType: order.service_fee_type,
   });
 };
 

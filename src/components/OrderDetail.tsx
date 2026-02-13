@@ -12,6 +12,7 @@ import html2canvas from "html2canvas";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { formatDate } from "../utils/date";
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -46,7 +47,9 @@ export default function OrderDetail() {
 
       if (orderData.order.customer_id) {
         try {
-          const customerData = await getCustomerById(orderData.order.customer_id);
+          const customerData = await getCustomerById(
+            orderData.order.customer_id,
+          );
           setCustomerDetail(customerData);
         } catch (customerErr) {
           console.error("Failed to fetch customer details:", customerErr);
@@ -183,11 +186,17 @@ export default function OrderDetail() {
   const customerCity = customerDetail?.city || "-";
   const customerAddress = customerDetail?.address || "-";
   const customerPlatform = customerDetail?.platform || order.order_from || "-";
+  const serviceFeeAmount =
+    order.service_fee_type === "percent"
+      ? ((order.total_price || 0) * (order.service_fee || 0)) / 100
+      : order.service_fee || 0;
+
   const orderTotal =
     (order.total_price || 0) +
     (order.shipping_fee || 0) +
     (order.delivery_fee || 0) +
-    (order.cargo_fee || 0);
+    (order.cargo_fee || 0) +
+    serviceFeeAmount;
   const exchangeRate = order.exchange_rate || 1;
   const totalWithExchange = orderTotal * exchangeRate;
 
@@ -228,7 +237,9 @@ export default function OrderDetail() {
                 {t("orders.detail.title")} #{order.order_id || order.id}
               </h1>
               <p className="text-[var(--color-text-secondary)]">
-                {t("orders.detail.created_at", { date: order.created_at })}
+                {t("orders.detail.created_at", {
+                  date: formatDate(order.created_at),
+                })}
               </p>
             </div>
           </div>
@@ -366,7 +377,7 @@ export default function OrderDetail() {
                   <p style={{ margin: "4px 0" }}>
                     #{order.order_id || order.id}
                   </p>
-                  <p style={{ margin: 0 }}>{order.order_date}</p>
+                  <p style={{ margin: 0 }}>{formatDate(order.order_date)}</p>
                 </div>
               </div>
             </div>
@@ -435,16 +446,30 @@ export default function OrderDetail() {
                       marginTop: "16px",
                     }}
                   >
-                    <span style={{ color: "#64748b" }}>{t("customers.form.phone")}</span>
-                    <span style={{ color: "#0f172a", fontWeight: "500" }}>{customerPhone}</span>
-                    <span style={{ color: "#64748b" }}>{t("customers.form.city")}</span>
-                    <span style={{ color: "#0f172a", fontWeight: "500" }}>{customerCity}</span>
-                    <span style={{ color: "#64748b" }}>{t("customers.form.address")}</span>
+                    <span style={{ color: "#64748b" }}>
+                      {t("customers.form.phone")}
+                    </span>
+                    <span style={{ color: "#0f172a", fontWeight: "500" }}>
+                      {customerPhone}
+                    </span>
+                    <span style={{ color: "#64748b" }}>
+                      {t("customers.form.city")}
+                    </span>
+                    <span style={{ color: "#0f172a", fontWeight: "500" }}>
+                      {customerCity}
+                    </span>
+                    <span style={{ color: "#64748b" }}>
+                      {t("customers.form.address")}
+                    </span>
                     <span style={{ color: "#0f172a", fontWeight: "500" }}>
                       {customerAddress}
                     </span>
-                    <span style={{ color: "#64748b" }}>{t("orders.invoice.platform")}</span>
-                    <span style={{ color: "#0f172a", fontWeight: "500" }}>{customerPlatform}</span>
+                    <span style={{ color: "#64748b" }}>
+                      {t("orders.invoice.platform")}
+                    </span>
+                    <span style={{ color: "#0f172a", fontWeight: "500" }}>
+                      {customerPlatform}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -580,6 +605,33 @@ export default function OrderDetail() {
                     </tr>
                   ))}
                   {/* Additional Fees */}
+                  {serviceFeeAmount > 0 && (
+                    <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                      <td
+                        style={{
+                          padding: "16px 0",
+                          color: "#94a3b8",
+                          fontWeight: "500",
+                        }}
+                      >
+                        {t("orders.detail.fee")}
+                      </td>
+                      <td style={{ padding: "16px 0" }}>
+                        {t("orders.form.service_fee")}
+                        {order.service_fee_type === "percent" &&
+                          ` (${order.service_fee}%)`}
+                      </td>
+                      <td style={{ padding: "16px 0", textAlign: "right" }}>
+                        -
+                      </td>
+                      <td style={{ padding: "16px 0", textAlign: "right" }}>
+                        -
+                      </td>
+                      <td style={{ padding: "16px 0", textAlign: "right" }}>
+                        {serviceFeeAmount.toLocaleString()}
+                      </td>
+                    </tr>
+                  )}
                   {(order.shipping_fee || 0) > 0 && (
                     <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <td
@@ -694,16 +746,17 @@ export default function OrderDetail() {
                     paddingBottom: "16px",
                     borderBottom: "1px solid #e2e8f0",
                   }}
-                  >
-                    <span>{t("orders.invoice.total_fees")}</span>
-                    <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                      {(
-                        (order.shipping_fee || 0) +
+                >
+                  <span>{t("orders.invoice.total_fees")}</span>
+                  <span style={{ fontWeight: "500", color: "#0f172a" }}>
+                    {(
+                      (order.shipping_fee || 0) +
                       (order.delivery_fee || 0) +
-                      (order.cargo_fee || 0)
+                      (order.cargo_fee || 0) +
+                      serviceFeeAmount
                     ).toLocaleString()}
-                    </span>
-                  </div>
+                  </span>
+                </div>
                 <div
                   style={{
                     display: "flex",
@@ -728,9 +781,7 @@ export default function OrderDetail() {
                   }}
                 >
                   <span>{t("orders.invoice.total")}</span>
-                  <span>
-                    {orderTotal.toLocaleString()}
-                  </span>
+                  <span>{orderTotal.toLocaleString()}</span>
                 </div>
                 <div
                   style={{
@@ -745,9 +796,7 @@ export default function OrderDetail() {
                   }}
                 >
                   <span>{t("orders.invoice.total_with_exchange")}</span>
-                  <span>
-                    {totalWithExchange.toLocaleString()} Kyats
-                  </span>
+                  <span>{totalWithExchange.toLocaleString()} Kyats</span>
                 </div>
               </div>
             </div>
@@ -800,11 +849,21 @@ export default function OrderDetail() {
                     {t("customers.id_label")}: {customerCode}
                   </p>
                   <div className="grid grid-cols-[110px_1fr] gap-y-1.5 gap-x-2 mt-4 text-sm">
-                    <span className="text-[#c9b07a]">{t("customers.form.phone")}</span>
-                    <span className="text-slate-50 font-medium">{customerPhone}</span>
-                    <span className="text-[#c9b07a]">{t("customers.form.city")}</span>
-                    <span className="text-slate-50 font-medium">{customerCity}</span>
-                    <span className="text-[#c9b07a]">{t("customers.form.address")}</span>
+                    <span className="text-[#c9b07a]">
+                      {t("customers.form.phone")}
+                    </span>
+                    <span className="text-slate-50 font-medium">
+                      {customerPhone}
+                    </span>
+                    <span className="text-[#c9b07a]">
+                      {t("customers.form.city")}
+                    </span>
+                    <span className="text-slate-50 font-medium">
+                      {customerCity}
+                    </span>
+                    <span className="text-[#c9b07a]">
+                      {t("customers.form.address")}
+                    </span>
                     <span className="text-slate-50 font-medium break-words">
                       {customerAddress}
                     </span>
@@ -822,15 +881,21 @@ export default function OrderDetail() {
                     {t("orders.invoice.title")}
                   </p>
                   <div className="grid grid-cols-[90px_1fr] gap-y-2 gap-x-2 text-sm">
-                    <span className="text-[#9a7a3f]">{t("orders.form.order_from")}</span>
-                    <span className="font-bold text-slate-900">{customerPlatform}</span>
+                    <span className="text-[#9a7a3f]">
+                      {t("orders.form.order_from")}
+                    </span>
+                    <span className="font-bold text-slate-900">
+                      {customerPlatform}
+                    </span>
                     <span className="text-[#9a7a3f]">Order</span>
                     <span className="font-bold text-slate-900">
                       #{order.order_id || order.id}
                     </span>
-                    <span className="text-[#9a7a3f]">{t("orders.form.order_date")}</span>
+                    <span className="text-[#9a7a3f]">
+                      {t("orders.form.order_date")}
+                    </span>
                     <span className="font-bold text-slate-900">
-                      {order.order_date || "-"}
+                      {formatDate(order.order_date)}
                     </span>
                   </div>
                 </div>
@@ -965,7 +1030,7 @@ export default function OrderDetail() {
                     {t("orders.form.order_date")}
                   </label>
                   <p className="text-[var(--color-text-primary)]">
-                    {order.order_date || "-"}
+                    {formatDate(order.order_date)}
                   </p>
                 </div>
                 <div>
@@ -973,7 +1038,7 @@ export default function OrderDetail() {
                     {t("orders.form.arrived_date")}
                   </label>
                   <p className="text-[var(--color-text-primary)]">
-                    {order.arrived_date || "-"}
+                    {formatDate(order.arrived_date)}
                   </p>
                 </div>
                 <div>
@@ -981,7 +1046,7 @@ export default function OrderDetail() {
                     {t("orders.form.shipment_date")}
                   </label>
                   <p className="text-[var(--color-text-primary)]">
-                    {order.shipment_date || "-"}
+                    {formatDate(order.shipment_date)}
                   </p>
                 </div>
                 <div>
@@ -989,7 +1054,7 @@ export default function OrderDetail() {
                     {t("orders.form.user_withdraw_date")}
                   </label>
                   <p className="text-[var(--color-text-primary)]">
-                    {order.user_withdraw_date || "-"}
+                    {formatDate(order.user_withdraw_date)}
                   </p>
                 </div>
               </div>
@@ -1003,6 +1068,16 @@ export default function OrderDetail() {
                 {t("orders.detail.financial_summary")}
               </h2>
               <div className="space-y-3">
+                <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]">
+                  <span className="text-[var(--color-text-secondary)]">
+                    {t("orders.form.service_fee")}
+                    {order.service_fee_type === "percent" &&
+                      ` (${order.service_fee}%)`}
+                  </span>
+                  <span className="text-[var(--color-text-primary)]">
+                    {serviceFeeAmount.toLocaleString()}
+                  </span>
+                </div>
                 <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]">
                   <span className="text-[var(--color-text-secondary)]">
                     {t("orders.form.shipping_fee")}

@@ -12,6 +12,8 @@ export interface Order {
   shipment_date?: string;
   user_withdraw_date?: string;
   created_at?: string;
+  service_fee?: number;
+  service_fee_type?: "fixed" | "percent";
 }
 
 export interface OrderItem {

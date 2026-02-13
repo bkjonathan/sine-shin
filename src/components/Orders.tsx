@@ -8,6 +8,7 @@ import {
   deleteOrder,
   getOrderById,
 } from "../api/orderApi";
+import { formatDate } from "../utils/date";
 import { getCustomers } from "../api/customerApi";
 import { OrderWithCustomer, OrderItemPayload } from "../types/order";
 import { Customer } from "../types/customer";
@@ -62,6 +63,8 @@ export default function Orders() {
     arrived_date: "",
     shipment_date: "",
     user_withdraw_date: "",
+    service_fee: "",
+    service_fee_type: "fixed",
   };
   const [formData, setFormData] = useState(initialFormState);
 
@@ -142,6 +145,8 @@ export default function Orders() {
           arrived_date: order.arrived_date || "",
           shipment_date: order.shipment_date || "",
           user_withdraw_date: order.user_withdraw_date || "",
+          service_fee: order.service_fee?.toString() || "",
+          service_fee_type: order.service_fee_type || "fixed",
         });
         setIsModalOpen(true);
       } catch (e) {
@@ -159,6 +164,8 @@ export default function Orders() {
         arrived_date: "",
         shipment_date: "",
         user_withdraw_date: "",
+        service_fee: "",
+        service_fee_type: "fixed",
       });
       setIsModalOpen(true);
     }
@@ -204,6 +211,10 @@ export default function Orders() {
         arrived_date: formData.arrived_date || undefined,
         shipment_date: formData.shipment_date || undefined,
         user_withdraw_date: formData.user_withdraw_date || undefined,
+        service_fee: formData.service_fee
+          ? parseFloat(formData.service_fee)
+          : undefined,
+        service_fee_type: formData.service_fee_type || "fixed",
       };
 
       if (editingOrder) {
@@ -438,7 +449,7 @@ export default function Orders() {
                         <span className="text-[var(--color-text-muted)] text-xs block">
                           {t("orders.date")}
                         </span>
-                        {order.order_date || "-"}
+                        {formatDate(order.order_date)}
                       </div>
                       <div>
                         <span className="text-[var(--color-text-muted)] text-xs block">
@@ -658,7 +669,7 @@ export default function Orders() {
                         <line x1="12" y1="5" x2="12" y2="19"></line>
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                       </svg>
-                      {t("orders.add_item")}
+                      {t("orders.form.add_item")}
                     </button>
                   </div>
 
@@ -778,69 +789,104 @@ export default function Orders() {
                 </div>
 
                 {/* Section: Fees */}
-                {editingOrder && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
-                      {t("orders.modal.fees")}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                          {t("orders.form.shipping_fee")}
-                        </label>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
+                    {t("orders.modal.fees")}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                        {t("orders.form.service_fee_label")}
+                      </label>
+                      <div className="flex gap-2">
                         <input
                           type="number"
                           min="0"
                           step="0.01"
                           className="input-liquid w-full"
-                          value={formData.shipping_fee}
+                          value={formData.service_fee}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
-                              shipping_fee: e.target.value,
+                              service_fee: e.target.value,
                             })
                           }
                         />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                          {t("orders.form.delivery_fee")}
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="input-liquid w-full"
-                          value={formData.delivery_fee}
+                        <select
+                          className="input-liquid w-24"
+                          value={formData.service_fee_type}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
-                              delivery_fee: e.target.value,
+                              service_fee_type: e.target.value,
                             })
                           }
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                          {t("orders.form.cargo_fee")}
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="input-liquid w-full"
-                          value={formData.cargo_fee}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              cargo_fee: e.target.value,
-                            })
-                          }
-                        />
+                        >
+                          <option value="fixed">
+                            {t("orders.form.fixed")}
+                          </option>
+                          <option value="percent">%</option>
+                        </select>
                       </div>
                     </div>
                   </div>
-                )}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                        {t("orders.form.shipping_fee")}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="input-liquid w-full"
+                        value={formData.shipping_fee}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            shipping_fee: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                        {t("orders.form.delivery_fee")}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="input-liquid w-full"
+                        value={formData.delivery_fee}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            delivery_fee: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                        {t("orders.form.cargo_fee")}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="input-liquid w-full"
+                        value={formData.cargo_fee}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            cargo_fee: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Section: Status Dates */}
                 {editingOrder && (

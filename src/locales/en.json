@@ -127,6 +127,7 @@
       "customer": "Customer",
       "select_customer": "Select Customer",
       "order_from": "Order From",
+      "add_item": "Add Item",
       "product_url": "Product URL (Optional)",
       "order_date": "Order Date",
       "weight": "Weight (kg)",
@@ -136,7 +137,12 @@
       "cargo_fee": "Cargo Fee",
       "arrived_date": "Arrived Date",
       "shipment_date": "Shipment Date",
-      "user_withdraw_date": "User Withdraw Date"
+      "shipment_date": "Shipment Date",
+      "user_withdraw_date": "User Withdraw Date",
+      "service_fee_label": "Service Fee",
+      "service_fee": "Service Fee",
+      "fixed": "Fixed",
+      "percent": "Percent"
     },
     "delete_modal": {
       "title": "Delete Order?",

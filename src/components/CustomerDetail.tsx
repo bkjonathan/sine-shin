@@ -4,8 +4,9 @@ import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { getCustomerById, getCustomerOrders } from "../api/customerApi";
 import { Customer } from "../types/customer";
-import { Order } from "../types/order";
+import { OrderWithCustomer } from "../types/order";
 import { useSound } from "../context/SoundContext";
+import { formatDate } from "../utils/date";
 
 const fadeVariants = {
   hidden: { opacity: 0, y: 12 },
@@ -23,7 +24,7 @@ export default function CustomerDetail() {
   const { playSound } = useSound();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -234,12 +235,12 @@ export default function CustomerDetail() {
                           {order.order_id}
                         </td>
                         <td className="px-4 py-3 text-[var(--color-text-secondary)]">
-                          {order.order_date || "-"}
+                          {formatDate(order.order_date)}
                         </td>
                         <td className="px-4 py-3 text-[var(--color-text-secondary)]">
-                          {order.product_url ? (
+                          {order.first_product_url ? (
                             <a
-                              href={order.product_url}
+                              href={order.first_product_url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-[var(--color-accent-blue)] hover:underline truncate max-w-[150px] block"
@@ -251,10 +252,10 @@ export default function CustomerDetail() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right text-[var(--color-text-secondary)]">
-                          {order.product_qty || 0}
+                          {order.total_qty || 0}
                         </td>
                         <td className="px-4 py-3 text-right text-[var(--color-text-secondary)]">
-                          {order.price?.toLocaleString()}
+                          {order.total_price?.toLocaleString()}
                         </td>
                       </tr>
                     ))

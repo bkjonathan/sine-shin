@@ -127,6 +127,7 @@
       "customer": "ဖောက်သည်",
       "select_customer": "ဖောက်သည် ရွေးချယ်ပါ",
       "order_from": "မှာယူသည့် နေရာ",
+      "add_item": "ပစ္စည်း ထပ်ထည့်ရန်",
       "product_url": "ပစ္စည်း လင့်ခ် (ရှိပါက)",
       "order_date": "အော်ဒါ နေ့စွဲ",
       "weight": "အလေးချိန် (kg)",
@@ -136,7 +137,12 @@
       "cargo_fee": "ကားခ",
       "arrived_date": "ရောက်ရှိ နေ့စွဲ",
       "shipment_date": "ပို့ဆောင် နေ့စွဲ",
-      "user_withdraw_date": "ထုတ်ယူ နေ့စွဲ"
+      "shipment_date": "ပို့ဆောင် နေ့စွဲ",
+      "user_withdraw_date": "ထုတ်ယူ နေ့စွဲ",
+      "service_fee_label": "ဝန်ဆောင်ခ",
+      "service_fee": "ဝန်ဆောင်ခ",
+      "fixed": "ပုံသေ",
+      "percent": "ရာခိုင်နှုန်း"
     },
     "delete_modal": {
       "title": "အော်ဒါ ဖျက်မည်လား?",

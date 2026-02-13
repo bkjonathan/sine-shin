@@ -76,6 +76,8 @@ struct Order {
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
     created_at: Option<String>,
+    service_fee: Option<f64>,
+    service_fee_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -113,6 +115,8 @@ struct OrderWithCustomer {
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
     created_at: Option<String>,
+    service_fee: Option<f64>,
+    service_fee_type: Option<String>,
     // Aggregated fields
     total_price: Option<f64>,
     total_qty: Option<i64>,
@@ -539,6 +543,8 @@ async fn create_order(
     arrived_date: Option<String>,
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
+    service_fee: Option<f64>,
+    service_fee_type: Option<String>,
     items: Vec<OrderItemPayload>,
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
@@ -548,7 +554,7 @@ async fn create_order(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     let id = sqlx::query(
-        "INSERT INTO orders (customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO orders (customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(customer_id)
     .bind(order_from)
@@ -560,6 +566,8 @@ async fn create_order(
     .bind(arrived_date)
     .bind(shipment_date)
     .bind(user_withdraw_date)
+    .bind(service_fee)
+    .bind(service_fee_type)
     .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?
@@ -642,6 +650,8 @@ async fn update_order(
     arrived_date: Option<String>,
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
+    service_fee: Option<f64>,
+    service_fee_type: Option<String>,
     items: Vec<OrderItemPayload>,
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
@@ -651,7 +661,7 @@ async fn update_order(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     sqlx::query(
-        "UPDATE orders SET customer_id = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ? WHERE id = ?",
+        "UPDATE orders SET customer_id = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, service_fee_type = ? WHERE id = ?",
     )
     .bind(customer_id)
     .bind(order_from)
@@ -663,6 +673,8 @@ async fn update_order(
     .bind(arrived_date)
     .bind(shipment_date)
     .bind(user_withdraw_date)
+    .bind(service_fee)
+    .bind(service_fee_type)
     .bind(id)
     .execute(&mut *tx)
     .await
