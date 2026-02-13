@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../context/ThemeContext";
 import { useSound } from "../context/SoundContext";
+import { RESET_APP_CODE } from "../cheapcode";
 
 // ── Settings Categories ──
 const categories = [
@@ -69,6 +70,28 @@ const categories = [
         <line x1="21" y1="12" x2="23" y2="12" />
         <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
         <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+      </svg>
+    ),
+  },
+  {
+    id: "data",
+    label: "Data",
+    icon: (
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
+        <line x1="3" y1="12" x2="21" y2="12" />
+        <path d="M3 12v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5" />
+        <line x1="10" y1="21" x2="14" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
     ),
   },
@@ -393,6 +416,189 @@ function AccountSettings() {
   );
 }
 
+// ── Data Settings Component ──
+function DataSettings() {
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const { playSound } = useSound();
+
+  const handleReset = async () => {
+    if (code !== RESET_APP_CODE) {
+      setError("Incorrect code. Please try again.");
+      playSound("error");
+      return;
+    }
+
+    try {
+      setResetting(true);
+      await invoke("reset_app_data");
+      localStorage.clear();
+      playSound("success");
+      // Force reload to trigger onboarding check
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to reset data:", err);
+      setError("Failed to reset data. Please try again.");
+      playSound("error");
+      setResetting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      key="data"
+      initial={{ opacity: 0, x: 10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
+        Data Management
+      </h2>
+      <p className="text-xs text-[var(--color-text-muted)] mb-5">
+        Manage your application data and storage
+      </p>
+
+      <div className="space-y-6">
+        <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-red-500/10 text-red-500">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                <path d="M15 11v6" />
+                <path d="M9 11v6" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-red-500 mb-1">
+                Danger Zone
+              </h3>
+              <p className="text-xs text-[var(--color-text-muted)] mb-4">
+                Resetting the application will permanently delete all your data,
+                including orders, customers, and settings. This action cannot be
+                undone.
+              </p>
+              <button
+                onClick={() => {
+                  setShowConfirm(true);
+                  playSound("click");
+                }}
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition-colors shadow-lg shadow-red-500/20"
+              >
+                Reset All Data
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowConfirm(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-[var(--color-glass-border)]"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 9v2m0 4h.01" />
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  </svg>
+                </div>
+
+                <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
+                  Are you absolutely sure?
+                </h3>
+                <p className="text-sm text-[var(--color-text-muted)] mb-6">
+                  This action will swipe all data from the database. Enter the
+                  code
+                  <span className="font-mono font-bold text-[var(--color-text-primary)] mx-1">
+                    {RESET_APP_CODE}
+                  </span>
+                  to confirm.
+                </p>
+
+                <div className="w-full mb-4">
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => {
+                      setCode(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder="Enter confirmation code"
+                    className="input-liquid text-center tracking-widest font-mono"
+                    autoFocus
+                  />
+                  {error && (
+                    <p className="text-xs text-red-500 mt-2">{error}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={() => {
+                      setShowConfirm(false);
+                      setCode("");
+                      setError(null);
+                    }}
+                    disabled={resetting}
+                    className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    disabled={resetting}
+                    className="flex-1 btn-liquid bg-red-500 hover:bg-red-600 text-white py-2.5 text-sm flex items-center justify-center gap-2"
+                  >
+                    {resetting && (
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    )}
+                    {resetting ? "Resetting..." : "Confirm Reset"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 export default function Settings() {
   const [activeCategory, setActiveCategory] = useState("general");
 
@@ -585,6 +791,8 @@ export default function Settings() {
               </div>
             </motion.div>
           )}
+
+          {activeCategory === "data" && <DataSettings />}
         </div>
       </motion.div>
     </motion.div>

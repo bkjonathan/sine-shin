@@ -195,6 +195,44 @@ async fn update_shop_settings(
     Ok(())
 }
 
+// ... (previous code)
+
+#[tauri::command]
+async fn reset_app_data(app: AppHandle) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // 1. Drop all tables
+    // We can just drop the specific tables we know about, or use a query to find all tables.
+    // Since we only have 'shop_settings' for now (and maybe others in future), 
+    // let's be explicit or try to drop everything.
+    // For now, let's just drop 'shop_settings'. 
+    // A more robust way for "Reset All" is to drop the table.
+    sqlx::query("DROP TABLE IF EXISTS shop_settings")
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. Delete logos directory
+    if let Ok(app_data_dir) = app.path().app_data_dir() {
+        let logos_dir = app_data_dir.join("logos");
+        if logos_dir.exists() {
+             let _ = fs::remove_dir_all(&logos_dir); // Ignore errors if we can't delete
+        }
+    }
+
+    // 3. Re-run migrations
+    // We can reuse the migration logic or just manually run the creation SQL.
+    // Re-running the migration via tauri_plugin_sql might be tricky if it tracks migrations.
+    // It's often easier to just run the CREATE TABLE statement manually here.
+    sqlx::query(include_str!("../migrations/001_create_shop_settings.sql"))
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -249,7 +287,8 @@ pub fn run() {
             check_is_onboarded, 
             save_shop_setup, 
             get_shop_settings, 
-            update_shop_settings
+            update_shop_settings,
+            reset_app_data
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
