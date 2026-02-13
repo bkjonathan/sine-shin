@@ -134,6 +134,14 @@ export default function AppLayout() {
         {/* Drag region / traffic light spacing */}
         <div
           className="drag-region shrink-0"
+          data-tauri-drag-region
+          onMouseDown={(e) => {
+            if (e.button === 0 && e.detail === 1) {
+              e.preventDefault();
+              appWindow.startDragging();
+            }
+          }}
+          onDoubleClick={() => appWindow.toggleMaximize()}
           style={{
             height: platform === "macos" ? "52px" : "var(--titlebar-height)",
             paddingTop: platform === "macos" ? "12px" : "0",
@@ -192,6 +200,21 @@ export default function AppLayout() {
         {/* Title bar / drag region */}
         <div
           className="drag-region shrink-0 flex items-center justify-end"
+          data-tauri-drag-region
+          onMouseDown={(e) => {
+            // Only drag if clicking on the bar itself, not on child buttons
+            if (
+              e.target === e.currentTarget &&
+              e.button === 0 &&
+              e.detail === 1
+            ) {
+              e.preventDefault();
+              appWindow.startDragging();
+            }
+          }}
+          onDoubleClick={(e) => {
+            if (e.target === e.currentTarget) appWindow.toggleMaximize();
+          }}
           style={{ height: "var(--titlebar-height)" }}
         >
           {/* Windows-style window controls */}
