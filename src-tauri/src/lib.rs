@@ -152,6 +152,12 @@ pub fn run() {
             });
 
             app.manage(AppDb(Arc::new(Mutex::new(pool))));
+
+            #[cfg(target_os = "windows")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_decorations(false);
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![check_is_onboarded, save_shop_setup, get_shop_settings])
