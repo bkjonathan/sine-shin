@@ -12,6 +12,7 @@ import { OrderWithCustomer } from "../types/order";
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
+import { Select } from "./ui/Select";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -64,6 +65,10 @@ export default function Orders() {
     user_withdraw_date: "",
   };
   const [formData, setFormData] = useState(initialFormState);
+
+  useEffect(() => {
+    console.log("Form Data Changed:", formData);
+  }, [formData]);
 
   // Delete State
   const [orderToDelete, setOrderToDelete] = useState<OrderWithCustomer | null>(
@@ -135,7 +140,14 @@ export default function Orders() {
       });
     } else {
       setEditingOrder(null);
-      setFormData(initialFormState);
+      // Explicitly clear dates to prevent any potential auto-fill
+      setFormData({
+        ...initialFormState,
+        order_date: "",
+        arrived_date: "",
+        shipment_date: "",
+        user_withdraw_date: "",
+      });
     }
     setIsModalOpen(true);
     playSound("click");
@@ -509,58 +521,54 @@ export default function Orders() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-6"
+                autoComplete="off"
+              >
                 {/* Section: Basic Info */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
                     {t("orders.modal.basic_info")}
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.customer")}{" "}
-                        <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        required
-                        className="input-liquid w-full"
-                        value={formData.customer_id}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            customer_id: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="">
-                          {t("orders.form.select_customer")}
-                        </option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} ({c.customer_id})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.order_from")}
-                      </label>
-                      <select
-                        className="input-liquid w-full"
-                        value={formData.order_from}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            order_from: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="Facebook">Facebook</option>
-                        <option value="TikTok">TikTok</option>
-                        <option value="Others">{t("common.others")}</option>
-                      </select>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Select
+                      label={t("orders.form.customer")}
+                      required
+                      options={customers.map((c) => ({
+                        value: c.id,
+                        label: `${c.name} (${c.customer_id})`,
+                      }))}
+                      value={
+                        formData.customer_id
+                          ? parseInt(formData.customer_id)
+                          : ""
+                      }
+                      onChange={(val) =>
+                        setFormData({
+                          ...formData,
+                          customer_id: val.toString(),
+                        })
+                      }
+                      placeholder={t("orders.form.select_customer")}
+                    />
+                    <Select
+                      label={t("orders.form.order_from")}
+                      options={[
+                        { value: "Facebook", label: "Facebook" },
+                        { value: "TikTok", label: "TikTok" },
+                        { value: "Others", label: t("common.others") },
+                      ]}
+                      value={formData.order_from}
+                      onChange={(val) =>
+                        setFormData({
+                          ...formData,
+                          order_from: val.toString(),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                         {t("orders.form.product_url")}
@@ -583,9 +591,15 @@ export default function Orders() {
                         {t("orders.form.order_date")}
                       </label>
                       <input
-                        type="date"
+                        type={formData.order_date ? "date" : "text"}
                         className="input-liquid w-full"
+                        autoComplete="off"
+                        placeholder="dd/mm/yyyy"
                         value={formData.order_date}
+                        onFocus={(e) => (e.target.type = "date")}
+                        onBlur={(e) => {
+                          if (!e.target.value) e.target.type = "text";
+                        }}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
@@ -748,9 +762,15 @@ export default function Orders() {
                         {t("orders.form.arrived_date")}
                       </label>
                       <input
-                        type="date"
+                        type={formData.arrived_date ? "date" : "text"}
                         className="input-liquid w-full"
+                        autoComplete="off"
+                        placeholder="dd/mm/yyyy"
                         value={formData.arrived_date}
+                        onFocus={(e) => (e.target.type = "date")}
+                        onBlur={(e) => {
+                          if (!e.target.value) e.target.type = "text";
+                        }}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
@@ -764,9 +784,15 @@ export default function Orders() {
                         {t("orders.form.shipment_date")}
                       </label>
                       <input
-                        type="date"
+                        type={formData.shipment_date ? "date" : "text"}
                         className="input-liquid w-full"
+                        autoComplete="off"
+                        placeholder="dd/mm/yyyy"
                         value={formData.shipment_date}
+                        onFocus={(e) => (e.target.type = "date")}
+                        onBlur={(e) => {
+                          if (!e.target.value) e.target.type = "text";
+                        }}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
@@ -780,9 +806,15 @@ export default function Orders() {
                         {t("orders.form.user_withdraw_date")}
                       </label>
                       <input
-                        type="date"
+                        type={formData.user_withdraw_date ? "date" : "text"}
                         className="input-liquid w-full"
+                        autoComplete="off"
+                        placeholder="dd/mm/yyyy"
                         value={formData.user_withdraw_date}
+                        onFocus={(e) => (e.target.type = "date")}
+                        onBlur={(e) => {
+                          if (!e.target.value) e.target.type = "text";
+                        }}
                         onChange={(e) =>
                           setFormData({
                             ...formData,

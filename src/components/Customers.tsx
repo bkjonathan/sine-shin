@@ -10,6 +10,7 @@ import {
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
+import { Select } from "./ui/Select";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -566,12 +567,17 @@ export default function Customers() {
                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                       {t("customers.form.platform")}
                     </label>
-                    <div className="relative">
-                      <select
-                        className="input-liquid w-full appearance-none"
+                    <div className="relative z-20">
+                      <Select
+                        label={t("customers.form.platform")}
+                        options={[
+                          { value: "Facebook", label: "Facebook" },
+                          { value: "TikTok", label: "TikTok" },
+                          { value: "Others", label: t("common.others") },
+                        ]}
                         value={formData.platform}
-                        onChange={(e) => {
-                          const platform = e.target.value;
+                        onChange={(val) => {
+                          const platform = val.toString();
                           let socialUrl = formData.social_media_url;
 
                           if (platform === "Facebook") {
@@ -588,29 +594,8 @@ export default function Customers() {
                             social_media_url: socialUrl,
                           });
                         }}
-                      >
-                        <option value="" disabled>
-                          {t("customers.form.select_platform")}
-                        </option>
-                        <option value="Facebook">Facebook</option>
-                        <option value="TikTok">TikTok</option>
-                        <option value="Others">{t("common.others")}</option>
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-[var(--color-text-muted)]">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </div>
+                        placeholder={t("customers.form.select_platform")}
+                      />
                     </div>
                   </div>
                   <div>

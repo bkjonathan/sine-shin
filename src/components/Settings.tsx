@@ -4,6 +4,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { motion, AnimatePresence } from "framer-motion";
+import { Select } from "./ui/Select";
 import { useTheme } from "../context/ThemeContext";
 import { useSound } from "../context/SoundContext";
 import { RESET_APP_CODE } from "../cheapcode";
@@ -833,14 +834,18 @@ export default function Settings() {
                     {t("settings.language_label")}
                   </p>
                 </div>
-                <select
-                  value={i18n.language}
-                  onChange={(e) => i18n.changeLanguage(e.target.value)}
-                  className="bg-[var(--color-glass-white)] border border-[var(--color-glass-border)] text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 text-[var(--color-text-primary)]"
-                >
-                  <option value="en">English</option>
-                  <option value="mm">မြန်မာ</option>
-                </select>
+                <div className="w-40">
+                  <Select
+                    className="w-full"
+                    options={[
+                      { value: "en", label: "English" },
+                      { value: "mm", label: "မြန်မာ" },
+                    ]}
+                    value={i18n.language}
+                    onChange={(val) => i18n.changeLanguage(val.toString())}
+                    placeholder="Select Language"
+                  />
+                </div>
               </div>
 
               <ToggleSetting
