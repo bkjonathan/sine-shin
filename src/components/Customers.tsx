@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   getCustomers,
@@ -27,6 +28,7 @@ const modalVariants: Variants = {
 };
 
 export default function Customers() {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -277,7 +279,8 @@ export default function Customers() {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="glass-panel p-5 group hover:border-[var(--color-accent-blue)]/30 transition-all duration-300 hover:shadow-lg hover:shadow-[var(--color-accent-blue)]/5 relative overflow-hidden"
+                  onClick={() => navigate(`/customers/${customer.id}`)}
+                  className="glass-panel p-5 group hover:border-[var(--color-accent-blue)]/30 transition-all duration-300 hover:shadow-lg hover:shadow-[var(--color-accent-blue)]/5 relative overflow-hidden cursor-pointer"
                 >
                   {/* Decorative background gradient on hover */}
                   <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-accent-blue)]/0 to-[var(--color-accent-purple)]/0 group-hover:from-[var(--color-accent-blue)]/5 group-hover:to-[var(--color-accent-purple)]/5 transition-all duration-500 pointer-events-none" />
@@ -314,7 +317,10 @@ export default function Customers() {
                       {/* Actions */}
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
                         <button
-                          onClick={() => handleOpenModal(customer)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenModal(customer);
+                          }}
                           className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-accent-blue)] hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors"
                           title="Edit"
                         >
@@ -333,7 +339,8 @@ export default function Customers() {
                           </svg>
                         </button>
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setCustomerToDelete(customer);
                             setIsDeleteModalOpen(true);
                           }}

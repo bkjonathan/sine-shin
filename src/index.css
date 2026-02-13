@@ -129,6 +129,10 @@
     width: 100%;
   }
 
+  button {
+    cursor: pointer;
+  }
+
   /* Tight tracking for all headings */
   h1,
   h2,

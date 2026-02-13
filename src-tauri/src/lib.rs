@@ -682,6 +682,35 @@ async fn get_db_status(app: AppHandle) -> Result<DbStatus, String> {
     })
 }
 
+#[tauri::command]
+async fn get_customer(app: AppHandle, id: i64) -> Result<Customer, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let customer = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
+        .bind(id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("Customer not found".to_string())?;
+
+    Ok(customer)
+}
+
+#[tauri::command]
+async fn get_customer_orders(app: AppHandle, customer_id: i64) -> Result<Vec<Order>, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let orders = sqlx::query_as::<_, Order>("SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC")
+        .bind(customer_id)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(orders)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -743,10 +772,12 @@ pub fn run() {
             get_db_status,
             create_customer,
             get_customers,
+            get_customer, // Added
             update_customer,
             delete_customer,
             create_order,
             get_orders,
+            get_customer_orders, // Added
             update_order,
             delete_order
         ])

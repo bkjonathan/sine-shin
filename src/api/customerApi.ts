@@ -33,3 +33,16 @@ export const updateCustomer = async (customer: Customer): Promise<void> => {
 export const deleteCustomer = async (id: number): Promise<void> => {
   return await invoke("delete_customer", { id });
 };
+
+export const getCustomerById = async (id: number): Promise<Customer> => {
+  return await invoke("get_customer", { id });
+};
+
+// We import Order here to avoid circular dependency if possible, or just use any/Order interface
+import { Order } from "../types/order";
+
+export const getCustomerOrders = async (
+  customerId: number,
+): Promise<Order[]> => {
+  return await invoke("get_customer_orders", { customerId });
+};

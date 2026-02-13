@@ -24,7 +24,18 @@
     "shop_name_label": "Shop Name",
     "shop_phone_label": "Phone Number",
     "shop_address_label": "Address",
-    "complete_setup": "Complete Setup"
+    "complete_setup": "Complete Setup",
+    "login": {
+      "welcome": "Welcome Back",
+      "subtitle": "Sign in to your account",
+      "username": "Username",
+      "enter_username": "Enter username",
+      "password": "Password",
+      "enter_password": "Enter password",
+      "sign_in": "Sign In",
+      "signing_in": "Signing in...",
+      "error_failed": "Login failed"
+    }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -146,6 +157,18 @@
       "message_part1": "Are you sure you want to delete ",
       "message_part2": "? This action cannot be undone.",
       "delete": "Delete"
+    },
+    "detail": {
+      "title": "Customer Details",
+      "order_history": "Order History",
+      "back_to_list": "Back to Customers",
+      "view_item": "View Item",
+      "no_orders": "No orders found for this customer.",
+      "order_id": "Order ID",
+      "date": "Date",
+      "item": "Item",
+      "qty": "Qty",
+      "price": "Price"
     }
   },
   "settings": {

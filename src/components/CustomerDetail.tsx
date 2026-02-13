@@ -1,0 +1,270 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
+import { getCustomerById, getCustomerOrders } from "../api/customerApi";
+import { Customer } from "../types/customer";
+import { Order } from "../types/order";
+import { useSound } from "../context/SoundContext";
+
+const fadeVariants = {
+  hidden: { opacity: 0, y: 12 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring", stiffness: 300, damping: 24 },
+  },
+};
+
+export default function CustomerDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { playSound } = useSound();
+
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (id) {
+      fetchData(parseInt(id));
+    }
+  }, [id]);
+
+  const fetchData = async (customerId: number) => {
+    try {
+      setLoading(true);
+      const [customerData, ordersData] = await Promise.all([
+        getCustomerById(customerId),
+        getCustomerOrders(customerId),
+      ]);
+      setCustomer(customerData);
+      setOrders(ordersData);
+    } catch (err) {
+      console.error("Failed to fetch customer details:", err);
+      setError("Failed to load customer details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    playSound("click");
+    navigate("/customers");
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <div className="w-8 h-8 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !customer) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-muted)]">
+        <p>{error || "Customer not found"}</p>
+        <button
+          onClick={handleBack}
+          className="mt-4 btn-liquid btn-liquid-ghost"
+        >
+          {t("customers.detail.back_to_list")}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial="hidden"
+      animate="show"
+      variants={{
+        hidden: { opacity: 0 },
+        show: {
+          opacity: 1,
+          transition: { staggerChildren: 0.06 },
+        },
+      }}
+      className="max-w-6xl mx-auto h-full flex flex-col space-y-6"
+    >
+      {/* Header with Back Button */}
+      <motion.div variants={fadeVariants} className="flex items-center gap-4">
+        <button
+          onClick={handleBack}
+          className="p-2 hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+            {customer.name}
+          </h1>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            {customer.customer_id}
+          </p>
+        </div>
+      </motion.div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Customer Info Card */}
+        <motion.div variants={fadeVariants} className="lg:col-span-1 space-y-6">
+          <div className="glass-panel p-6 space-y-4">
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+              {t("customers.detail.title")}
+            </h2>
+
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 text-sm">
+                <span className="text-[var(--color-text-muted)] w-20">
+                  {t("customers.form.phone")}:
+                </span>
+                <span className="text-[var(--color-text-primary)]">
+                  {customer.phone || "-"}
+                </span>
+              </div>
+              <div className="flex items-start gap-3 text-sm">
+                <span className="text-[var(--color-text-muted)] w-20">
+                  {t("customers.form.city")}:
+                </span>
+                <span className="text-[var(--color-text-primary)]">
+                  {customer.city || "-"}
+                </span>
+              </div>
+              <div className="flex items-start gap-3 text-sm">
+                <span className="text-[var(--color-text-muted)] w-20">
+                  {t("customers.form.address")}:
+                </span>
+                <span className="text-[var(--color-text-primary)]">
+                  {customer.address || "-"}
+                </span>
+              </div>
+              <div className="flex items-start gap-3 text-sm">
+                <span className="text-[var(--color-text-muted)] w-20">
+                  {t("customers.form.platform")}:
+                </span>
+                <span className="text-[var(--color-text-primary)]">
+                  {customer.platform || "-"}
+                </span>
+              </div>
+              {customer.social_media_url && (
+                <div className="pt-2">
+                  <a
+                    href={customer.social_media_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-[var(--color-accent-blue)] hover:underline"
+                  >
+                    {t("customers.visit_social")}
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Orders List */}
+        <motion.div variants={fadeVariants} className="lg:col-span-2">
+          <div className="glass-panel p-6 h-full flex flex-col">
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+              {t("customers.detail.order_history")} ({orders.length})
+            </h2>
+
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-[var(--color-text-muted)] uppercase border-b border-[var(--color-glass-border)]">
+                  <tr>
+                    <th className="px-4 py-3">
+                      {t("customers.detail.order_id")}
+                    </th>
+                    <th className="px-4 py-3">{t("customers.detail.date")}</th>
+                    <th className="px-4 py-3">{t("customers.detail.item")}</th>
+                    <th className="px-4 py-3 text-right">
+                      {t("customers.detail.qty")}
+                    </th>
+                    <th className="px-4 py-3 text-right">
+                      {t("customers.detail.price")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-glass-border)]">
+                  {orders.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-[var(--color-text-muted)]"
+                      >
+                        {t("customers.detail.no_orders")}
+                      </td>
+                    </tr>
+                  ) : (
+                    orders.map((order) => (
+                      <tr
+                        key={order.id}
+                        className="hover:bg-[var(--color-glass-white-hover)] transition-colors"
+                      >
+                        <td className="px-4 py-3 font-medium text-[var(--color-text-primary)]">
+                          {order.order_id}
+                        </td>
+                        <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                          {order.order_date || "-"}
+                        </td>
+                        <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                          {order.product_url ? (
+                            <a
+                              href={order.product_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[var(--color-accent-blue)] hover:underline truncate max-w-[150px] block"
+                            >
+                              {t("customers.detail.view_item")}
+                            </a>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right text-[var(--color-text-secondary)]">
+                          {order.product_qty || 0}
+                        </td>
+                        <td className="px-4 py-3 text-right text-[var(--color-text-secondary)]">
+                          {order.price?.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
