@@ -77,10 +77,12 @@ const itemVariants = {
 
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 // ... existing imports
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [shop, setShop] = useState<ShopData | null>(null);
@@ -131,10 +133,12 @@ export default function Dashboard() {
           )}
           <div>
             <h1 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
-              {shop ? `Welcome back, ${shop.shop_name}` : "Welcome!"}
+              {shop
+                ? t("dashboard.welcome_back", { name: shop.shop_name })
+                : t("dashboard.welcome")}
             </h1>
             <p className="text-sm text-[var(--color-text-muted)]">
-              Here's what's happening today
+              {t("dashboard.happening_today")}
             </p>
           </div>
         </div>
@@ -143,7 +147,7 @@ export default function Dashboard() {
           onClick={handleLogout}
           className="btn-liquid btn-liquid-ghost text-sm px-4 py-2"
         >
-          Logout
+          {t("app.logout")}
         </button>
       </motion.div>
 
@@ -151,7 +155,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           {
-            label: "Total Revenue",
+            label: "dashboard.total_revenue",
             value: "$12,459",
             change: "+12.5%",
             positive: true,
@@ -159,7 +163,7 @@ export default function Dashboard() {
               "from-[var(--color-accent-blue)] to-[var(--color-accent-cyan)]",
           },
           {
-            label: "Total Orders",
+            label: "dashboard.total_orders",
             value: "328",
             change: "+8.2%",
             positive: true,
@@ -167,14 +171,14 @@ export default function Dashboard() {
               "from-[var(--color-accent-purple)] to-[var(--color-accent-pink)]",
           },
           {
-            label: "New Customers",
+            label: "dashboard.new_customers",
             value: "64",
             change: "+23.1%",
             positive: true,
             gradient: "from-emerald-500 to-teal-500",
           },
           {
-            label: "Avg. Order Value",
+            label: "dashboard.avg_order_value",
             value: "$38.00",
             change: "-2.4%",
             positive: false,
@@ -185,7 +189,7 @@ export default function Dashboard() {
             <div className="glass-panel p-5 group hover:bg-white/[0.08] transition-colors duration-300">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider">
-                  {stat.label}
+                  {t(stat.label)}
                 </span>
                 <div
                   className={`w-8 h-8 rounded-lg bg-gradient-to-br ${stat.gradient} flex items-center justify-center opacity-80`}
@@ -203,7 +207,7 @@ export default function Dashboard() {
                     : "text-[var(--color-error)]"
                 }`}
               >
-                {stat.change} from last month
+                {stat.change} {t("dashboard.from_last_month")}
               </span>
             </div>
           </motion.div>
@@ -217,10 +221,10 @@ export default function Dashboard() {
           <div className="glass-panel p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-                Recent Activity
+                {t("dashboard.recent_activity")}
               </h2>
               <button className="text-xs font-medium text-[var(--color-accent-blue)] hover:text-[var(--color-accent-purple)] transition-colors">
-                View All
+                {t("dashboard.view_all")}
               </button>
             </div>
 
@@ -269,14 +273,30 @@ export default function Dashboard() {
         <motion.div variants={itemVariants}>
           <div className="glass-panel p-6">
             <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-5">
-              Quick Actions
+              {t("dashboard.quick_actions")}
             </h2>
             <div className="space-y-2">
               {[
-                { label: "New Order", icon: "🛒", desc: "Create a new order" },
-                { label: "Add Product", icon: "➕", desc: "Add to inventory" },
-                { label: "Manage Staff", icon: "👥", desc: "Team management" },
-                { label: "Reports", icon: "📊", desc: "View analytics" },
+                {
+                  label: "dashboard.actions.new_order",
+                  icon: "🛒",
+                  desc: "dashboard.actions.new_order_desc",
+                },
+                {
+                  label: "dashboard.actions.add_product",
+                  icon: "➕",
+                  desc: "dashboard.actions.add_product_desc",
+                },
+                {
+                  label: "dashboard.actions.manage_staff",
+                  icon: "👥",
+                  desc: "dashboard.actions.manage_staff_desc",
+                },
+                {
+                  label: "dashboard.actions.reports",
+                  icon: "📊",
+                  desc: "dashboard.actions.reports_desc",
+                },
               ].map((action) => (
                 <button
                   key={action.label}
@@ -292,10 +312,10 @@ export default function Dashboard() {
                   <span className="text-lg">{action.icon}</span>
                   <div>
                     <p className="text-sm font-medium text-[var(--color-text-primary)] group-hover:text-white transition-colors">
-                      {action.label}
+                      {t(action.label)}
                     </p>
                     <p className="text-xs text-[var(--color-text-muted)]">
-                      {action.desc}
+                      {t(action.desc)}
                     </p>
                   </div>
                 </button>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
@@ -8,94 +9,7 @@ import { useSound } from "../context/SoundContext";
 import { RESET_APP_CODE } from "../cheapcode";
 
 // ── Settings Categories ──
-const categories = [
-  {
-    id: "general",
-    label: "General",
-    icon: (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-      </svg>
-    ),
-  },
-  {
-    id: "account",
-    label: "Account",
-    icon: (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-      </svg>
-    ),
-  },
-  {
-    id: "appearance",
-    label: "Appearance",
-    icon: (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="12" cy="12" r="5" />
-        <line x1="12" y1="1" x2="12" y2="3" />
-        <line x1="12" y1="21" x2="12" y2="23" />
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-        <line x1="1" y1="12" x2="3" y2="12" />
-        <line x1="21" y1="12" x2="23" y2="12" />
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-      </svg>
-    ),
-  },
-  {
-    id: "data",
-    label: "Data",
-    icon: (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
-        <line x1="3" y1="12" x2="21" y2="12" />
-        <path d="M3 12v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5" />
-        <line x1="10" y1="21" x2="14" y2="21" />
-        <line x1="12" y1="17" x2="12" y2="21" />
-      </svg>
-    ),
-  },
-];
+// Categories moved inside component for translation
 
 // ── Toggle Component ──
 function ToggleSetting({
@@ -173,6 +87,7 @@ function AccountSettings() {
   // Logo state
   const [newLogoPath, setNewLogoPath] = useState<string | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -209,7 +124,7 @@ function AccountSettings() {
       }
     } catch (err) {
       console.error("Failed to fetch settings:", err);
-      setMessage({ type: "error", text: "Failed to load settings" });
+      setMessage({ type: "error", text: t("settings.error_load") });
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -258,7 +173,10 @@ function AccountSettings() {
         logoPath: newLogoPath,
         customerIdPrefix,
       });
-      setMessage({ type: "success", text: "Settings saved successfully" });
+      setMessage({
+        type: "success",
+        text: t("settings.account.success_message"),
+      });
       playSound("success");
 
       // After save, clear the newLogoPath
@@ -277,7 +195,7 @@ function AccountSettings() {
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
       console.error("Failed to save settings:", err);
-      setMessage({ type: "error", text: "Failed to save settings" });
+      setMessage({ type: "error", text: t("settings.account.error_message") });
       playSound("error");
     } finally {
       setSaving(false);
@@ -301,7 +219,7 @@ function AccountSettings() {
     >
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-          Account Settings
+          {t("settings.account.title")}
         </h2>
         {message && (
           <motion.span
@@ -318,14 +236,14 @@ function AccountSettings() {
         )}
       </div>
       <p className="text-xs text-[var(--color-text-muted)] mb-5">
-        Manage your account information
+        {t("settings.account.subtitle")}
       </p>
 
       <div className="space-y-5">
         {/* Logo Section */}
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-[var(--color-text-secondary)]">
-            Shop Logo
+            {t("settings.account.shop_logo")}
           </label>
           {/* Debug Info */}
           <div className="text-[10px] p-2 bg-black/20 rounded font-mono text-[var(--color-text-muted)] break-all hidden">
@@ -363,49 +281,49 @@ function AccountSettings() {
               onClick={handlePickLogo}
               className="btn-liquid btn-liquid-ghost text-xs px-3 py-1.5"
             >
-              Change Logo
+              {t("settings.account.change_logo")}
             </button>
           </div>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-            Shop Name
+            {t("settings.account.shop_name")}
           </label>
           <input
             type="text"
             className="input-liquid"
-            placeholder="Your shop name"
+            placeholder={t("settings.account.shop_name_placeholder")}
             value={shopName}
             onChange={(e) => setShopName(e.target.value)}
           />
         </div>
         <div>
           <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-            Phone Number
+            {t("settings.account.phone_number")}
           </label>
           <input
             type="tel"
             className="input-liquid"
-            placeholder="Your phone number"
+            placeholder={t("settings.account.phone_placeholder")}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
           />
         </div>
         <div>
           <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-            Address
+            {t("settings.account.address")}
           </label>
           <textarea
             className="input-liquid min-h-[80px] py-2"
-            placeholder="Your shop address"
+            placeholder={t("settings.account.address_placeholder")}
             value={address}
             onChange={(e) => setAddress(e.target.value)}
           />
         </div>
         <div>
           <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-            Customer ID Prefix
+            {t("settings.account.customer_id_prefix")}
           </label>
           <input
             type="text"
@@ -415,7 +333,7 @@ function AccountSettings() {
             onChange={(e) => setCustomerIdPrefix(e.target.value.toUpperCase())}
           />
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            Prefix for auto-generated customer IDs (e.g. SSC-00001)
+            {t("settings.account.customer_id_desc")}
           </p>
         </div>
         <div className="pt-2">
@@ -427,7 +345,9 @@ function AccountSettings() {
             {saving && (
               <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             )}
-            {saving ? "Saving..." : "Save Changes"}
+            {saving
+              ? t("settings.account.saving")
+              : t("settings.account.save_changes")}
           </button>
         </div>
       </div>
@@ -443,6 +363,7 @@ function DbStatus() {
     size_bytes: number | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const { t } = useTranslation();
 
   useEffect(() => {
     fetchStatus();
@@ -478,10 +399,12 @@ function DbStatus() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-            Database Status
+            {t("settings.data_mgmt.db_status")}
           </h3>
           <div className="flex gap-3 text-xs text-[var(--color-text-muted)] mt-1">
-            <span>{status?.total_tables || 0} Tables</span>
+            <span>
+              {status?.total_tables || 0} {t("settings.data_mgmt.tables")}
+            </span>
             {status?.size_bytes && (
               <>
                 <span>•</span>
@@ -493,7 +416,7 @@ function DbStatus() {
         <button
           onClick={fetchStatus}
           className="p-1.5 hover:bg-[var(--color-glass-white-hover)] rounded-lg text-[var(--color-text-secondary)] transition-colors"
-          title="Refresh Status"
+          title={t("settings.data_mgmt.refresh_status")}
         >
           <svg
             width="14"
@@ -523,7 +446,7 @@ function DbStatus() {
               {table.name}
             </span>
             <span className="font-medium text-[var(--color-text-primary)] bg-[var(--color-glass-white-hover)] px-2 py-0.5 rounded-md">
-              {table.row_count} rows
+              {table.row_count} {t("settings.data_mgmt.rows")}
             </span>
           </div>
         ))}
@@ -539,10 +462,11 @@ function DataSettings() {
   const [error, setError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const { playSound } = useSound();
+  const { t } = useTranslation();
 
   const handleReset = async () => {
     if (code !== RESET_APP_CODE) {
-      setError("Incorrect code. Please try again.");
+      setError(t("settings.data_mgmt.error_code"));
       playSound("error");
       return;
     }
@@ -556,7 +480,7 @@ function DataSettings() {
       window.location.reload();
     } catch (err) {
       console.error("Failed to reset data:", err);
-      setError("Failed to reset data. Please try again.");
+      setError(t("settings.data_mgmt.error_reset"));
       playSound("error");
       setResetting(false);
     }
@@ -570,10 +494,10 @@ function DataSettings() {
       transition={{ duration: 0.2 }}
     >
       <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
-        Data Management
+        {t("settings.data_mgmt.title")}
       </h2>
       <p className="text-xs text-[var(--color-text-muted)] mb-5">
-        Manage your application data and storage
+        {t("settings.data_mgmt.subtitle")}
       </p>
 
       <DbStatus />
@@ -601,12 +525,10 @@ function DataSettings() {
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-red-500 mb-1">
-                Danger Zone
+                {t("settings.data_mgmt.danger_zone")}
               </h3>
               <p className="text-xs text-[var(--color-text-muted)] mb-4">
-                Resetting the application will permanently delete all your data,
-                including orders, customers, and settings. This action cannot be
-                undone.
+                {t("settings.data_mgmt.reset_warning")}
               </p>
               <button
                 onClick={() => {
@@ -615,7 +537,7 @@ function DataSettings() {
                 }}
                 className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition-colors shadow-lg shadow-red-500/20"
               >
-                Reset All Data
+                {t("settings.data_mgmt.reset_btn")}
               </button>
             </div>
           </div>
@@ -657,15 +579,14 @@ function DataSettings() {
                 </div>
 
                 <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
-                  Are you absolutely sure?
+                  {t("settings.data_mgmt.modal_title")}
                 </h3>
                 <p className="text-sm text-[var(--color-text-muted)] mb-6">
-                  This action will swipe all data from the database. Enter the
-                  code
+                  {t("settings.data_mgmt.modal_message_part1")}
                   <span className="font-mono font-bold text-[var(--color-text-primary)] mx-1">
                     {RESET_APP_CODE}
                   </span>
-                  to confirm.
+                  {t("settings.data_mgmt.modal_message_part2")}
                 </p>
 
                 <div className="w-full mb-4">
@@ -676,7 +597,7 @@ function DataSettings() {
                       setCode(e.target.value);
                       setError(null);
                     }}
-                    placeholder="Enter confirmation code"
+                    placeholder={t("settings.data_mgmt.enter_code")}
                     className="input-liquid text-center tracking-widest font-mono"
                     autoFocus
                   />
@@ -695,7 +616,7 @@ function DataSettings() {
                     disabled={resetting}
                     className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
                   >
-                    Cancel
+                    {t("settings.data_mgmt.cancel")}
                   </button>
                   <button
                     onClick={handleReset}
@@ -705,7 +626,9 @@ function DataSettings() {
                     {resetting && (
                       <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     )}
-                    {resetting ? "Resetting..." : "Confirm Reset"}
+                    {resetting
+                      ? t("settings.data_mgmt.resetting")
+                      : t("settings.data_mgmt.confirm_reset")}
                   </button>
                 </div>
               </div>
@@ -718,6 +641,7 @@ function DataSettings() {
 }
 
 export default function Settings() {
+  const { t, i18n } = useTranslation();
   const [activeCategory, setActiveCategory] = useState("general");
 
   // Global Theme Context
@@ -740,6 +664,96 @@ export default function Settings() {
   // Sound Context
   const { soundEnabled, toggleSound, playSound } = useSound();
 
+  // ── Settings Categories ──
+  const categories = [
+    {
+      id: "general",
+      label: t("settings.general"),
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      ),
+    },
+    {
+      id: "account",
+      label: t("settings.account.title"),
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      ),
+    },
+    {
+      id: "appearance",
+      label: t("settings.appearance"),
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+      ),
+    },
+    {
+      id: "data",
+      label: t("settings.data"),
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <path d="M3 12v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5" />
+          <line x1="10" y1="21" x2="14" y2="21" />
+          <line x1="12" y1="17" x2="12" y2="21" />
+        </svg>
+      ),
+    },
+  ];
+
   return (
     <motion.div
       initial="hidden"
@@ -755,10 +769,10 @@ export default function Settings() {
     >
       <motion.div variants={fadeVariants} className="mb-6">
         <h1 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
-          Settings
+          {t("settings.title")}
         </h1>
         <p className="text-sm text-[var(--color-text-muted)] mt-1">
-          Manage your preferences
+          {t("settings.manage_preferences")}
         </p>
       </motion.div>
 
@@ -803,27 +817,47 @@ export default function Settings() {
               transition={{ duration: 0.2 }}
             >
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
-                General Settings
+                {t("settings.general")}
               </h2>
               <p className="text-xs text-[var(--color-text-muted)] mb-5">
-                Configure basic shop preferences
+                {t("settings.general_desc")}
               </p>
 
+              {/* Language Switcher */}
+              <div className="flex items-center justify-between py-4 border-b border-[var(--color-glass-border)]">
+                <div className="flex-1 mr-4">
+                  <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                    {t("settings.language")}
+                  </p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                    {t("settings.language_label")}
+                  </p>
+                </div>
+                <select
+                  value={i18n.language}
+                  onChange={(e) => i18n.changeLanguage(e.target.value)}
+                  className="bg-[var(--color-glass-white)] border border-[var(--color-glass-border)] text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 text-[var(--color-text-primary)]"
+                >
+                  <option value="en">English</option>
+                  <option value="mm">မြန်မာ</option>
+                </select>
+              </div>
+
               <ToggleSetting
-                label="Push Notifications"
-                description="Receive notifications for important events"
+                label={t("settings.push_notifications")}
+                description={t("settings.push_notifications_desc")}
                 checked={notifications}
                 onChange={setNotifications}
               />
               <ToggleSetting
-                label="Order Alerts"
-                description="Get notified when a new order comes in"
+                label={t("settings.order_alerts")}
+                description={t("settings.order_alerts_desc")}
                 checked={orderAlerts}
                 onChange={setOrderAlerts}
               />
               <ToggleSetting
-                label="Sound Effects"
-                description="Play sounds for notifications and actions"
+                label={t("settings.sound_effects")}
+                description={t("settings.sound_effects_desc")}
                 checked={soundEnabled}
                 onChange={() => {
                   toggleSound();
@@ -831,8 +865,8 @@ export default function Settings() {
                 }}
               />
               <ToggleSetting
-                label="Auto Backup"
-                description="Automatically backup your data daily"
+                label={t("settings.auto_backup")}
+                description={t("settings.auto_backup_desc")}
                 checked={autoBackup}
                 onChange={setAutoBackup}
               />
@@ -849,15 +883,15 @@ export default function Settings() {
               transition={{ duration: 0.2 }}
             >
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
-                Appearance
+                {t("settings.appearance")}
               </h2>
               <p className="text-xs text-[var(--color-text-muted)] mb-5">
-                Customize how the app looks and feels
+                {t("settings.appearance_desc")}
               </p>
 
               <ToggleSetting
-                label="Dark Mode"
-                description="Use dark color scheme throughout the app"
+                label={t("settings.dark_mode")}
+                description={t("settings.dark_mode_desc")}
                 checked={theme === "dark"}
                 onChange={() => {
                   toggleTheme();
@@ -865,14 +899,14 @@ export default function Settings() {
                 }}
               />
               <ToggleSetting
-                label="Smooth Animations"
-                description="Enable page transitions and micro-interactions"
+                label={t("settings.smooth_animations")}
+                description={t("settings.smooth_animations_desc")}
                 checked={animations}
                 onChange={setAnimations}
               />
               <ToggleSetting
-                label="Compact Mode"
-                description="Reduce spacing to show more content"
+                label={t("settings.compact_mode")}
+                description={t("settings.compact_mode_desc")}
                 checked={compactMode}
                 onChange={setCompactMode}
               />
@@ -880,7 +914,7 @@ export default function Settings() {
               {/* Theme preview */}
               <div className="mt-6 pt-4 border-t border-[var(--color-glass-border)]">
                 <p className="text-sm font-medium text-[var(--color-text-primary)] mb-3">
-                  Accent Color
+                  {t("settings.accent_color")}
                 </p>
                 <div className="flex items-center gap-3">
                   {[
@@ -902,7 +936,7 @@ export default function Settings() {
                         transition-all duration-200 hover:scale-110
                         ${accentColor === themeItem.id ? "ring-[var(--color-text-primary)] scale-110" : ""}
                       `}
-                      title={themeItem.name}
+                      title={t(`settings.colors.${themeItem.id}`)}
                     />
                   ))}
                 </div>

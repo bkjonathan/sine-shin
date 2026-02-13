@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSound } from "../context/SoundContext";
+import { useTranslation } from "react-i18next";
 
 // ── SVG Icons ──
 const Icons = {
@@ -97,10 +98,10 @@ const Icons = {
 };
 
 const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: Icons.Home },
-  { to: "/orders", label: "Orders", icon: Icons.List },
-  { to: "/customers", label: "Customers", icon: Icons.Users },
-  { to: "/settings", label: "Settings", icon: Icons.Settings },
+  { to: "/dashboard", label: "nav.dashboard", icon: Icons.Home },
+  { to: "/orders", label: "nav.orders", icon: Icons.List },
+  { to: "/customers", label: "nav.customers", icon: Icons.Users },
+  { to: "/settings", label: "nav.settings", icon: Icons.Settings },
 ];
 
 export default function AppLayout() {
@@ -113,6 +114,7 @@ export default function AppLayout() {
 
   const appWindow = getCurrentWindow();
   const { playSound } = useSound();
+  const { t } = useTranslation();
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-liquid-bg)]">
@@ -143,10 +145,10 @@ export default function AppLayout() {
         {/* App branding */}
         <div className="px-5 pb-4">
           <h1 className="text-lg font-bold text-[var(--color-text-primary)] tracking-tight">
-            Sine Shin
+            {t("app.title")}
           </h1>
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            Shop Management
+            {t("app.subtitle")}
           </p>
         </div>
 
@@ -162,7 +164,7 @@ export default function AppLayout() {
               }
             >
               <Icon />
-              <span>{label}</span>
+              <span>{t(label)}</span>
             </NavLink>
           ))}
         </nav>
@@ -175,10 +177,10 @@ export default function AppLayout() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-                Admin
+                {t("nav.admin")}
               </p>
               <p className="text-xs text-[var(--color-text-muted)] truncate">
-                Owner
+                {t("nav.owner")}
               </p>
             </div>
           </div>

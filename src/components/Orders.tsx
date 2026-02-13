@@ -10,6 +10,7 @@ import { getCustomers } from "../api/customerApi";
 import { OrderWithCustomer } from "../types/order";
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
+import { useTranslation } from "react-i18next";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -34,6 +35,7 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const { playSound } = useSound();
+  const { t } = useTranslation();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -232,10 +234,10 @@ export default function Orders() {
       >
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
-            Orders
+            {t("orders.title")}
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Manage your orders and shipments
+            {t("orders.manage_orders")}
           </p>
         </div>
         <button
@@ -254,7 +256,7 @@ export default function Orders() {
           >
             <path d="M12 5v14M5 12h14" />
           </svg>
-          Add Order
+          {t("orders.add_order")}
         </button>
       </motion.div>
 
@@ -279,7 +281,7 @@ export default function Orders() {
           <input
             type="text"
             className="input-liquid pl-10 w-full"
-            placeholder="Search orders, customers..."
+            placeholder={t("orders.search_placeholder")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -311,12 +313,12 @@ export default function Orders() {
               </svg>
             </div>
             <h3 className="text-lg font-medium text-[var(--color-text-primary)]">
-              No orders found
+              {t("orders.no_orders")}
             </h3>
             <p className="text-sm text-[var(--color-text-muted)] mt-1">
               {searchTerm
-                ? "Try adjusting your search terms"
-                : "Create an order to get started"}
+                ? t("orders.no_orders_search")
+                : t("orders.no_orders_create")}
             </p>
           </div>
         ) : (
@@ -334,7 +336,7 @@ export default function Orders() {
                   <div className="relative z-10">
                     <div className="flex justify-between items-start mb-3">
                       <div className="bg-[var(--color-glass-white)] px-2 py-1 rounded text-xs font-mono text-[var(--color-text-secondary)] border border-[var(--color-glass-border)]">
-                        {order.order_id || "ID pending..."}
+                        {order.order_id || t("orders.id_pending")}
                       </div>
 
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
@@ -384,7 +386,7 @@ export default function Orders() {
                       {order.customer_name}
                     </h3>
                     <p className="text-sm text-[var(--color-text-muted)] mb-4">
-                      From:{" "}
+                      {t("orders.from")}{" "}
                       <span className="text-[var(--color-text-secondary)]">
                         {order.order_from || "-"}
                       </span>
@@ -397,32 +399,32 @@ export default function Orders() {
                         className="text-xs text-[var(--color-accent-blue)] hover:underline mb-2 block truncate"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        Product Link
+                        {t("orders.product_link")}
                       </a>
                     )}
 
                     <div className="grid grid-cols-2 gap-2 text-sm text-[var(--color-text-secondary)] mb-4 bg-[var(--color-glass-white)]/50 p-2 rounded-lg border border-[var(--color-glass-border)]/50">
                       <div>
                         <span className="text-[var(--color-text-muted)] text-xs block">
-                          Date
+                          {t("orders.date")}
                         </span>
                         {order.order_date || "-"}
                       </div>
                       <div>
                         <span className="text-[var(--color-text-muted)] text-xs block">
-                          Qty
+                          {t("orders.qty")}
                         </span>
                         {order.product_qty || 0}
                       </div>
                       <div>
                         <span className="text-[var(--color-text-muted)] text-xs block">
-                          Price
+                          {t("orders.price")}
                         </span>
                         {order.price?.toLocaleString() || "-"}
                       </div>
                       <div>
                         <span className="text-[var(--color-text-muted)] text-xs block">
-                          Total
+                          {t("orders.total")}
                         </span>
                         {(
                           (order.product_qty || 0) * (order.price || 0)
@@ -434,17 +436,17 @@ export default function Orders() {
                     <div className="flex gap-2 text-xs">
                       {order.arrived_date && (
                         <span className="bg-green-500/10 text-green-500 px-2 py-0.5 rounded border border-green-500/20">
-                          Arrived
+                          {t("orders.status_arrived")}
                         </span>
                       )}
                       {order.shipment_date && (
                         <span className="bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded border border-blue-500/20">
-                          Shipped
+                          {t("orders.status_shipped")}
                         </span>
                       )}
                       {!order.arrived_date && !order.shipment_date && (
                         <span className="bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20">
-                          Pending
+                          {t("orders.status_pending")}
                         </span>
                       )}
                     </div>
@@ -476,7 +478,9 @@ export default function Orders() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
-                  {editingOrder ? "Edit Order" : "Add New Order"}
+                  {editingOrder
+                    ? t("orders.modal.title_edit")
+                    : t("orders.modal.title_add")}
                 </h2>
                 <button
                   onClick={handleCloseModal}
@@ -502,12 +506,13 @@ export default function Orders() {
                 {/* Section: Basic Info */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
-                    Basic Information
+                    {t("orders.modal.basic_info")}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Customer <span className="text-red-500">*</span>
+                        {t("orders.form.customer")}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <select
                         required
@@ -520,7 +525,9 @@ export default function Orders() {
                           })
                         }
                       >
-                        <option value="">Select Customer</option>
+                        <option value="">
+                          {t("orders.form.select_customer")}
+                        </option>
                         {customers.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name} ({c.customer_id})
@@ -530,7 +537,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Order From
+                        {t("orders.form.order_from")}
                       </label>
                       <select
                         className="input-liquid w-full"
@@ -544,12 +551,12 @@ export default function Orders() {
                       >
                         <option value="Facebook">Facebook</option>
                         <option value="TikTok">TikTok</option>
-                        <option value="Others">Others</option>
+                        <option value="Others">{t("common.others")}</option>
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Product URL (Optional)
+                        {t("orders.form.product_url")}
                       </label>
                       <input
                         type="url"
@@ -566,7 +573,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Order Date
+                        {t("orders.form.order_date")}
                       </label>
                       <input
                         type="date"
@@ -586,12 +593,12 @@ export default function Orders() {
                 {/* Section: Product & Price */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
-                    Product & Details
+                    {t("orders.modal.product_details")}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Qty
+                        {t("orders.qty")}
                       </label>
                       <input
                         type="number"
@@ -608,7 +615,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Price
+                        {t("orders.price")}
                       </label>
                       <input
                         type="number"
@@ -623,7 +630,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Weight (kg)
+                        {t("orders.form.weight")}
                       </label>
                       <input
                         type="number"
@@ -641,7 +648,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Exchange Rate
+                        {t("orders.form.exchange_rate")}
                       </label>
                       <input
                         type="number"
@@ -663,12 +670,12 @@ export default function Orders() {
                 {/* Section: Fees */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
-                    Fees
+                    {t("orders.modal.fees")}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Shipping Fee
+                        {t("orders.form.shipping_fee")}
                       </label>
                       <input
                         type="number"
@@ -686,7 +693,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Delivery Fee
+                        {t("orders.form.delivery_fee")}
                       </label>
                       <input
                         type="number"
@@ -704,7 +711,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Cargo Fee
+                        {t("orders.form.cargo_fee")}
                       </label>
                       <input
                         type="number"
@@ -726,12 +733,12 @@ export default function Orders() {
                 {/* Section: Status Dates */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
-                    Status Dates
+                    {t("orders.modal.status_dates")}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Arrived Date
+                        {t("orders.form.arrived_date")}
                       </label>
                       <input
                         type="date"
@@ -747,7 +754,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        Shipment Date
+                        {t("orders.form.shipment_date")}
                       </label>
                       <input
                         type="date"
@@ -763,7 +770,7 @@ export default function Orders() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        User Withdraw Date
+                        {t("orders.form.user_withdraw_date")}
                       </label>
                       <input
                         type="date"
@@ -786,7 +793,7 @@ export default function Orders() {
                     onClick={handleCloseModal}
                     className="btn-liquid btn-liquid-ghost"
                   >
-                    Cancel
+                    {t("orders.modal.cancel")}
                   </button>
                   <button
                     type="submit"
@@ -796,7 +803,9 @@ export default function Orders() {
                     {isSubmitting && (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     )}
-                    {editingOrder ? "Update Order" : "Create Order"}
+                    {editingOrder
+                      ? t("orders.modal.update")
+                      : t("orders.modal.create")}
                   </button>
                 </div>
               </form>
@@ -840,24 +849,23 @@ export default function Orders() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
-                  Delete Order?
+                  {t("orders.delete_modal.title")}
                 </h3>
                 <p className="text-sm text-[var(--color-text-muted)] mb-6">
-                  Are you sure you want to delete this order? This action cannot
-                  be undone.
+                  {t("orders.delete_modal.message")}
                 </p>
                 <div className="flex gap-3 w-full">
                   <button
                     onClick={() => setIsDeleteModalOpen(false)}
                     className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
                   >
-                    Cancel
+                    {t("orders.modal.cancel")}
                   </button>
                   <button
                     onClick={handleConfirmDelete}
                     className="flex-1 btn-liquid bg-red-500 hover:bg-red-600 text-white py-2.5 text-sm"
                   >
-                    Delete
+                    {t("orders.delete_modal.delete")}
                   </button>
                 </div>
               </div>

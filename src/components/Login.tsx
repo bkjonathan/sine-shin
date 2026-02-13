@@ -3,10 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -38,7 +40,7 @@ export default function Login() {
           ? err.message
           : typeof err === "string"
             ? err
-            : "Login failed";
+            : t("auth.login.error_failed");
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -71,9 +73,11 @@ export default function Login() {
                 <line x1="15" y1="12" x2="3" y2="12" />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">Welcome Back</h1>
+            <h1 className="text-2xl font-bold text-white mb-2">
+              {t("auth.login.welcome")}
+            </h1>
             <p className="text-sm text-[var(--color-text-secondary)]">
-              Sign in to continue
+              {t("auth.login.subtitle")}
             </p>
           </div>
 
@@ -93,12 +97,12 @@ export default function Login() {
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Username
+                {t("auth.login.username")}
               </label>
               <input
                 type="text"
                 className="input-liquid"
-                placeholder="Enter username"
+                placeholder={t("auth.login.enter_username")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -106,12 +110,12 @@ export default function Login() {
             </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Password
+                {t("auth.login.password")}
               </label>
               <input
                 type="password"
                 className="input-liquid"
-                placeholder="Enter password"
+                placeholder={t("auth.login.enter_password")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -126,10 +130,10 @@ export default function Login() {
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                  Signing in...
+                  {t("auth.login.signing_in")}
                 </>
               ) : (
-                "Sign In"
+                t("auth.login.sign_in")
               )}
             </button>
           </form>

@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 // ── Slide animation variants ──
 const slideVariants = {
@@ -32,6 +33,7 @@ const slideTransition = {
 
 export default function OnboardingForm() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,16 +96,16 @@ export default function OnboardingForm() {
   const handleNext = () => {
     setError("");
     if (currentStep === 1 && !shopName.trim()) {
-      setError("Shop name is required");
+      setError(t("auth.onboarding.error_shop_name"));
       return;
     }
     if (currentStep === 3) {
       if (!username.trim() || !password.trim()) {
-        setError("Username and password are required");
+        setError(t("auth.onboarding.error_credentials"));
         return;
       }
       if (password !== confirmPassword) {
-        setError("Passwords do not match");
+        setError(t("auth.onboarding.error_password_match"));
         return;
       }
     }
@@ -150,7 +152,7 @@ export default function OnboardingForm() {
           ? err.message
           : typeof err === "string"
             ? err
-            : "Failed to save";
+            : t("auth.onboarding.error_failed");
       setError(message);
       setIsSubmitting(false);
     }
@@ -257,17 +259,17 @@ export default function OnboardingForm() {
                 </div>
 
                 <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">
-                  Welcome to Sine Shin
+                  {t("auth.onboarding.welcome_title")}
                 </h1>
                 <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed mb-10 max-w-[280px] mx-auto">
-                  Set up your shop in just a few steps. Let's get you started.
+                  {t("auth.onboarding.welcome_subtitle")}
                 </p>
 
                 <button
                   className="btn-liquid btn-liquid-primary px-10 py-3.5 text-base"
                   onClick={handleNext}
                 >
-                  Get Started
+                  {t("auth.onboarding.get_started")}
                   <svg
                     width="16"
                     height="16"
@@ -298,22 +300,22 @@ export default function OnboardingForm() {
               >
                 <div className="text-center mb-2">
                   <h2 className="text-xl font-bold text-white mb-1">
-                    Shop Details
+                    {t("auth.onboarding.step1_title")}
                   </h2>
                   <p className="text-sm text-[var(--color-text-muted)]">
-                    Tell us about your shop
+                    {t("auth.onboarding.step1_subtitle")}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                    Shop Name{" "}
+                    {t("auth.onboarding.shop_name")}{" "}
                     <span className="text-[var(--color-error)]">*</span>
                   </label>
                   <input
                     type="text"
                     className="input-liquid"
-                    placeholder="Enter your shop name"
+                    placeholder={t("auth.onboarding.enter_shop_name")}
                     value={shopName}
                     onChange={(e) => setShopName(e.target.value)}
                     autoFocus
@@ -322,12 +324,12 @@ export default function OnboardingForm() {
 
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                    Phone Number
+                    {t("auth.onboarding.phone_number")}
                   </label>
                   <input
                     type="tel"
                     className="input-liquid"
-                    placeholder="Enter phone number"
+                    placeholder={t("auth.onboarding.enter_phone")}
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                   />
@@ -349,10 +351,10 @@ export default function OnboardingForm() {
               >
                 <div className="text-center mb-2">
                   <h2 className="text-xl font-bold text-white mb-1">
-                    Shop Logo
+                    {t("auth.onboarding.step2_title")}
                   </h2>
                   <p className="text-sm text-[var(--color-text-muted)]">
-                    Add your brand identity
+                    {t("auth.onboarding.step2_subtitle")}
                   </p>
                 </div>
 
@@ -402,7 +404,7 @@ export default function OnboardingForm() {
                           <polyline points="21 15 16 10 5 21" />
                         </svg>
                         <span className="text-xs text-[var(--color-text-muted)] group-hover:text-[var(--color-accent-blue)] transition-colors">
-                          Choose Image
+                          {t("auth.onboarding.choose_image")}
                         </span>
                       </>
                     )}
@@ -430,22 +432,22 @@ export default function OnboardingForm() {
               >
                 <div className="text-center mb-2">
                   <h2 className="text-xl font-bold text-white mb-1">
-                    Owner Account
+                    {t("auth.onboarding.step3_title")}
                   </h2>
                   <p className="text-sm text-[var(--color-text-muted)]">
-                    Create your login credentials
+                    {t("auth.onboarding.step3_subtitle")}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                    Username{" "}
+                    {t("auth.login.username")}{" "}
                     <span className="text-[var(--color-error)]">*</span>
                   </label>
                   <input
                     type="text"
                     className="input-liquid"
-                    placeholder="Enter username"
+                    placeholder={t("auth.login.enter_username")}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                   />
@@ -453,13 +455,13 @@ export default function OnboardingForm() {
 
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                    Password{" "}
+                    {t("auth.login.password")}{" "}
                     <span className="text-[var(--color-error)]">*</span>
                   </label>
                   <input
                     type="password"
                     className="input-liquid"
-                    placeholder="Enter password"
+                    placeholder={t("auth.login.enter_password")}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
@@ -467,13 +469,13 @@ export default function OnboardingForm() {
 
                 <div>
                   <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                    Confirm Password{" "}
+                    {t("auth.onboarding.confirm_password")}{" "}
                     <span className="text-[var(--color-error)]">*</span>
                   </label>
                   <input
                     type="password"
                     className="input-liquid"
-                    placeholder="Confirm password"
+                    placeholder={t("auth.onboarding.enter_confirm_password")}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
@@ -501,7 +503,7 @@ export default function OnboardingForm() {
                 >
                   <path d="M10 12L6 8L10 4" />
                 </svg>
-                Back
+                {t("auth.onboarding.back")}
               </button>
 
               {currentStep < 3 ? (
@@ -509,7 +511,7 @@ export default function OnboardingForm() {
                   className="btn-liquid btn-liquid-primary"
                   onClick={handleNext}
                 >
-                  Next
+                  {t("auth.onboarding.next")}
                   <svg
                     width="16"
                     height="16"
@@ -532,11 +534,11 @@ export default function OnboardingForm() {
                   {isSubmitting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Saving...
+                      {t("auth.onboarding.saving")}
                     </>
                   ) : (
                     <>
-                      Complete Setup
+                      {t("auth.onboarding.complete_setup")}
                       <svg
                         width="16"
                         height="16"
@@ -559,7 +561,7 @@ export default function OnboardingForm() {
 
         {/* Footer note */}
         <p className="text-center text-xs text-white/25 mt-6">
-          You can update these settings later
+          {t("auth.onboarding.footer_note")}
         </p>
       </div>
     </div>

@@ -8,6 +8,7 @@ import {
 } from "../api/customerApi";
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
+import { useTranslation } from "react-i18next";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -31,6 +32,7 @@ export default function Customers() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const { playSound } = useSound();
+  const { t } = useTranslation();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -177,10 +179,10 @@ export default function Customers() {
       >
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
-            Customers
+            {t("customers.title")}
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Manage your customer database
+            {t("customers.manage_customers")}
           </p>
         </div>
         <button
@@ -199,7 +201,7 @@ export default function Customers() {
           >
             <path d="M12 5v14M5 12h14" />
           </svg>
-          Add Customer
+          {t("customers.add_customer")}
         </button>
       </motion.div>
 
@@ -224,7 +226,7 @@ export default function Customers() {
           <input
             type="text"
             className="input-liquid pl-10 w-full"
-            placeholder="Search customers..."
+            placeholder={t("customers.search_placeholder")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -257,12 +259,12 @@ export default function Customers() {
               </svg>
             </div>
             <h3 className="text-lg font-medium text-[var(--color-text-primary)]">
-              No customers found
+              {t("customers.no_customers")}
             </h3>
             <p className="text-sm text-[var(--color-text-muted)] mt-1">
               {searchTerm
-                ? "Try adjusting your search terms"
-                : "Get started by adding your first customer"}
+                ? t("customers.no_customers_search")
+                : t("customers.no_customers_create")}
             </p>
           </div>
         ) : (
@@ -395,7 +397,7 @@ export default function Customers() {
                             </svg>
                           </div>
                           <span className="text-[var(--color-text-muted)] italic">
-                            No phone
+                            {t("customers.no_phone")}
                           </span>
                         </div>
                       )}
@@ -439,7 +441,7 @@ export default function Customers() {
                             </svg>
                           </div>
                           <span className="text-[var(--color-text-muted)] italic">
-                            No address
+                            {t("customers.no_address")}
                           </span>
                         </div>
                       )}
@@ -464,7 +466,7 @@ export default function Customers() {
                               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                             </svg>
-                            Visit Social Profile
+                            {t("customers.visit_social")}
                           </a>
                         </div>
                       )}
@@ -497,7 +499,9 @@ export default function Customers() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
-                  {editingCustomer ? "Edit Customer" : "Add New Customer"}
+                  {editingCustomer
+                    ? t("customers.modal.title_edit")
+                    : t("customers.modal.title_add")}
                 </h2>
                 <button
                   onClick={handleCloseModal}
@@ -523,7 +527,8 @@ export default function Customers() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="col-span-1 md:col-span-2">
                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                      Name <span className="text-red-500">*</span>
+                      {t("customers.form.name")}{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -538,7 +543,7 @@ export default function Customers() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                      Phone
+                      {t("customers.form.phone")}
                     </label>
                     <input
                       type="tel"
@@ -552,28 +557,58 @@ export default function Customers() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                      Platform
+                      {t("customers.form.platform")}
                     </label>
-                    <input
-                      type="text"
-                      className="input-liquid w-full"
-                      placeholder="Facebook, TikTok..."
-                      list="platforms"
-                      value={formData.platform}
-                      onChange={(e) =>
-                        setFormData({ ...formData, platform: e.target.value })
-                      }
-                    />
-                    <datalist id="platforms">
-                      <option value="Facebook" />
-                      <option value="Instagram" />
-                      <option value="TikTok" />
-                      <option value="Walk-in" />
-                    </datalist>
+                    <div className="relative">
+                      <select
+                        className="input-liquid w-full appearance-none"
+                        value={formData.platform}
+                        onChange={(e) => {
+                          const platform = e.target.value;
+                          let socialUrl = formData.social_media_url;
+
+                          if (platform === "Facebook") {
+                            socialUrl = "https://facebook.com";
+                          } else if (platform === "TikTok") {
+                            socialUrl = "https://tiktok.com";
+                          } else if (platform === "Others") {
+                            socialUrl = "-";
+                          }
+
+                          setFormData({
+                            ...formData,
+                            platform,
+                            social_media_url: socialUrl,
+                          });
+                        }}
+                      >
+                        <option value="" disabled>
+                          {t("customers.form.select_platform")}
+                        </option>
+                        <option value="Facebook">Facebook</option>
+                        <option value="TikTok">TikTok</option>
+                        <option value="Others">{t("common.others")}</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-[var(--color-text-muted)]">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                      City
+                      {t("customers.form.city")}
                     </label>
                     <input
                       type="text"
@@ -587,10 +622,10 @@ export default function Customers() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                      Social URL
+                      {t("customers.form.social_url")}
                     </label>
                     <input
-                      type="url"
+                      type={formData.platform === "Others" ? "text" : "url"}
                       className="input-liquid w-full"
                       placeholder="https://facebook.com/..."
                       value={formData.social_media_url}
@@ -604,7 +639,7 @@ export default function Customers() {
                   </div>
                   <div className="col-span-1 md:col-span-2">
                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                      Address
+                      {t("customers.form.address")}
                     </label>
                     <textarea
                       className="input-liquid w-full min-h-[80px]"
@@ -623,7 +658,7 @@ export default function Customers() {
                     onClick={handleCloseModal}
                     className="btn-liquid btn-liquid-ghost"
                   >
-                    Cancel
+                    {t("customers.modal.cancel")}
                   </button>
                   <button
                     type="submit"
@@ -633,7 +668,9 @@ export default function Customers() {
                     {isSubmitting && (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     )}
-                    {editingCustomer ? "Update Customer" : "Create Customer"}
+                    {editingCustomer
+                      ? t("customers.modal.update")
+                      : t("customers.modal.create")}
                   </button>
                 </div>
               </form>
@@ -677,27 +714,27 @@ export default function Customers() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
-                  Delete Customer?
+                  {t("customers.delete_modal.title")}
                 </h3>
                 <p className="text-sm text-[var(--color-text-muted)] mb-6">
-                  Are you sure you want to delete{" "}
+                  {t("customers.delete_modal.message_part1")}
                   <span className="font-semibold text-[var(--color-text-primary)]">
                     {customerToDelete?.name}
                   </span>
-                  ? This action cannot be undone.
+                  {t("customers.delete_modal.message_part2")}
                 </p>
                 <div className="flex gap-3 w-full">
                   <button
                     onClick={() => setIsDeleteModalOpen(false)}
                     className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
                   >
-                    Cancel
+                    {t("customers.modal.cancel")}
                   </button>
                   <button
                     onClick={handleConfirmDelete}
                     className="flex-1 btn-liquid bg-red-500 hover:bg-red-600 text-white py-2.5 text-sm"
                   >
-                    Delete
+                    {t("customers.delete_modal.delete")}
                   </button>
                 </div>
               </div>
