@@ -30,6 +30,18 @@ struct User {
     created_at: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+struct Customer {
+    id: i64,
+    name: String,
+    phone: Option<String>,
+    address: Option<String>,
+    city: Option<String>,
+    social_media_url: Option<String>,
+    platform: Option<String>,
+    created_at: Option<String>,
+}
+
 #[tauri::command]
 async fn register_user(app: AppHandle, name: String, password: String) -> Result<(), String> {
     let db = app.state::<AppDb>();
@@ -296,6 +308,94 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
 }
 
 
+#[tauri::command]
+async fn create_customer(
+    app: AppHandle,
+    name: String,
+    phone: Option<String>,
+    address: Option<String>,
+    city: Option<String>,
+    social_media_url: Option<String>,
+    platform: Option<String>,
+) -> Result<i64, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let id = sqlx::query(
+        "INSERT INTO customers (name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(name)
+    .bind(phone)
+    .bind(address)
+    .bind(city)
+    .bind(social_media_url)
+    .bind(platform)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .last_insert_rowid();
+
+    Ok(id)
+}
+
+#[tauri::command]
+async fn get_customers(app: AppHandle) -> Result<Vec<Customer>, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let customers = sqlx::query_as::<_, Customer>("SELECT * FROM customers ORDER BY created_at DESC")
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(customers)
+}
+
+#[tauri::command]
+async fn update_customer(
+    app: AppHandle,
+    id: i64,
+    name: String,
+    phone: Option<String>,
+    address: Option<String>,
+    city: Option<String>,
+    social_media_url: Option<String>,
+    platform: Option<String>,
+) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    sqlx::query(
+        "UPDATE customers SET name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ? WHERE id = ?",
+    )
+    .bind(name)
+    .bind(phone)
+    .bind(address)
+    .bind(city)
+    .bind(social_media_url)
+    .bind(platform)
+    .bind(id)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_customer(app: AppHandle, id: i64) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    sqlx::query("DELETE FROM customers WHERE id = ?")
+        .bind(id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct TableStatus {
     name: String,
@@ -368,6 +468,12 @@ pub fn run() {
             description: "create users table",
             sql: include_str!("../migrations/002_create_users_table.sql"),
             kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "create customers table",
+            sql: include_str!("../migrations/003_create_customers_table.sql"),
+            kind: MigrationKind::Up,
         }
     ];
 
@@ -406,6 +512,11 @@ pub fn run() {
                     .execute(&pool)
                     .await
                     .expect("Failed to run migration 002");
+
+                sqlx::query(include_str!("../migrations/003_create_customers_table.sql"))
+                    .execute(&pool)
+                    .await
+                    .expect("Failed to run migration 003");
             });
 
             app.manage(AppDb(Arc::new(Mutex::new(pool))));
@@ -425,8 +536,13 @@ pub fn run() {
             reset_app_data,
             register_user,
             login_user,
-            get_db_status
+            get_db_status,
+            create_customer,
+            get_customers,
+            update_customer,
+            delete_customer
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import AppLayout from "./components/AppLayout";
 import OnboardingForm from "./components/OnboardingForm";
 import Dashboard from "./components/Dashboard";
+import Customers from "./components/Customers";
 import Settings from "./components/Settings.tsx";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
@@ -112,15 +113,7 @@ function AppRoutes() {
             />
           }
         />
-        <Route
-          path="/customers"
-          element={
-            <PlaceholderPage
-              title="Customers"
-              description="Customer management coming soon"
-            />
-          }
-        />
+        <Route path="/customers" element={<Customers />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
 
