@@ -127,6 +127,26 @@
       "product_details": "ကုန်ပစ္စည်း အချက်အလက်များ",
       "timeline": "အချိန်ဇယား",
       "financial_summary": "ငွေကြေး သုံးသပ်ချက်"
+    },
+    "invoice": {
+      "download": "ဘောက်ချာ ဒေါင်းလုဒ်ယူမည်",
+      "generating": "ထုတ်လုပ်နေသည်...",
+      "title": "ဘောက်ချာ",
+      "bill_to": "ဝယ်ယူသူ",
+      "platform": "ပလက်ဖောင်း",
+      "item_desc": "ပစ္စည်း အကြောင်းအရာ",
+      "qty": "အရေအတွက်",
+      "price": "ဈေးနှုန်း",
+      "amount": "သင့်ငွေ",
+      "subtotal": "စုစုပေါင်း (အခွန်မပါ)",
+      "total_fees": "ဝန်ဆောင်ခများ",
+      "total": "စုစုပေါင်း",
+      "shipping_fee": "သယ်ယူပို့ဆောင်ခ",
+      "delivery_fee": "ပို့ဆောင်ခ",
+      "cargo_fee": "ကားဂိတ်တန်ဆာခ",
+      "footer_message": "အားပေးမှုကို ကျေးဇူးတင်ရှိပါသည်",
+      "footer_credit": "Sine Shin Manager မှ ထုတ်လုပ်သည်",
+      "success_saved": "ဘောက်ချာ သိမ်းဆည်းပြီးပါပြီ"
     }
   },
   "customers": {
