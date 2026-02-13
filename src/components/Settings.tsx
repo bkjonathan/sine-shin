@@ -416,6 +416,103 @@ function AccountSettings() {
   );
 }
 
+// ── DbStatus Component ──
+function DbStatus() {
+  const [status, setStatus] = useState<{
+    total_tables: number;
+    tables: Array<{ name: string; row_count: number }>;
+    size_bytes: number | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  const fetchStatus = async () => {
+    try {
+      const data = await invoke<{
+        total_tables: number;
+        tables: Array<{ name: string; row_count: number }>;
+        size_bytes: number | null;
+      }>("get_db_status");
+      setStatus(data);
+    } catch (err) {
+      console.error("Failed to fetch DB status:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="mb-6 p-4 rounded-xl border border-[var(--color-glass-border)] bg-[var(--color-glass-white)]">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+            Database Status
+          </h3>
+          <div className="flex gap-3 text-xs text-[var(--color-text-muted)] mt-1">
+            <span>{status?.total_tables || 0} Tables</span>
+            {status?.size_bytes && (
+              <>
+                <span>•</span>
+                <span>{formatBytes(status.size_bytes)}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={fetchStatus}
+          className="p-1.5 hover:bg-[var(--color-glass-white-hover)] rounded-lg text-[var(--color-text-secondary)] transition-colors"
+          title="Refresh Status"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+            <path d="M16 21h5v-5" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {status?.tables.map((table) => (
+          <div
+            key={table.name}
+            className="flex items-center justify-between text-xs py-2 border-b border-[var(--color-glass-border)] last:border-0 last:pb-0"
+          >
+            <span className="font-mono text-[var(--color-text-secondary)]">
+              {table.name}
+            </span>
+            <span className="font-medium text-[var(--color-text-primary)] bg-[var(--color-glass-white-hover)] px-2 py-0.5 rounded-md">
+              {table.row_count} rows
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Data Settings Component ──
 function DataSettings() {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -459,6 +556,8 @@ function DataSettings() {
       <p className="text-xs text-[var(--color-text-muted)] mb-5">
         Manage your application data and storage
       </p>
+
+      <DbStatus />
 
       <div className="space-y-6">
         <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5">

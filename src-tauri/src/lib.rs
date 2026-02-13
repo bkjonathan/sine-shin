@@ -295,6 +295,65 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TableStatus {
+    name: String,
+    row_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct DbStatus {
+    total_tables: i64,
+    tables: Vec<TableStatus>,
+    size_bytes: Option<u64>,
+}
+
+#[tauri::command]
+async fn get_db_status(app: AppHandle) -> Result<DbStatus, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // Get all tables (excluding internal sqlite tables)
+    let tables: Vec<(String,)> = sqlx::query_as("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut table_statuses = Vec::new();
+
+    for (name,) in &tables {
+        let query = format!("SELECT COUNT(*) FROM {}", name);
+        let count: (i64,) = sqlx::query_as(&query)
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        table_statuses.push(TableStatus {
+            name: name.clone(),
+            row_count: count.0,
+        });
+    }
+    
+    // Get DB file size
+    let size_bytes = if let Ok(app_data_dir) = app.path().app_data_dir() {
+        let db_path = app_data_dir.join("shop.db");
+        if let Ok(metadata) = fs::metadata(db_path) {
+            Some(metadata.len())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    Ok(DbStatus {
+        total_tables: tables.len() as i64,
+        tables: table_statuses,
+        size_bytes,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -365,7 +424,8 @@ pub fn run() {
             update_shop_settings,
             reset_app_data,
             register_user,
-            login_user
+            login_user,
+            get_db_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
