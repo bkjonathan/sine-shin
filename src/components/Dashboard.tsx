@@ -74,7 +74,14 @@ const itemVariants = {
   },
 };
 
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+// ... existing imports
+
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [shop, setShop] = useState<ShopData | null>(null);
   const [logoSrc, setLogoSrc] = useState("");
 
@@ -94,6 +101,11 @@ export default function Dashboard() {
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <motion.div
       variants={containerVariants}
@@ -102,7 +114,10 @@ export default function Dashboard() {
       className="max-w-5xl mx-auto"
     >
       {/* ── Welcome Header ── */}
-      <motion.div variants={itemVariants} className="mb-8">
+      <motion.div
+        variants={itemVariants}
+        className="mb-8 flex items-center justify-between"
+      >
         <div className="flex items-center gap-4">
           {logoSrc && (
             <div className="w-12 h-12 rounded-2xl overflow-hidden glass-panel p-1.5 flex items-center justify-center">
@@ -122,6 +137,13 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
+
+        <button
+          onClick={handleLogout}
+          className="btn-liquid btn-liquid-ghost text-sm px-4 py-2"
+        >
+          Logout
+        </button>
       </motion.div>
 
       {/* ── Stats Grid ── */}

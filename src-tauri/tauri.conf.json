@@ -36,7 +36,8 @@
           "$PICTURES/**"
         ]
       }
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

@@ -43,6 +43,11 @@ export default function OnboardingForm() {
   const [logoPath, setLogoPath] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
 
+  // User data
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   const handlePickLogo = async () => {
     // Try Tauri native dialog first
     try {
@@ -92,8 +97,19 @@ export default function OnboardingForm() {
       setError("Shop name is required");
       return;
     }
+    if (currentStep === 3) {
+      if (!username.trim() || !password.trim()) {
+        setError("Username and password are required");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match");
+        return;
+      }
+    }
+
     setDirection(1);
-    setCurrentStep((prev) => Math.min(prev + 1, 2));
+    setCurrentStep((prev) => Math.min(prev + 1, 3));
   };
 
   const handleBack = () => {
@@ -114,9 +130,18 @@ export default function OnboardingForm() {
           address: "",
           logoFilePath: logoPath,
         });
+
+        await invoke("register_user", {
+          name: username.trim(),
+          password: password,
+        });
       } else {
         // Browser mode — mark onboarding as done
         localStorage.setItem("browser_onboarded", "true");
+        localStorage.setItem(
+          "browser_user",
+          JSON.stringify({ name: username }),
+        );
       }
       navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
@@ -158,7 +183,7 @@ export default function OnboardingForm() {
 
       {/* ── Step indicators (dots) ── */}
       <div className="fixed top-8 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3">
-        {[0, 1, 2].map((step) => (
+        {[0, 1, 2, 3].map((step) => (
           <div key={step} className="relative flex items-center justify-center">
             <div
               className={`
@@ -172,7 +197,7 @@ export default function OnboardingForm() {
                 }
               `}
             />
-            {step < 2 && (
+            {step < 3 && (
               <div
                 className={`w-8 h-px ml-3 transition-all duration-500 ${
                   currentStep > step ? "bg-white/40" : "bg-white/10"
@@ -390,6 +415,71 @@ export default function OnboardingForm() {
                 )}
               </motion.div>
             )}
+
+            {/* Step 3: User Account */}
+            {currentStep === 3 && (
+              <motion.div
+                key="step-3"
+                custom={direction}
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={slideTransition}
+                className="space-y-6"
+              >
+                <div className="text-center mb-2">
+                  <h2 className="text-xl font-bold text-white mb-1">
+                    Owner Account
+                  </h2>
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    Create your login credentials
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                    Username{" "}
+                    <span className="text-[var(--color-error)]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="input-liquid"
+                    placeholder="Enter username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                    Password{" "}
+                    <span className="text-[var(--color-error)]">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    className="input-liquid"
+                    placeholder="Enter password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                    Confirm Password{" "}
+                    <span className="text-[var(--color-error)]">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    className="input-liquid"
+                    placeholder="Confirm password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
 
           {/* Navigation Buttons */}
@@ -414,7 +504,7 @@ export default function OnboardingForm() {
                 Back
               </button>
 
-              {currentStep < 2 ? (
+              {currentStep < 3 ? (
                 <button
                   className="btn-liquid btn-liquid-primary"
                   onClick={handleNext}

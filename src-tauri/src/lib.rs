@@ -21,17 +21,72 @@ struct ShopSettings {
     created_at: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+struct User {
+    id: i64,
+    name: String,
+    password_hash: String,
+    role: String,
+    created_at: Option<String>,
+}
+
+#[tauri::command]
+async fn register_user(app: AppHandle, name: String, password: String) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // Hash password
+    let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST).map_err(|e| e.to_string())?;
+
+    sqlx::query("INSERT INTO users (name, password_hash) VALUES (?, ?)")
+        .bind(name)
+        .bind(password_hash)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn login_user(app: AppHandle, name: String, password: String) -> Result<User, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let user: Option<User> = sqlx::query_as("SELECT * FROM users WHERE name = ?")
+        .bind(&name)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if let Some(user) = user {
+        let valid = bcrypt::verify(password, &user.password_hash).map_err(|e| e.to_string())?;
+        if valid {
+            Ok(user)
+        } else {
+            Err("Invalid password".to_string())
+        }
+    } else {
+        Err("User not found".to_string())
+    }
+}
+
 #[tauri::command]
 async fn check_is_onboarded(app: AppHandle) -> Result<bool, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM shop_settings")
+    let shop_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM shop_settings")
         .fetch_one(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(count.0 > 0)
+    let user_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(shop_count.0 > 0 && user_count.0 > 0)
 }
 
 #[tauri::command]
@@ -213,6 +268,11 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
+    sqlx::query("DROP TABLE IF EXISTS users")
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     // 2. Delete logos directory
     if let Ok(app_data_dir) = app.path().app_data_dir() {
         let logos_dir = app_data_dir.join("logos");
@@ -222,10 +282,12 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
     }
 
     // 3. Re-run migrations
-    // We can reuse the migration logic or just manually run the creation SQL.
-    // Re-running the migration via tauri_plugin_sql might be tricky if it tracks migrations.
-    // It's often easier to just run the CREATE TABLE statement manually here.
     sqlx::query(include_str!("../migrations/001_create_shop_settings.sql"))
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    sqlx::query(include_str!("../migrations/002_create_users_table.sql"))
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -235,12 +297,20 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![Migration {
-        version: 1,
-        description: "create shop_settings table",
-        sql: include_str!("../migrations/001_create_shop_settings.sql"),
-        kind: MigrationKind::Up,
-    }];
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "create shop_settings table",
+            sql: include_str!("../migrations/001_create_shop_settings.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create users table",
+            sql: include_str!("../migrations/002_create_users_table.sql"),
+            kind: MigrationKind::Up,
+        }
+    ];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -271,7 +341,12 @@ pub fn run() {
                 sqlx::query(include_str!("../migrations/001_create_shop_settings.sql"))
                     .execute(&pool)
                     .await
-                    .expect("Failed to run migration");
+                    .expect("Failed to run migration 001");
+                
+                sqlx::query(include_str!("../migrations/002_create_users_table.sql"))
+                    .execute(&pool)
+                    .await
+                    .expect("Failed to run migration 002");
             });
 
             app.manage(AppDb(Arc::new(Mutex::new(pool))));
@@ -288,7 +363,9 @@ pub fn run() {
             save_shop_setup, 
             get_shop_settings, 
             update_shop_settings,
-            reset_app_data
+            reset_app_data,
+            register_user,
+            login_user
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
