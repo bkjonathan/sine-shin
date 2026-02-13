@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
@@ -11,6 +11,7 @@ import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
 import { Select } from "./ui/Select";
+import { parseCSV } from "../utils/csvUtils";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -58,9 +59,103 @@ export default function Customers() {
   );
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
+  // Import State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+
   useEffect(() => {
     fetchCustomers();
   }, []);
+
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input value so the same file can be selected again if needed
+    event.target.value = "";
+
+    try {
+      setIsImporting(true);
+      const text = await file.text();
+      const records = parseCSV(text);
+
+      if (records.length === 0) {
+        playSound("error");
+        alert(
+          t("customers.import.no_records") || "No valid records found in CSV",
+        );
+        return;
+      }
+
+      console.log("Parsed CSV Records:", records); // Debug log
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errorDetails: string[] = [];
+
+      for (const record of records) {
+        // Map CSV headers to Customer object keys (case-insensitive check)
+        // Expected headers: Name, Phone, Address, City, Platform, Social URL
+        // We look for these keys in the record object
+
+        const getValue = (key: string) => {
+          const foundKey = Object.keys(record).find(
+            (k) => k.toLowerCase() === key.toLowerCase(),
+          );
+          return foundKey ? record[foundKey] : "";
+        };
+
+        const name = getValue("name");
+
+        if (!name) {
+          console.warn("Skipping record without name:", record);
+          errorCount++;
+          errorDetails.push(`Row without name: ${JSON.stringify(record)}`);
+          continue;
+        }
+
+        const customerData = {
+          name: name,
+          phone: getValue("phone"),
+          address: getValue("address"),
+          city: getValue("city"),
+          social_media_url:
+            getValue("social url") ||
+            getValue("social_media_url") ||
+            getValue("social_url"), // Added social_url check
+          platform: getValue("platform"),
+        };
+
+        try {
+          await createCustomer(customerData);
+          successCount++;
+        } catch (e) {
+          console.error("Failed to import customer:", name, e);
+          errorCount++;
+          errorDetails.push(`Failed to import '${name}': ${e}`);
+        }
+      }
+
+      playSound(successCount > 0 ? "success" : "error");
+      await fetchCustomers();
+
+      // Detailed feedback
+      let message = `Import complete.\nSuccess: ${successCount}\nFailed: ${errorCount}`;
+      if (errorCount > 0) {
+        message += "\n\nCheck console for details.";
+        console.error("Import Errors:", errorDetails);
+      }
+      alert(message);
+    } catch (error) {
+      console.error("Failed to parse CSV:", error);
+      playSound("error");
+      alert("Failed to parse CSV file");
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   useEffect(() => {
     if (!searchTerm) {
@@ -188,24 +283,137 @@ export default function Customers() {
             {t("customers.manage_customers")}
           </p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="btn-liquid btn-liquid-primary px-4 py-2 text-sm flex items-center gap-2"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <div className="flex gap-3">
+          <input
+            type="file"
+            accept=".csv"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
           >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          {t("customers.add_customer")}
-        </button>
+            {isImporting ? (
+              <div className="w-4 h-4 border-2 border-[var(--color-text-secondary)] border-t-[var(--color-text-primary)] rounded-full animate-spin" />
+            ) : (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            )}
+            {t("customers.import_csv")}
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                // 1. Get all customers
+                // We'll use the 'customers' state since it contains all fetched data
+                if (!customers || customers.length === 0) {
+                  return;
+                }
+
+                // 2. Define headers
+                const headers = [
+                  "ID",
+                  "Customer ID",
+                  "Name",
+                  "Phone",
+                  "Address",
+                  "City",
+                  "Platform",
+                  "Social URL",
+                  "Created At",
+                ];
+
+                // 3. Format data rows
+                const csvRows = customers.map((c) => {
+                  return [
+                    c.id,
+                    c.customer_id || "-",
+                    `"${c.name.replace(/"/g, '""')}"`, // Handle quotes in names
+                    c.phone ? `"${c.phone}"` : "-",
+                    c.address ? `"${c.address.replace(/"/g, '""')}"` : "-",
+                    c.city ? `"${c.city}"` : "-",
+                    c.platform || "-",
+                    c.social_media_url || "-",
+                    c.created_at || "-",
+                  ].join(",");
+                });
+
+                // 4. Combine headers and rows
+                const csvContent = [headers.join(","), ...csvRows].join("\n");
+
+                // 5. Create blob and download link
+                const blob = new Blob([csvContent], {
+                  type: "text/csv;charset=utf-8;",
+                });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+
+                // Format filename: customers_export_YYYY-MM-DD.csv
+                const date = new Date().toISOString().split("T")[0];
+                link.setAttribute("download", `customers_export_${date}.csv`);
+
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                playSound("success");
+              } catch (error) {
+                console.error("Failed to export CSV:", error);
+                playSound("error");
+              }
+            }}
+            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {t("customers.export_csv")}
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="btn-liquid btn-liquid-primary px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            {t("customers.add_customer")}
+          </button>
+        </div>
       </motion.div>
 
       {/* ── Search Bar ── */}

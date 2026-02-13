@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS shop_settings (
   address TEXT,
   logo_path TEXT,
   customer_id_prefix TEXT DEFAULT 'SSC-',
-  order_id_prefix TEXT DEFAULT 'SSO0-',
+  order_id_prefix TEXT DEFAULT 'SSO-',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -174,6 +174,8 @@
   "customers": {
     "title": "ဖောက်သည်များ",
     "manage_customers": "ဖောက်သည်များကို စီမံခန့်ခွဲရန်",
+    "export_csv": "CSV ထုတ်ယူရန်",
+    "import_csv": "CSV ထည့်သွင်းရန်",
     "add_customer": "ဖောက်သည်သစ်ထည့်ရန်",
     "search_placeholder": "ဖောက်သည်ရှာရန်...",
     "name": "အမည်",
