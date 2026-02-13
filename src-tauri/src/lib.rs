@@ -18,6 +18,7 @@ struct ShopSettings {
     phone: Option<String>,
     address: Option<String>,
     logo_path: Option<String>,
+    customer_id_prefix: Option<String>,
     created_at: Option<String>,
 }
 
@@ -33,6 +34,7 @@ struct User {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 struct Customer {
     id: i64,
+    customer_id: Option<String>,
     name: String,
     phone: Option<String>,
     address: Option<String>,
@@ -184,6 +186,7 @@ async fn update_shop_settings(
     phone: String,
     address: String,
     logo_path: Option<String>,
+    customer_id_prefix: Option<String>,
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -234,21 +237,23 @@ async fn update_shop_settings(
         };
 
         if let Some(internal_path) = new_internal_logo_path {
-             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ? WHERE id = ?")
+             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ?, customer_id_prefix = ? WHERE id = ?")
                 .bind(shop_name)
                 .bind(phone)
                 .bind(address)
                 .bind(internal_path)
+                .bind(customer_id_prefix)
                 .bind(id)
                 .execute(&*pool)
                 .await
                 .map_err(|e| e.to_string())?;
         } else {
              // Keep existing logo
-             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ? WHERE id = ?")
+             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, customer_id_prefix = ? WHERE id = ?")
                 .bind(shop_name)
                 .bind(phone)
                 .bind(address)
+                .bind(customer_id_prefix)
                 .bind(id)
                 .execute(&*pool)
                 .await
@@ -270,11 +275,6 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
     let pool = db.0.lock().await;
 
     // 1. Drop all tables
-    // We can just drop the specific tables we know about, or use a query to find all tables.
-    // Since we only have 'shop_settings' for now (and maybe others in future), 
-    // let's be explicit or try to drop everything.
-    // For now, let's just drop 'shop_settings'. 
-    // A more robust way for "Reset All" is to drop the table.
     sqlx::query("DROP TABLE IF EXISTS shop_settings")
         .execute(&*pool)
         .await
@@ -285,24 +285,45 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
+    sqlx::query("DROP TABLE IF EXISTS customers")
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Also clear migration history so it re-runs cleanly
+    sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     // 2. Delete logos directory
     if let Ok(app_data_dir) = app.path().app_data_dir() {
         let logos_dir = app_data_dir.join("logos");
         if logos_dir.exists() {
-             let _ = fs::remove_dir_all(&logos_dir); // Ignore errors if we can't delete
+             let _ = fs::remove_dir_all(&logos_dir); 
         }
     }
 
     // 3. Re-run migrations
-    sqlx::query(include_str!("../migrations/001_create_shop_settings.sql"))
+    // Since we cleared migration history, we can just run the init sql manually 
+    // or let the migration framework handle it on restart.
+    // Ideally we re-run the init script to make the app usable immediately without restart.
+    sqlx::query(include_str!("../migrations/001_init.sql"))
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    sqlx::query(include_str!("../migrations/002_create_users_table.sql"))
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    // Re-insert migration record to keep state consistent?
+    // Or just rely on the fact that running the SQL created the tables.
+    // If we want the migration system to know about it, we'd need to insert into _sqlx_migrations.
+    // But simplified approach for "Reset": just run the schema creation.
+    // When app restarts, migration logic will see tables exist and might try to run migration again if not recorded.
+    // So let's record it manually to be safe, matching tauri-plugin-sql logic if possible.
+    // Actually, tauri-plugin-sql creates the _sqlx_migrations table.
+    // By dropping it, we force a re-check on next startup. 
+    // If we run `001_init.sql` now, tables exist. Next startup, plugin sees migration 1 not applied (because table dropped), tries to run it.
+    // `001_init.sql` uses `CREATE TABLE IF NOT EXISTS`, so it should be safe to run again on startup.
+    // So current approach is fine.
 
     Ok(())
 }
@@ -334,6 +355,23 @@ async fn create_customer(
     .await
     .map_err(|e| e.to_string())?
     .last_insert_rowid();
+
+    // Auto-generate customer_id
+    // 1. Get prefix
+    let prefix: Option<String> = sqlx::query_scalar("SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
+        .fetch_optional(&*pool)
+        .await
+        .unwrap_or(Some("SSC-".to_string())); // Default fallback if DB check fails, though migration should ensure it exists
+    
+    let prefix_str = prefix.unwrap_or_else(|| "SSC-".to_string());
+    let customer_id = format!("{}{:05}", prefix_str, id);
+
+    // 2. Update customer with generated ID
+    let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
+        .bind(customer_id)
+        .bind(id)
+        .execute(&*pool)
+        .await;
 
     Ok(id)
 }
@@ -459,20 +497,8 @@ pub fn run() {
     let migrations = vec![
         Migration {
             version: 1,
-            description: "create shop_settings table",
-            sql: include_str!("../migrations/001_create_shop_settings.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 2,
-            description: "create users table",
-            sql: include_str!("../migrations/002_create_users_table.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 3,
-            description: "create customers table",
-            sql: include_str!("../migrations/003_create_customers_table.sql"),
+            description: "init database",
+            sql: include_str!("../migrations/001_init.sql"),
             kind: MigrationKind::Up,
         }
     ];
@@ -501,23 +527,7 @@ pub fn run() {
                     .expect("Failed to create database pool")
             });
 
-            // Run the migration on our pool as well
-            tauri::async_runtime::block_on(async {
-                sqlx::query(include_str!("../migrations/001_create_shop_settings.sql"))
-                    .execute(&pool)
-                    .await
-                    .expect("Failed to run migration 001");
-                
-                sqlx::query(include_str!("../migrations/002_create_users_table.sql"))
-                    .execute(&pool)
-                    .await
-                    .expect("Failed to run migration 002");
 
-                sqlx::query(include_str!("../migrations/003_create_customers_table.sql"))
-                    .execute(&pool)
-                    .await
-                    .expect("Failed to run migration 003");
-            });
 
             app.manage(AppDb(Arc::new(Mutex::new(pool))));
 

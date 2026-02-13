@@ -166,6 +166,7 @@ function AccountSettings() {
   const [shopName, setShopName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [customerIdPrefix, setCustomerIdPrefix] = useState("SSC-");
 
   const { playSound } = useSound();
 
@@ -192,10 +193,12 @@ function AccountSettings() {
         phone: string | null;
         address: string | null;
         logo_path: string | null;
+        customer_id_prefix: string | null;
       }>("get_shop_settings");
       setShopName(settings.shop_name);
       setPhone(settings.phone || "");
       setAddress(settings.address || "");
+      setCustomerIdPrefix(settings.customer_id_prefix || "SSC-");
 
       if (settings.logo_path) {
         // Use convertFileSrc (Tauri's asset protocol) for reliable display
@@ -253,6 +256,7 @@ function AccountSettings() {
         phone,
         address,
         logoPath: newLogoPath,
+        customerIdPrefix,
       });
       setMessage({ type: "success", text: "Settings saved successfully" });
       playSound("success");
@@ -398,6 +402,21 @@ function AccountSettings() {
             value={address}
             onChange={(e) => setAddress(e.target.value)}
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+            Customer ID Prefix
+          </label>
+          <input
+            type="text"
+            className="input-liquid font-mono uppercase"
+            placeholder="SSC-"
+            value={customerIdPrefix}
+            onChange={(e) => setCustomerIdPrefix(e.target.value.toUpperCase())}
+          />
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            Prefix for auto-generated customer IDs (e.g. SSC-00001)
+          </p>
         </div>
         <div className="pt-2">
           <button

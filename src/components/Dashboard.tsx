@@ -8,6 +8,7 @@ interface ShopData {
   phone: string | null;
   address: string | null;
   logo_path: string | null;
+  customer_id_prefix: string | null;
 }
 
 // ── Mock data for the liquid dashboard ──

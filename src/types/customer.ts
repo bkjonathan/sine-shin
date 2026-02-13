@@ -1,5 +1,6 @@
 export interface Customer {
   id: number;
+  customer_id?: string | null;
   name: string;
   phone?: string | null;
   address?: string | null;

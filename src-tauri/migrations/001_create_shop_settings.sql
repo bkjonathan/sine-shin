@@ -1,8 +1,0 @@
-CREATE TABLE IF NOT EXISTS shop_settings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  shop_name TEXT NOT NULL,
-  phone TEXT,
-  address TEXT,
-  logo_path TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);

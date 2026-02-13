@@ -272,118 +272,53 @@ export default function Customers() {
                 <motion.div
                   key={customer.id}
                   layout
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="glass-panel p-5 group hover:border-[var(--color-accent-blue)]/30 transition-colors"
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="glass-panel p-5 group hover:border-[var(--color-accent-blue)]/30 transition-all duration-300 hover:shadow-lg hover:shadow-[var(--color-accent-blue)]/5 relative overflow-hidden"
                 >
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[var(--color-glass-white-hover)] flex items-center justify-center text-[var(--color-text-primary)] font-bold text-lg">
-                        {customer.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-blue)] transition-colors">
-                          {customer.name}
-                        </h3>
-                        <span className="text-xs text-[var(--color-text-muted)] px-2 py-0.5 rounded-full bg-[var(--color-glass-white-hover)] border border-[var(--color-glass-border)]">
-                          {customer.platform || "Direct"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => handleOpenModal(customer)}
-                        className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent-blue)] hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCustomerToDelete(customer);
-                          setIsDeleteModalOpen(true);
-                        }}
-                        className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-red-500/10 rounded-lg transition-colors"
-                        title="Delete"
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+                  {/* Decorative background gradient on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-accent-blue)]/0 to-[var(--color-accent-purple)]/0 group-hover:from-[var(--color-accent-blue)]/5 group-hover:to-[var(--color-accent-purple)]/5 transition-all duration-500 pointer-events-none" />
 
-                  <div className="space-y-2 text-sm text-[var(--color-text-secondary)]">
-                    {customer.phone && (
-                      <div className="flex items-center gap-2">
-                        <svg
-                          className="w-4 h-4 text-[var(--color-text-muted)]"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                        </svg>
-                        <span>{customer.phone}</span>
+                  <div className="relative z-10">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-start gap-3.5">
+                        {/* Avatar */}
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--color-glass-white)] to-[var(--color-glass-white-hover)] border border-[var(--color-glass-border)] flex items-center justify-center text-[var(--color-text-primary)] font-bold text-lg shadow-sm group-hover:scale-105 transition-transform duration-300">
+                          {customer.name.charAt(0).toUpperCase()}
+                        </div>
+
+                        {/* Name & Meta */}
+                        <div>
+                          <h3 className="font-semibold text-[var(--color-text-primary)] text-lg leading-tight group-hover:text-[var(--color-accent-blue)] transition-colors">
+                            {customer.name}
+                          </h3>
+
+                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                            {customer.customer_id && (
+                              <span className="text-[10px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-glass-white-hover)] px-2 py-0.5 rounded border border-[var(--color-glass-border)] opacity-80 group-hover:opacity-100 transition-opacity">
+                                {customer.customer_id}
+                              </span>
+                            )}
+                            {customer.platform && (
+                              <span className="text-[10px] font-medium text-[var(--color-text-muted)] bg-[var(--color-glass-white)] px-2 py-0.5 rounded-full border border-[var(--color-glass-border)]">
+                                {customer.platform}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    {(customer.address || customer.city) && (
-                      <div className="flex items-start gap-2">
-                        <svg
-                          className="w-4 h-4 text-[var(--color-text-muted)] mt-0.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                        <span className="line-clamp-2">
-                          {[customer.address, customer.city]
-                            .filter(Boolean)
-                            .join(", ")}
-                        </span>
-                      </div>
-                    )}
-                    {customer.social_media_url && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <a
-                          href={customer.social_media_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-[var(--color-accent-blue)] hover:underline flex items-center gap-1"
+
+                      {/* Actions */}
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
+                        <button
+                          onClick={() => handleOpenModal(customer)}
+                          className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-accent-blue)] hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors"
+                          title="Edit"
                         >
                           <svg
-                            className="w-3 h-3"
+                            width="16"
+                            height="16"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
@@ -391,13 +326,149 @@ export default function Customers() {
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           >
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                           </svg>
-                          Social Profile
-                        </a>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCustomerToDelete(customer);
+                            setIsDeleteModalOpen(true);
+                          }}
+                          className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
                       </div>
-                    )}
+                    </div>
+
+                    {/* Divider */}
+                    <div className="h-px w-full bg-gradient-to-r from-transparent via-[var(--color-glass-border)] to-transparent mb-3 opacity-50" />
+
+                    {/* Contact Info */}
+                    <div className="space-y-2.5">
+                      {customer.phone ? (
+                        <div className="flex items-center gap-2.5 text-sm group/phone">
+                          <div className="p-1.5 rounded-md bg-[var(--color-glass-white)] text-[var(--color-text-muted)] group-hover/phone:text-[var(--color-accent-blue)] transition-colors">
+                            <svg
+                              className="w-3.5 h-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                            </svg>
+                          </div>
+                          <span className="text-[var(--color-text-secondary)] font-medium">
+                            {customer.phone}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2.5 text-sm opacity-40">
+                          <div className="p-1.5 rounded-md bg-[var(--color-glass-white)] text-[var(--color-text-muted)]">
+                            <svg
+                              className="w-3.5 h-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                            </svg>
+                          </div>
+                          <span className="text-[var(--color-text-muted)] italic">
+                            No phone
+                          </span>
+                        </div>
+                      )}
+
+                      {customer.address || customer.city ? (
+                        <div className="flex items-start gap-2.5 text-sm group/addr">
+                          <div className="p-1.5 mt-0.5 rounded-md bg-[var(--color-glass-white)] text-[var(--color-text-muted)] group-hover/addr:text-[var(--color-accent-purple)] transition-colors shrink-0">
+                            <svg
+                              className="w-3.5 h-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                              <circle cx="12" cy="10" r="3" />
+                            </svg>
+                          </div>
+                          <span className="text-[var(--color-text-secondary)] line-clamp-2 leading-snug">
+                            {[customer.address, customer.city]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2.5 text-sm opacity-40">
+                          <div className="p-1.5 rounded-md bg-[var(--color-glass-white)] text-[var(--color-text-muted)]">
+                            <svg
+                              className="w-3.5 h-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                              <circle cx="12" cy="10" r="3" />
+                            </svg>
+                          </div>
+                          <span className="text-[var(--color-text-muted)] italic">
+                            No address
+                          </span>
+                        </div>
+                      )}
+
+                      {customer.social_media_url && (
+                        <div className="pt-1">
+                          <a
+                            href={customer.social_media_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-[var(--color-accent-blue)] hover:text-[var(--color-accent-cyan)] font-medium transition-colors bg-[var(--color-accent-blue)]/5 hover:bg-[var(--color-accent-blue)]/10 px-2.5 py-1.5 rounded-md w-full justify-center group/link"
+                          >
+                            <svg
+                              className="w-3.5 h-3.5 transition-transform group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                            </svg>
+                            Visit Social Profile
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               ))}
