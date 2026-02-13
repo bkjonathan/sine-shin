@@ -96,6 +96,9 @@
     "date": "နေ့စွဲ",
     "qty": "အရေအတွက်",
     "price": "စျေးနှုန်း",
+    "total_qty": "စုစုပေါင်း အရေအတွက်",
+    "total_price": "စုစုပေါင်း စျေးနှုန်း",
+    "total_weight": "စုစုပေါင်း အလေးချိန်",
     "actions": "လုပ်ဆောင်ချက်များ",
     "status_pending": "ဆိုင်းငံ့",
     "status_processing": "ဆောင်ရွက်ဆဲ",
@@ -150,7 +153,9 @@
       "timeline": "အချိန်ဇယား",
       "financial_summary": "ငွေကြေး သုံးသပ်ချက်",
       "fee": "အခွန်အခ",
-      "product_order_from": "{{platform}} မှ မှာယူသော ပစ္စည်း"
+      "product_order_from": "{{platform}} မှ မှာယူသော ပစ္စည်း",
+      "item_index": "ပစ္စည်း {{index}}",
+      "error_loading": "အသေးစိတ်အချက်အလက်များကို ဖွင့်၍မရပါ"
     },
     "invoice": {
       "download": "ဘောက်ချာ ဒေါင်းလုဒ်ယူမည်",
@@ -170,7 +175,10 @@
       "cargo_fee": "ကားဂိတ်တန်ဆာခ",
       "footer_message": "အားပေးမှုကို ကျေးဇူးတင်ရှိပါသည်",
       "footer_credit": "Sine Shin Manager မှ ထုတ်လုပ်သည်",
-      "success_saved": "ဘောက်ချာ သိမ်းဆည်းပြီးပါပြီ"
+      "success_saved": "ဘောက်ချာ သိမ်းဆည်းပြီးပါပြီ",
+      "error_element_not_found": "အမှား: ဘောက်ချာ အစိတ်အပိုင်း ရှာမတွေ့ပါ",
+      "error_blob_generation": "ပုံရိပ် ထုတ်လုပ်၍ မရပါ",
+      "error_download_failed": "ဒေါင်းလုဒ် မအောင်မြင်ပါ"
     }
   },
   "customers": {
@@ -192,6 +200,8 @@
     "no_phone": "ဖုန်းနံပါတ်မရှိ",
     "no_address": "လိပ်စာမရှိ",
     "visit_social": "ပရိုဖိုင် ကြည့်ရန်",
+    "id_prefix": "ID: ",
+    "id_label": "ID",
     "modal": {
       "title_add": "ဖောက်သည်သစ် ထည့်ရန်",
       "title_edit": "ဖောက်သည် ပြင်ဆင်ရန်",
@@ -324,6 +334,9 @@
     }
   },
   "common": {
-    "others": "အခြား"
+    "others": "အခြား",
+    "image": "ပုံရိပ်",
+    "tel": "ဖုန်း",
+    "no": "နံပါတ်"
   }
 }

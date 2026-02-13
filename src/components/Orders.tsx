@@ -778,142 +778,146 @@ export default function Orders() {
                 </div>
 
                 {/* Section: Fees */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
-                    {t("orders.modal.fees")}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.shipping_fee")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.shipping_fee}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            shipping_fee: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.delivery_fee")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.delivery_fee}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            delivery_fee: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.cargo_fee")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.cargo_fee}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            cargo_fee: e.target.value,
-                          })
-                        }
-                      />
+                {editingOrder && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
+                      {t("orders.modal.fees")}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.form.shipping_fee")}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="input-liquid w-full"
+                          value={formData.shipping_fee}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              shipping_fee: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.form.delivery_fee")}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="input-liquid w-full"
+                          value={formData.delivery_fee}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              delivery_fee: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.form.cargo_fee")}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="input-liquid w-full"
+                          value={formData.cargo_fee}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              cargo_fee: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Section: Status Dates */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
-                    {t("orders.modal.status_dates")}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.arrived_date")}
-                      </label>
-                      <input
-                        type={formData.arrived_date ? "date" : "text"}
-                        className="input-liquid w-full"
-                        autoComplete="off"
-                        placeholder="dd/mm/yyyy"
-                        value={formData.arrived_date}
-                        onFocus={(e) => (e.target.type = "date")}
-                        onBlur={(e) => {
-                          if (!e.target.value) e.target.type = "text";
-                        }}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            arrived_date: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.shipment_date")}
-                      </label>
-                      <input
-                        type={formData.shipment_date ? "date" : "text"}
-                        className="input-liquid w-full"
-                        autoComplete="off"
-                        placeholder="dd/mm/yyyy"
-                        value={formData.shipment_date}
-                        onFocus={(e) => (e.target.type = "date")}
-                        onBlur={(e) => {
-                          if (!e.target.value) e.target.type = "text";
-                        }}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            shipment_date: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.user_withdraw_date")}
-                      </label>
-                      <input
-                        type={formData.user_withdraw_date ? "date" : "text"}
-                        className="input-liquid w-full"
-                        autoComplete="off"
-                        placeholder="dd/mm/yyyy"
-                        value={formData.user_withdraw_date}
-                        onFocus={(e) => (e.target.type = "date")}
-                        onBlur={(e) => {
-                          if (!e.target.value) e.target.type = "text";
-                        }}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            user_withdraw_date: e.target.value,
-                          })
-                        }
-                      />
+                {editingOrder && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
+                      {t("orders.modal.status_dates")}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.form.arrived_date")}
+                        </label>
+                        <input
+                          type={formData.arrived_date ? "date" : "text"}
+                          className="input-liquid w-full"
+                          autoComplete="off"
+                          placeholder="dd/mm/yyyy"
+                          value={formData.arrived_date}
+                          onFocus={(e) => (e.target.type = "date")}
+                          onBlur={(e) => {
+                            if (!e.target.value) e.target.type = "text";
+                          }}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              arrived_date: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.form.shipment_date")}
+                        </label>
+                        <input
+                          type={formData.shipment_date ? "date" : "text"}
+                          className="input-liquid w-full"
+                          autoComplete="off"
+                          placeholder="dd/mm/yyyy"
+                          value={formData.shipment_date}
+                          onFocus={(e) => (e.target.type = "date")}
+                          onBlur={(e) => {
+                            if (!e.target.value) e.target.type = "text";
+                          }}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              shipment_date: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.form.user_withdraw_date")}
+                        </label>
+                        <input
+                          type={formData.user_withdraw_date ? "date" : "text"}
+                          className="input-liquid w-full"
+                          autoComplete="off"
+                          placeholder="dd/mm/yyyy"
+                          value={formData.user_withdraw_date}
+                          onFocus={(e) => (e.target.type = "date")}
+                          onBlur={(e) => {
+                            if (!e.target.value) e.target.type = "text";
+                          }}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              user_withdraw_date: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-[var(--color-glass-border)]">
                   <button

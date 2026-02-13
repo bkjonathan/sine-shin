@@ -41,7 +41,7 @@ export default function OrderDetail() {
       setShopSettings(settingsData);
     } catch (err) {
       console.error("Failed to fetch data:", err);
-      setError("Failed to load details");
+      setError(t("orders.detail.error_loading"));
     } finally {
       setLoading(false);
     }
@@ -54,7 +54,7 @@ export default function OrderDetail() {
         ref: !!invoiceRef.current,
         order: !!orderDetail,
       });
-      alert("Error: Invoice element not found");
+      alert(t("orders.invoice.error_element_not_found"));
       return;
     }
 
@@ -83,7 +83,7 @@ export default function OrderDetail() {
         canvas.toBlob(resolve, "image/png");
       });
 
-      if (!blob) throw new Error("Failed to generate image blob");
+      if (!blob) throw new Error(t("orders.invoice.error_blob_generation"));
       console.log("Blob generated, size:", blob.size);
 
       const buffer = await blob.arrayBuffer();
@@ -96,7 +96,7 @@ export default function OrderDetail() {
         defaultPath: fileName,
         filters: [
           {
-            name: "Image",
+            name: t("common.image"),
             extensions: ["png"],
           },
         ],
@@ -115,7 +115,7 @@ export default function OrderDetail() {
       console.error("Failed to download invoice:", err);
       // Explicitly show the error to the user for now
       alert(
-        `Download failed: ${err instanceof Error ? err.message : String(err)}`,
+        `${t("orders.invoice.error_download_failed")}: ${err instanceof Error ? err.message : String(err)}`,
       );
       playSound("error");
     } finally {
@@ -300,7 +300,7 @@ export default function OrderDetail() {
                           margin: 0,
                         }}
                       >
-                        <span>Tel:</span> {shopSettings.phone}
+                        <span>{t("common.tel")}:</span> {shopSettings.phone}
                       </p>
                     )}
                     {shopSettings?.address && (
@@ -323,7 +323,7 @@ export default function OrderDetail() {
                     margin: 0,
                   }}
                 >
-                  Invoice
+                  {t("orders.invoice.title")}
                 </h2>
                 <div
                   style={{
@@ -361,7 +361,7 @@ export default function OrderDetail() {
                   margin: "0 0 16px 0",
                 }}
               >
-                Bill To
+                {t("orders.invoice.bill_to")}
               </h3>
               <div
                 style={{
@@ -383,8 +383,7 @@ export default function OrderDetail() {
                     {order.customer_name}
                   </p>
                   <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>
-                    ID: {t("customers.id_prefix")}
-                    {order.customer_id}
+                    {t("customers.id_label")}: {order.customer_id}
                   </p>
                 </div>
                 {order.order_from && (
@@ -397,7 +396,7 @@ export default function OrderDetail() {
                         marginTop: 0,
                       }}
                     >
-                      Platform
+                      {t("orders.invoice.platform")}
                     </p>
                     <p
                       style={{
@@ -435,7 +434,7 @@ export default function OrderDetail() {
                         width: "48px",
                       }}
                     >
-                      #
+                      {t("common.no")}
                     </th>
                     <th
                       style={{
@@ -459,7 +458,7 @@ export default function OrderDetail() {
                         width: "96px",
                       }}
                     >
-                      Qty
+                      {t("orders.invoice.qty")}
                     </th>
                     <th
                       style={{
@@ -472,7 +471,7 @@ export default function OrderDetail() {
                         width: "128px",
                       }}
                     >
-                      Price
+                      {t("orders.invoice.price")}
                     </th>
                     <th
                       style={{
@@ -485,7 +484,7 @@ export default function OrderDetail() {
                         width: "128px",
                       }}
                     >
-                      Amount
+                      {t("orders.invoice.amount")}
                     </th>
                   </tr>
                 </thead>
@@ -746,20 +745,23 @@ export default function OrderDetail() {
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
                 {t("orders.detail.product_details")}
               </h2>
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {items.map((item, index) => (
                   <div
                     key={index}
-                    className="p-4 bg-[var(--color-glass-white)]/10 rounded-lg border border-[var(--color-glass-border)]"
+                    className="border border-[var(--color-glass-border)] rounded-xl p-4 bg-[var(--color-bg-primary)] hover:border-[var(--color-accent-blue)]/30 transition-colors"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-[var(--color-text-muted)]">
-                        Item {index + 1}
+                    {/* Header with item badge */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="px-2.5 py-1 rounded-lg bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] text-xs font-semibold">
+                        {t("orders.detail.item_index", { index: index + 1 })}
                       </span>
                     </div>
+
+                    {/* Product URL if exists */}
                     {item.product_url && (
-                      <div className="mb-3">
-                        <label className="block text-xs text-[var(--color-text-secondary)] mb-1">
+                      <div className="mb-3 pb-3 border-b border-[var(--color-glass-border)]">
+                        <label className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)] mb-1.5 block font-semibold">
                           {t("orders.product_link")}
                         </label>
                         <a
@@ -772,30 +774,47 @@ export default function OrderDetail() {
                         </a>
                       </div>
                     )}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-xs text-[var(--color-text-secondary)] mb-1">
+
+                    {/* Info Grid */}
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div className="text-center p-2.5 rounded-lg bg-[var(--color-glass-white)]/5 border border-[var(--color-glass-border)]">
+                        <label className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)] block mb-1.5 font-semibold">
                           {t("orders.qty")}
                         </label>
-                        <p className="text-[var(--color-text-primary)]">
+                        <p className="text-xl font-bold text-[var(--color-text-primary)]">
                           {item.product_qty || 0}
                         </p>
                       </div>
-                      <div>
-                        <label className="block text-xs text-[var(--color-text-secondary)] mb-1">
+                      <div className="text-center p-2.5 rounded-lg bg-[var(--color-glass-white)]/5 border border-[var(--color-glass-border)]">
+                        <label className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)] block mb-1.5 font-semibold">
                           {t("orders.price")}
                         </label>
-                        <p className="text-[var(--color-text-primary)]">
+                        <p className="text-xl font-bold text-[var(--color-text-primary)]">
                           {item.price?.toLocaleString()}
                         </p>
                       </div>
-                      <div>
-                        <label className="block text-xs text-[var(--color-text-secondary)] mb-1">
+                      <div className="text-center p-2.5 rounded-lg bg-[var(--color-glass-white)]/5 border border-[var(--color-glass-border)]">
+                        <label className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)] block mb-1.5 font-semibold">
                           {t("orders.form.weight")}
                         </label>
-                        <p className="text-[var(--color-text-primary)]">
-                          {item.product_weight || 0} kg
+                        <p className="text-xl font-bold text-[var(--color-text-primary)]">
+                          {item.product_weight || 0}{" "}
+                          <span className="text-sm">kg</span>
                         </p>
+                      </div>
+                    </div>
+
+                    {/* Total Section */}
+                    <div className="pt-3 border-t border-[var(--color-glass-border)]">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                          {t("orders.total")}
+                        </span>
+                        <span className="text-xl font-bold text-[var(--color-accent-blue)]">
+                          {(
+                            (item.price || 0) * (item.product_qty || 0)
+                          ).toLocaleString()}
+                        </span>
                       </div>
                     </div>
                   </div>
