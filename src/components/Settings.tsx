@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { motion } from "framer-motion";
 import { useTheme } from "../context/ThemeContext";
+import { useSound } from "../context/SoundContext";
 
 // ── Settings Categories ──
 const categories = [
@@ -143,6 +144,8 @@ function AccountSettings() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
 
+  const { playSound } = useSound();
+
   // Logo state
   const [newLogoPath, setNewLogoPath] = useState<string | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
@@ -229,6 +232,7 @@ function AccountSettings() {
         logoPath: newLogoPath,
       });
       setMessage({ type: "success", text: "Settings saved successfully" });
+      playSound("success");
 
       // After save, clear the newLogoPath
       setNewLogoPath(null);
@@ -247,6 +251,7 @@ function AccountSettings() {
     } catch (err) {
       console.error("Failed to save settings:", err);
       setMessage({ type: "error", text: "Failed to save settings" });
+      playSound("error");
     } finally {
       setSaving(false);
     }
@@ -406,8 +411,10 @@ export default function Settings() {
   // Local state for non-theme settings
   const [notifications, setNotifications] = useState(true);
   const [orderAlerts, setOrderAlerts] = useState(true);
-  const [soundEffects, setSoundEffects] = useState(false);
   const [autoBackup, setAutoBackup] = useState(true);
+
+  // Sound Context
+  const { soundEnabled, toggleSound, playSound } = useSound();
 
   return (
     <motion.div
@@ -441,7 +448,10 @@ export default function Settings() {
             {categories.map((cat) => (
               <button
                 key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
+                onClick={() => {
+                  setActiveCategory(cat.id);
+                  playSound("click");
+                }}
                 className={`
                   w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium
                   transition-all duration-200 text-left
@@ -490,8 +500,11 @@ export default function Settings() {
               <ToggleSetting
                 label="Sound Effects"
                 description="Play sounds for notifications and actions"
-                checked={soundEffects}
-                onChange={setSoundEffects}
+                checked={soundEnabled}
+                onChange={() => {
+                  toggleSound();
+                  if (!soundEnabled) playSound("switch"); // Play sound when turning on
+                }}
               />
               <ToggleSetting
                 label="Auto Backup"
@@ -522,7 +535,10 @@ export default function Settings() {
                 label="Dark Mode"
                 description="Use dark color scheme throughout the app"
                 checked={theme === "dark"}
-                onChange={() => toggleTheme()}
+                onChange={() => {
+                  toggleTheme();
+                  playSound("switch");
+                }}
               />
               <ToggleSetting
                 label="Smooth Animations"
@@ -552,7 +568,10 @@ export default function Settings() {
                   ].map((themeItem) => (
                     <button
                       key={themeItem.id}
-                      onClick={() => setAccentColor(themeItem.id as any)}
+                      onClick={() => {
+                        setAccentColor(themeItem.id as any);
+                        playSound("click");
+                      }}
                       className={`
                         w-8 h-8 rounded-full ${themeItem.color}
                         ring-2 ring-transparent

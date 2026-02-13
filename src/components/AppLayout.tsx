@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useSound } from "../context/SoundContext";
 
 // ── SVG Icons ──
 const Icons = {
@@ -111,6 +112,7 @@ export default function AppLayout() {
   });
 
   const appWindow = getCurrentWindow();
+  const { playSound } = useSound();
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-liquid-bg)]">
@@ -154,6 +156,7 @@ export default function AppLayout() {
             <NavLink
               key={to}
               to={to}
+              onClick={() => playSound("click")}
               className={({ isActive }) =>
                 `nav-item ${isActive ? "nav-item-active" : ""}`
               }

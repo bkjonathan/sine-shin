@@ -6,6 +6,7 @@ import OnboardingForm from "./components/OnboardingForm";
 import Dashboard from "./components/Dashboard";
 import Settings from "./components/Settings.tsx";
 import { ThemeProvider } from "./context/ThemeContext";
+import { SoundProvider } from "./context/SoundContext";
 import "./index.css";
 
 function App() {
@@ -62,42 +63,47 @@ function App() {
 
   return (
     <ThemeProvider>
-      <Routes>
-        {/* Onboarding — Full screen, no layout shell */}
-        <Route path="/onboarding" element={<OnboardingForm />} />
+      <SoundProvider>
+        <Routes>
+          {/* Onboarding — Full screen, no layout shell */}
+          <Route path="/onboarding" element={<OnboardingForm />} />
 
-        {/* App shell with sidebar */}
-        <Route element={<AppLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
+          {/* App shell with sidebar */}
+          <Route element={<AppLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route
+              path="/orders"
+              element={
+                <PlaceholderPage
+                  title="Orders"
+                  description="Order management coming soon"
+                />
+              }
+            />
+            <Route
+              path="/customers"
+              element={
+                <PlaceholderPage
+                  title="Customers"
+                  description="Customer management coming soon"
+                />
+              }
+            />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
+
+          {/* Fallback */}
           <Route
-            path="/orders"
+            path="*"
             element={
-              <PlaceholderPage
-                title="Orders"
-                description="Order management coming soon"
+              <Navigate
+                to={isOnboarded ? "/dashboard" : "/onboarding"}
+                replace
               />
             }
           />
-          <Route
-            path="/customers"
-            element={
-              <PlaceholderPage
-                title="Customers"
-                description="Customer management coming soon"
-              />
-            }
-          />
-          <Route path="/settings" element={<Settings />} />
-        </Route>
-
-        {/* Fallback */}
-        <Route
-          path="*"
-          element={
-            <Navigate to={isOnboarded ? "/dashboard" : "/onboarding"} replace />
-          }
-        />
-      </Routes>
+        </Routes>
+      </SoundProvider>
     </ThemeProvider>
   );
 }
