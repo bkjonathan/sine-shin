@@ -110,6 +110,91 @@ async fn get_shop_settings(app: AppHandle) -> Result<ShopSettings, String> {
     Ok(settings)
 }
 
+#[tauri::command]
+async fn update_shop_settings(
+    app: AppHandle,
+    shop_name: String,
+    phone: String,
+    address: String,
+    logo_path: Option<String>,
+) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // We update the most recent record
+    let latest_id: Option<i64> = sqlx::query_scalar("SELECT id FROM shop_settings ORDER BY id DESC LIMIT 1")
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if let Some(id) = latest_id {
+        // Handle Logo Logic
+        let new_internal_logo_path = if let Some(path) = logo_path {
+            if !path.is_empty() {
+                // Copy logic same as save_shop_setup (could be refactored into helper)
+                let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+                let logos_dir = app_data_dir.join("logos");
+                fs::create_dir_all(&logos_dir).map_err(|e| format!("Failed to create logos dir: {}", e))?;
+
+                let source = PathBuf::from(&path);
+                if !source.exists() {
+                     // If file doesn't exist, maybe ignore or error? 
+                     // Let's warn and skip updating logo if invalid path provided
+                     // Or return error.
+                     return Err(format!("Logo file not found: {}", path));
+                }
+
+                let file_name = source
+                    .file_name()
+                    .ok_or("Invalid file name")?
+                    .to_string_lossy()
+                    .to_string();
+
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|e| e.to_string())?
+                    .as_millis();
+                let dest_name = format!("{}_{}", timestamp, file_name);
+                let dest = logos_dir.join(&dest_name);
+
+                fs::copy(&source, &dest).map_err(|e| format!("Failed to copy logo: {}", e))?;
+                Some(dest.to_string_lossy().to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(internal_path) = new_internal_logo_path {
+             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ? WHERE id = ?")
+                .bind(shop_name)
+                .bind(phone)
+                .bind(address)
+                .bind(internal_path)
+                .bind(id)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        } else {
+             // Keep existing logo
+             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ? WHERE id = ?")
+                .bind(shop_name)
+                .bind(phone)
+                .bind(address)
+                .bind(id)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+
+    } else {
+        return Err("No shop settings found to update".to_string());
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -160,7 +245,12 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![check_is_onboarded, save_shop_setup, get_shop_settings])
+        .invoke_handler(tauri::generate_handler![
+            check_is_onboarded, 
+            save_shop_setup, 
+            get_shop_settings, 
+            update_shop_settings
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

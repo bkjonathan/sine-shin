@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import AppLayout from "./components/AppLayout";
 import OnboardingForm from "./components/OnboardingForm";
 import Dashboard from "./components/Dashboard";
-import Settings from "./components/Settings";
+import Settings from "./components/Settings.tsx";
 import { ThemeProvider } from "./context/ThemeContext";
 import "./index.css";
 
