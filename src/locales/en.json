@@ -148,7 +148,9 @@
       "customer_info": "Customer Information",
       "product_details": "Product Details",
       "timeline": "Timeline",
-      "financial_summary": "Financial Summary"
+      "financial_summary": "Financial Summary",
+      "fee": "Fee",
+      "product_order_from": "Product Order from {{platform}}"
     },
     "invoice": {
       "download": "Download Invoice",

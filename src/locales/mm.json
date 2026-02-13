@@ -148,7 +148,9 @@
       "customer_info": "ဖောက်သည် အချက်အလက်",
       "product_details": "ကုန်ပစ္စည်း အချက်အလက်များ",
       "timeline": "အချိန်ဇယား",
-      "financial_summary": "ငွေကြေး သုံးသပ်ချက်"
+      "financial_summary": "ငွေကြေး သုံးသပ်ချက်",
+      "fee": "အခွန်အခ",
+      "product_order_from": "{{platform}} မှ မှာယူသော ပစ္စည်း"
     },
     "invoice": {
       "download": "ဘောက်ချာ ဒေါင်းလုဒ်ယူမည်",

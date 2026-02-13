@@ -6,9 +6,10 @@ import {
   createOrder,
   updateOrder,
   deleteOrder,
+  getOrderById,
 } from "../api/orderApi";
 import { getCustomers } from "../api/customerApi";
-import { OrderWithCustomer } from "../types/order";
+import { OrderWithCustomer, OrderItemPayload } from "../types/order";
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
@@ -48,17 +49,15 @@ export default function Orders() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
+  // Form State
   const initialFormState = {
     customer_id: "",
     order_from: "Facebook",
-    product_url: "",
-    product_qty: "",
-    price: "",
+    items: [] as OrderItemPayload[],
     exchange_rate: "",
     shipping_fee: "",
     delivery_fee: "",
     cargo_fee: "",
-    product_weight: "",
     order_date: "",
     arrived_date: "",
     shipment_date: "",
@@ -67,7 +66,7 @@ export default function Orders() {
   const [formData, setFormData] = useState(initialFormState);
 
   useEffect(() => {
-    console.log("Form Data Changed:", formData);
+    // console.log("Form Data Changed:", formData);
   }, [formData]);
 
   // Delete State
@@ -119,37 +118,50 @@ export default function Orders() {
     }
   };
 
-  const handleOpenModal = (order?: OrderWithCustomer) => {
+  const handleOpenModal = async (order?: OrderWithCustomer) => {
     if (order) {
       setEditingOrder(order);
-      setFormData({
-        customer_id: order.customer_id?.toString() || "",
-        order_from: order.order_from || "Facebook",
-        product_url: order.product_url || "",
-        product_qty: order.product_qty?.toString() || "",
-        price: order.price?.toString() || "",
-        exchange_rate: order.exchange_rate?.toString() || "",
-        shipping_fee: order.shipping_fee?.toString() || "",
-        delivery_fee: order.delivery_fee?.toString() || "",
-        cargo_fee: order.cargo_fee?.toString() || "",
-        product_weight: order.product_weight?.toString() || "",
-        order_date: order.order_date || "",
-        arrived_date: order.arrived_date || "",
-        shipment_date: order.shipment_date || "",
-        user_withdraw_date: order.user_withdraw_date || "",
-      });
+      // Fetch details to get items
+      try {
+        const detail = await getOrderById(order.id);
+        setFormData({
+          customer_id: order.customer_id?.toString() || "",
+          order_from: order.order_from || "Facebook",
+          // Map OrderItem to OrderItemPayload
+          items: detail.items.map((item) => ({
+            product_url: item.product_url,
+            product_qty: item.product_qty,
+            price: item.price,
+            product_weight: item.product_weight,
+          })),
+          exchange_rate: order.exchange_rate?.toString() || "",
+          shipping_fee: order.shipping_fee?.toString() || "",
+          delivery_fee: order.delivery_fee?.toString() || "",
+          cargo_fee: order.cargo_fee?.toString() || "",
+          order_date: order.order_date || "",
+          arrived_date: order.arrived_date || "",
+          shipment_date: order.shipment_date || "",
+          user_withdraw_date: order.user_withdraw_date || "",
+        });
+        setIsModalOpen(true);
+      } catch (e) {
+        console.error("Failed to load details for editing", e);
+        // Maybe show error notification
+      }
     } else {
       setEditingOrder(null);
-      // Explicitly clear dates to prevent any potential auto-fill
       setFormData({
         ...initialFormState,
+        items: [
+          { product_url: "", product_qty: 1, price: 0, product_weight: 0 },
+        ],
         order_date: "",
         arrived_date: "",
         shipment_date: "",
         user_withdraw_date: "",
       });
+      setIsModalOpen(true);
     }
-    setIsModalOpen(true);
     playSound("click");
   };
 
@@ -168,11 +180,14 @@ export default function Orders() {
       const payload: any = {
         customer_id: parseInt(formData.customer_id),
         order_from: formData.order_from || undefined,
-        product_url: formData.product_url || undefined,
-        product_qty: formData.product_qty
-          ? parseInt(formData.product_qty)
-          : undefined,
-        price: formData.price ? parseFloat(formData.price) : undefined,
+        items: formData.items.map((item) => ({
+          product_url: item.product_url || undefined,
+          product_qty: item.product_qty ? Number(item.product_qty) : undefined,
+          price: item.price ? Number(item.price) : undefined,
+          product_weight: item.product_weight
+            ? Number(item.product_weight)
+            : undefined,
+        })),
         exchange_rate: formData.exchange_rate
           ? parseFloat(formData.exchange_rate)
           : undefined,
@@ -185,9 +200,6 @@ export default function Orders() {
         cargo_fee: formData.cargo_fee
           ? parseFloat(formData.cargo_fee)
           : undefined,
-        product_weight: formData.product_weight
-          ? parseFloat(formData.product_weight)
-          : undefined,
         order_date: formData.order_date || undefined,
         arrived_date: formData.arrived_date || undefined,
         shipment_date: formData.shipment_date || undefined,
@@ -196,7 +208,6 @@ export default function Orders() {
 
       if (editingOrder) {
         await updateOrder({
-          ...editingOrder,
           ...payload,
           id: editingOrder.id,
         });
@@ -410,9 +421,9 @@ export default function Orders() {
                         {order.order_from || "-"}
                       </span>
                     </p>
-                    {order.product_url && (
+                    {order.first_product_url && (
                       <a
-                        href={order.product_url}
+                        href={order.first_product_url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-[var(--color-accent-blue)] hover:underline mb-2 block truncate"
@@ -433,21 +444,19 @@ export default function Orders() {
                         <span className="text-[var(--color-text-muted)] text-xs block">
                           {t("orders.qty")}
                         </span>
-                        {order.product_qty || 0}
-                      </div>
-                      <div>
-                        <span className="text-[var(--color-text-muted)] text-xs block">
-                          {t("orders.price")}
-                        </span>
-                        {order.price?.toLocaleString() || "-"}
+                        {order.total_qty || 0}
                       </div>
                       <div>
                         <span className="text-[var(--color-text-muted)] text-xs block">
                           {t("orders.total")}
                         </span>
-                        {(
-                          (order.product_qty || 0) * (order.price || 0)
-                        ).toLocaleString()}
+                        {(order.total_price || 0).toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="text-[var(--color-text-muted)] text-xs block">
+                          {t("orders.weight")}
+                        </span>
+                        {order.total_weight || 0} kg
                       </div>
                     </div>
 
@@ -571,19 +580,20 @@ export default function Orders() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.product_url")}
+                        {t("orders.form.exchange_rate")}
                       </label>
                       <input
-                        type="url"
+                        type="number"
+                        min="0"
+                        step="0.01"
                         className="input-liquid w-full"
-                        value={formData.product_url}
+                        value={formData.exchange_rate}
                         onChange={(e) =>
                           setFormData({
                             ...formData,
-                            product_url: e.target.value,
+                            exchange_rate: e.target.value,
                           })
                         }
-                        placeholder="https://..."
                       />
                     </div>
                     <div>
@@ -611,80 +621,159 @@ export default function Orders() {
                   </div>
                 </div>
 
-                {/* Section: Product & Price */}
+                {/* Section: Items */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
-                    {t("orders.modal.product_details")}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.qty")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        className="input-liquid w-full"
-                        value={formData.product_qty}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            product_qty: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.price")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.price}
-                        onChange={(e) =>
-                          setFormData({ ...formData, price: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.weight")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.product_weight}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            product_weight: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                        {t("orders.form.exchange_rate")}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.exchange_rate}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            exchange_rate: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
+                  <div className="flex items-center justify-between border-b border-[var(--color-glass-border)] pb-1">
+                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                      {t("orders.modal.product_details")}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          items: [
+                            ...formData.items,
+                            {
+                              product_url: "",
+                              product_qty: 1,
+                              price: 0,
+                              product_weight: 0,
+                            },
+                          ],
+                        })
+                      }
+                      className="text-xs flex items-center gap-1 text-[var(--color-accent-blue)] hover:text-[var(--color-accent-blue-hover)] transition-colors"
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                      {t("orders.add_item")}
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {formData.items.map((item, index) => (
+                      <div
+                        key={index}
+                        className="p-4 bg-[var(--color-glass-white)]/30 rounded-lg border border-[var(--color-glass-border)] relative group"
+                      >
+                        {formData.items.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                items: formData.items.filter(
+                                  (_, i) => i !== index,
+                                ),
+                              })
+                            }
+                            className="absolute top-2 right-2 text-[var(--color-text-muted)] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
+                            title={t("common.delete")}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                          </button>
+                        )}
+
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                              {t("orders.form.product_url")}
+                            </label>
+                            <input
+                              type="text"
+                              className="input-liquid w-full text-sm py-1.5"
+                              value={item.product_url || ""}
+                              onChange={(e) => {
+                                const newItems = [...formData.items];
+                                newItems[index].product_url = e.target.value;
+                                setFormData({ ...formData, items: newItems });
+                              }}
+                              placeholder="https://..."
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                                {t("orders.qty")}
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                className="input-liquid w-full text-sm py-1.5"
+                                value={item.product_qty || ""}
+                                onChange={(e) => {
+                                  const newItems = [...formData.items];
+                                  newItems[index].product_qty =
+                                    parseInt(e.target.value) || 0;
+                                  setFormData({ ...formData, items: newItems });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                                {t("orders.price")}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="input-liquid w-full text-sm py-1.5"
+                                value={item.price || ""}
+                                onChange={(e) => {
+                                  const newItems = [...formData.items];
+                                  newItems[index].price =
+                                    parseFloat(e.target.value) || 0;
+                                  setFormData({ ...formData, items: newItems });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                                {t("orders.form.weight")}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="input-liquid w-full text-sm py-1.5"
+                                value={item.product_weight || ""}
+                                onChange={(e) => {
+                                  const newItems = [...formData.items];
+                                  newItems[index].product_weight =
+                                    parseFloat(e.target.value) || 0;
+                                  setFormData({ ...formData, items: newItems });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 

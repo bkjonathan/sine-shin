@@ -824,7 +824,7 @@ export default function Customers() {
                       {t("customers.form.social_url")}
                     </label>
                     <input
-                      type={formData.platform === "Others" ? "text" : "url"}
+                      type="text"
                       className="input-liquid w-full"
                       placeholder="https://facebook.com/..."
                       value={formData.social_media_url}

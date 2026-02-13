@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { getOrderById } from "../api/orderApi";
 import { getShopSettings, ShopSettings } from "../api/settingApi";
-import { OrderWithCustomer } from "../types/order";
+import { OrderDetail as OrderDetailType } from "../types/order";
 import { useSound } from "../context/SoundContext";
 import html2canvas from "html2canvas";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -18,7 +18,7 @@ export default function OrderDetail() {
   const { playSound } = useSound();
   const invoiceRef = useRef<HTMLDivElement>(null);
 
-  const [order, setOrder] = useState<OrderWithCustomer | null>(null);
+  const [orderDetail, setOrderDetail] = useState<OrderDetailType | null>(null);
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export default function OrderDetail() {
         getOrderById(orderId),
         getShopSettings(),
       ]);
-      setOrder(orderData);
+      setOrderDetail(orderData);
       setShopSettings(settingsData);
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -49,14 +49,16 @@ export default function OrderDetail() {
 
   const handleDownloadInvoice = async () => {
     console.log("Download initiated");
-    if (!invoiceRef.current || !order) {
+    if (!invoiceRef.current || !orderDetail) {
       console.error("Missing ref or order", {
         ref: !!invoiceRef.current,
-        order: !!order,
+        order: !!orderDetail,
       });
       alert("Error: Invoice element not found");
       return;
     }
+
+    const { order } = orderDetail;
 
     try {
       setDownloading(true);
@@ -71,7 +73,7 @@ export default function OrderDetail() {
         useCORS: true,
         backgroundColor: "#ffffff", // Ensure white background
         logging: true, // Enable html2canvas logs
-        onclone: (doc) => {
+        onclone: (_) => {
           console.log("Cloned document for capture");
         },
       });
@@ -149,7 +151,7 @@ export default function OrderDetail() {
     );
   }
 
-  if (error || !order) {
+  if (error || !orderDetail) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-secondary)]">
         <p className="mb-4">{error || t("orders.detail.not_found")}</p>
@@ -159,6 +161,8 @@ export default function OrderDetail() {
       </div>
     );
   }
+
+  const { order, items } = orderDetail;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -442,7 +446,7 @@ export default function OrderDetail() {
                         textTransform: "uppercase",
                       }}
                     >
-                      Item Description
+                      {t("orders.invoice.item_desc")}
                     </th>
                     <th
                       style={{
@@ -486,52 +490,59 @@ export default function OrderDetail() {
                   </tr>
                 </thead>
                 <tbody style={{ fontSize: "14px", color: "#334155" }}>
-                  <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td
-                      style={{
-                        padding: "16px 0",
-                        color: "#94a3b8",
-                        fontWeight: "500",
-                      }}
+                  {items.map((item, index) => (
+                    <tr
+                      key={index}
+                      style={{ borderBottom: "1px solid #f1f5f9" }}
                     >
-                      01
-                    </td>
-                    <td style={{ padding: "16px 0", fontWeight: "500" }}>
-                      Product Order from {order.order_from || "Online"}
-                      {order.product_url && (
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            color: "#94a3b8",
-                            marginTop: "4px",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            maxWidth: "300px",
-                          }}
-                        >
-                          {order.product_url}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: "16px 0", textAlign: "right" }}>
-                      {order.product_qty}
-                    </td>
-                    <td style={{ padding: "16px 0", textAlign: "right" }}>
-                      {order.price?.toLocaleString()}
-                    </td>
-                    <td
-                      style={{
-                        padding: "16px 0",
-                        textAlign: "right",
-                        fontWeight: "600",
-                      }}
-                    >
-                      {(
-                        (order.price || 0) * (order.product_qty || 1)
-                      ).toLocaleString()}
-                    </td>
-                  </tr>
+                      <td
+                        style={{
+                          padding: "16px 0",
+                          color: "#94a3b8",
+                          fontWeight: "500",
+                        }}
+                      >
+                        {String(index + 1).padStart(2, "0")}
+                      </td>
+                      <td style={{ padding: "16px 0", fontWeight: "500" }}>
+                        {t("orders.detail.product_order_from", {
+                          platform: order.order_from || "Online",
+                        })}
+                        {item.product_url && (
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              color: "#94a3b8",
+                              marginTop: "4px",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: "300px",
+                            }}
+                          >
+                            {item.product_url}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: "16px 0", textAlign: "right" }}>
+                        {item.product_qty}
+                      </td>
+                      <td style={{ padding: "16px 0", textAlign: "right" }}>
+                        {item.price?.toLocaleString()}
+                      </td>
+                      <td
+                        style={{
+                          padding: "16px 0",
+                          textAlign: "right",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {(
+                          (item.price || 0) * (item.product_qty || 1)
+                        ).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
                   {/* Additional Fees */}
                   {(order.shipping_fee || 0) > 0 && (
                     <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
@@ -542,9 +553,11 @@ export default function OrderDetail() {
                           fontWeight: "500",
                         }}
                       >
-                        02
+                        {t("orders.detail.fee")}
                       </td>
-                      <td style={{ padding: "16px 0" }}>Shipping Fee</td>
+                      <td style={{ padding: "16px 0" }}>
+                        {t("orders.form.shipping_fee")}
+                      </td>
                       <td style={{ padding: "16px 0", textAlign: "right" }}>
                         -
                       </td>
@@ -565,9 +578,11 @@ export default function OrderDetail() {
                           fontWeight: "500",
                         }}
                       >
-                        03
+                        {t("orders.detail.fee")}
                       </td>
-                      <td style={{ padding: "16px 0" }}>Delivery Fee</td>
+                      <td style={{ padding: "16px 0" }}>
+                        {t("orders.form.delivery_fee")}
+                      </td>
                       <td style={{ padding: "16px 0", textAlign: "right" }}>
                         -
                       </td>
@@ -588,9 +603,11 @@ export default function OrderDetail() {
                           fontWeight: "500",
                         }}
                       >
-                        04
+                        {t("orders.detail.fee")}
                       </td>
-                      <td style={{ padding: "16px 0" }}>Cargo Fee</td>
+                      <td style={{ padding: "16px 0" }}>
+                        {t("orders.form.cargo_fee")}
+                      </td>
                       <td style={{ padding: "16px 0", textAlign: "right" }}>
                         -
                       </td>
@@ -626,11 +643,9 @@ export default function OrderDetail() {
                     color: "#64748b",
                   }}
                 >
-                  <span>Subtotal</span>
+                  <span>{t("orders.invoice.subtotal")}</span>
                   <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                    {(
-                      (order.price || 0) * (order.product_qty || 1)
-                    ).toLocaleString()}
+                    {(order.total_price || 0).toLocaleString()}
                   </span>
                 </div>
                 <div
@@ -644,7 +659,7 @@ export default function OrderDetail() {
                     borderBottom: "1px solid #e2e8f0",
                   }}
                 >
-                  <span>Total Fees</span>
+                  <span>{t("orders.invoice.total_fees")}</span>
                   <span style={{ fontWeight: "500", color: "#0f172a" }}>
                     {(
                       (order.shipping_fee || 0) +
@@ -662,10 +677,10 @@ export default function OrderDetail() {
                     color: "#0f172a",
                   }}
                 >
-                  <span>Total</span>
+                  <span>{t("orders.invoice.total")}</span>
                   <span>
                     {(
-                      (order.price || 0) * (order.product_qty || 1) +
+                      (order.total_price || 0) +
                       (order.shipping_fee || 0) +
                       (order.delivery_fee || 0) +
                       (order.cargo_fee || 0)
@@ -686,8 +701,10 @@ export default function OrderDetail() {
                 color: "#94a3b8",
               }}
             >
-              <p style={{ margin: 0 }}>Thank you for your business!</p>
-              <p style={{ marginTop: "4px" }}>Generated by Sine Shin Manager</p>
+              <p style={{ margin: 0 }}>{t("orders.invoice.footer_message")}</p>
+              <p style={{ marginTop: "4px" }}>
+                {t("orders.invoice.footer_credit")}
+              </p>
             </div>
           </div>
         </div>
@@ -729,52 +746,91 @@ export default function OrderDetail() {
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
                 {t("orders.detail.product_details")}
               </h2>
-              <div className="space-y-4">
-                {order.product_url && (
-                  <div>
-                    <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                      {t("orders.product_link")}
-                    </label>
-                    <a
-                      href={order.product_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[var(--color-accent-blue)] hover:underline break-all"
-                    >
-                      {order.product_url}
-                    </a>
+              <div className="space-y-6">
+                {items.map((item, index) => (
+                  <div
+                    key={index}
+                    className="p-4 bg-[var(--color-glass-white)]/10 rounded-lg border border-[var(--color-glass-border)]"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-[var(--color-text-muted)]">
+                        Item {index + 1}
+                      </span>
+                    </div>
+                    {item.product_url && (
+                      <div className="mb-3">
+                        <label className="block text-xs text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.product_link")}
+                        </label>
+                        <a
+                          href={item.product_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[var(--color-accent-blue)] hover:underline break-all text-sm"
+                        >
+                          {item.product_url}
+                        </a>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.qty")}
+                        </label>
+                        <p className="text-[var(--color-text-primary)]">
+                          {item.product_qty || 0}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.price")}
+                        </label>
+                        <p className="text-[var(--color-text-primary)]">
+                          {item.price?.toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[var(--color-text-secondary)] mb-1">
+                          {t("orders.form.weight")}
+                        </label>
+                        <p className="text-[var(--color-text-primary)]">
+                          {item.product_weight || 0} kg
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                )}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                ))}
+
+                <div className="pt-4 border-t border-[var(--color-glass-border)] grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                      {t("orders.qty")}
+                    <label className="block text-sm font-bold text-[var(--color-text-secondary)] mb-1">
+                      {t("orders.total_qty")}
                     </label>
-                    <p className="text-[var(--color-text-primary)]">
-                      {order.product_qty || 0}
+                    <p className="text-[var(--color-text-primary)] font-bold">
+                      {order.total_qty}
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                      {t("orders.price")}
+                    <label className="block text-sm font-bold text-[var(--color-text-secondary)] mb-1">
+                      {t("orders.total_price")}
                     </label>
-                    <p className="text-[var(--color-text-primary)]">
-                      {order.price?.toLocaleString()}
+                    <p className="text-[var(--color-text-primary)] font-bold">
+                      {order.total_price?.toLocaleString()}
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                      {t("orders.form.weight")}
+                    <label className="block text-sm font-bold text-[var(--color-text-secondary)] mb-1">
+                      {t("orders.total_weight")}
                     </label>
-                    <p className="text-[var(--color-text-primary)]">
-                      {order.product_weight || 0} kg
+                    <p className="text-[var(--color-text-primary)] font-bold">
+                      {order.total_weight}
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-bold text-[var(--color-text-secondary)] mb-1">
                       {t("orders.form.exchange_rate")}
                     </label>
-                    <p className="text-[var(--color-text-primary)]">
+                    <p className="text-[var(--color-text-primary)] font-bold">
                       {order.exchange_rate?.toLocaleString()}
                     </p>
                   </div>
@@ -861,7 +917,7 @@ export default function OrderDetail() {
                   </span>
                   <span className="font-bold text-xl text-[var(--color-accent-green)]">
                     {(
-                      (order.price || 0) * (order.product_qty || 1) +
+                      (order.total_price || 0) +
                       (order.shipping_fee || 0) +
                       (order.delivery_fee || 0) +
                       (order.cargo_fee || 0)

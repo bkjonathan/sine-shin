@@ -67,19 +67,34 @@ struct Order {
     order_id: Option<String>,
     customer_id: Option<i64>,
     order_from: Option<String>,
-    product_url: Option<String>,
-    product_qty: Option<i64>,
-    price: Option<f64>,
     exchange_rate: Option<f64>,
     shipping_fee: Option<f64>,
     delivery_fee: Option<f64>,
     cargo_fee: Option<f64>,
-    product_weight: Option<f64>,
     order_date: Option<String>,
     arrived_date: Option<String>,
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
     created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+struct OrderItem {
+    id: i64,
+    order_id: i64,
+    product_url: Option<String>,
+    product_qty: Option<i64>,
+    price: Option<f64>,
+    product_weight: Option<f64>,
+    created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OrderItemPayload {
+    product_url: Option<String>,
+    product_qty: Option<i64>,
+    price: Option<f64>,
+    product_weight: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -89,19 +104,26 @@ struct OrderWithCustomer {
     customer_id: Option<i64>,
     customer_name: Option<String>,
     order_from: Option<String>,
-    product_url: Option<String>,
-    product_qty: Option<i64>,
-    price: Option<f64>,
     exchange_rate: Option<f64>,
     shipping_fee: Option<f64>,
     delivery_fee: Option<f64>,
     cargo_fee: Option<f64>,
-    product_weight: Option<f64>,
     order_date: Option<String>,
     arrived_date: Option<String>,
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
     created_at: Option<String>,
+    // Aggregated fields
+    total_price: Option<f64>,
+    total_qty: Option<i64>,
+    total_weight: Option<f64>,
+    first_product_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OrderDetail {
+    order: OrderWithCustomer,
+    items: Vec<OrderItem>,
 }
 
 #[tauri::command]
@@ -509,47 +531,56 @@ async fn create_order(
     app: AppHandle,
     customer_id: i64,
     order_from: Option<String>,
-    product_url: Option<String>,
-    product_qty: Option<i64>,
-    price: Option<f64>,
     exchange_rate: Option<f64>,
     shipping_fee: Option<f64>,
     delivery_fee: Option<f64>,
     cargo_fee: Option<f64>,
-    product_weight: Option<f64>,
     order_date: Option<String>,
     arrived_date: Option<String>,
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
+    items: Vec<OrderItemPayload>,
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
+    // Start transaction
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
     let id = sqlx::query(
-        "INSERT INTO orders (customer_id, order_from, product_url, product_qty, price, exchange_rate, shipping_fee, delivery_fee, cargo_fee, product_weight, order_date, arrived_date, shipment_date, user_withdraw_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO orders (customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(customer_id)
     .bind(order_from)
-    .bind(product_url)
-    .bind(product_qty)
-    .bind(price)
     .bind(exchange_rate)
     .bind(shipping_fee)
     .bind(delivery_fee)
     .bind(cargo_fee)
-    .bind(product_weight)
     .bind(order_date)
     .bind(arrived_date)
     .bind(shipment_date)
     .bind(user_withdraw_date)
-    .execute(&*pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?
     .last_insert_rowid();
 
+    // Insert items
+    for item in items {
+        sqlx::query("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)")
+            .bind(id)
+            .bind(item.product_url)
+            .bind(item.product_qty)
+            .bind(item.price)
+            .bind(item.product_weight)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
     // Auto-generate order_id
     let prefix: Option<String> = sqlx::query_scalar("SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
-        .fetch_optional(&*pool)
+        .fetch_optional(&mut *tx)
         .await
         .unwrap_or(Some("SSO0-".to_string()));
     
@@ -559,8 +590,10 @@ async fn create_order(
     let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
         .bind(order_id)
         .bind(id)
-        .execute(&*pool)
+        .execute(&mut *tx)
         .await;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(id)
 }
@@ -570,8 +603,23 @@ async fn get_orders(app: AppHandle) -> Result<Vec<OrderWithCustomer>, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
+    // Use COALESCE to handle nulls from left join (if no items)
+    // We select the first product_url as a representative image if needed
     let orders = sqlx::query_as::<_, OrderWithCustomer>(
-        "SELECT o.*, c.name as customer_name FROM orders o LEFT JOIN customers c ON o.customer_id = c.id ORDER BY o.created_at DESC"
+        r#"
+        SELECT 
+            o.*, 
+            c.name as customer_name,
+            COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
+            COALESCE(SUM(oi.product_qty), 0) as total_qty,
+            COALESCE(SUM(oi.product_weight), 0) as total_weight,
+            (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
+        FROM orders o 
+        LEFT JOIN customers c ON o.customer_id = c.id 
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+        "#
     )
     .fetch_all(&*pool)
     .await
@@ -586,43 +634,61 @@ async fn update_order(
     id: i64,
     customer_id: i64,
     order_from: Option<String>,
-    product_url: Option<String>,
-    product_qty: Option<i64>,
-    price: Option<f64>,
     exchange_rate: Option<f64>,
     shipping_fee: Option<f64>,
     delivery_fee: Option<f64>,
     cargo_fee: Option<f64>,
-    product_weight: Option<f64>,
     order_date: Option<String>,
     arrived_date: Option<String>,
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
+    items: Vec<OrderItemPayload>,
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
+    // Start transaction
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
     sqlx::query(
-        "UPDATE orders SET customer_id = ?, order_from = ?, product_url = ?, product_qty = ?, price = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, product_weight = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ? WHERE id = ?",
+        "UPDATE orders SET customer_id = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ? WHERE id = ?",
     )
     .bind(customer_id)
     .bind(order_from)
-    .bind(product_url)
-    .bind(product_qty)
-    .bind(price)
     .bind(exchange_rate)
     .bind(shipping_fee)
     .bind(delivery_fee)
     .bind(cargo_fee)
-    .bind(product_weight)
     .bind(order_date)
     .bind(arrived_date)
     .bind(shipment_date)
     .bind(user_withdraw_date)
     .bind(id)
-    .execute(&*pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
+
+    // Delete existing items
+    sqlx::query("DELETE FROM order_items WHERE order_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Insert new items
+    for item in items {
+        sqlx::query("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)")
+            .bind(id)
+            .bind(item.product_url)
+            .bind(item.product_qty)
+            .bind(item.price)
+            .bind(item.product_weight)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -715,26 +781,55 @@ async fn get_customer(app: AppHandle, id: i64) -> Result<Customer, String> {
 }
 
 #[tauri::command]
-async fn get_customer_orders(app: AppHandle, customer_id: i64) -> Result<Vec<Order>, String> {
+async fn get_customer_orders(app: AppHandle, customer_id: i64) -> Result<Vec<OrderWithCustomer>, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let orders = sqlx::query_as::<_, Order>("SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC")
-        .bind(customer_id)
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let orders = sqlx::query_as::<_, OrderWithCustomer>(
+        r#"
+        SELECT 
+            o.*, 
+            c.name as customer_name,
+            COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
+            COALESCE(SUM(oi.product_qty), 0) as total_qty,
+            COALESCE(SUM(oi.product_weight), 0) as total_weight,
+            (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
+        FROM orders o 
+        LEFT JOIN customers c ON o.customer_id = c.id 
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        WHERE o.customer_id = ?
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+        "#
+    )
+    .bind(customer_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(orders)
 }
 
 #[tauri::command]
-async fn get_order(app: AppHandle, id: i64) -> Result<OrderWithCustomer, String> {
+async fn get_order(app: AppHandle, id: i64) -> Result<OrderDetail, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
     let order = sqlx::query_as::<_, OrderWithCustomer>(
-        "SELECT o.*, c.name as customer_name FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE o.id = ?"
+        r#"
+        SELECT 
+            o.*, 
+            c.name as customer_name,
+            COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
+            COALESCE(SUM(oi.product_qty), 0) as total_qty,
+            COALESCE(SUM(oi.product_weight), 0) as total_weight,
+            (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
+        FROM orders o 
+        LEFT JOIN customers c ON o.customer_id = c.id 
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        WHERE o.id = ?
+        GROUP BY o.id
+        "#
     )
     .bind(id)
     .fetch_optional(&*pool)
@@ -742,7 +837,17 @@ async fn get_order(app: AppHandle, id: i64) -> Result<OrderWithCustomer, String>
     .map_err(|e| e.to_string())?
     .ok_or("Order not found".to_string())?;
 
-    Ok(order)
+    // Fetch items
+    let items = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+        .bind(id)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(OrderDetail {
+        order,
+        items
+    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
