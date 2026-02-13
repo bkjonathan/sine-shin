@@ -19,6 +19,7 @@ struct ShopSettings {
     address: Option<String>,
     logo_path: Option<String>,
     customer_id_prefix: Option<String>,
+    order_id_prefix: Option<String>,
     created_at: Option<String>,
 }
 
@@ -41,6 +42,47 @@ struct Customer {
     city: Option<String>,
     social_media_url: Option<String>,
     platform: Option<String>,
+    created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+struct Order {
+    id: i64,
+    order_id: Option<String>,
+    customer_id: Option<i64>,
+    order_from: Option<String>,
+    product_qty: Option<i64>,
+    price: Option<f64>,
+    exchange_rate: Option<f64>,
+    shipping_fee: Option<f64>,
+    delivery_fee: Option<f64>,
+    cargo_fee: Option<f64>,
+    product_weight: Option<f64>,
+    order_date: Option<String>,
+    arrived_date: Option<String>,
+    shipment_date: Option<String>,
+    user_withdraw_date: Option<String>,
+    created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+struct OrderWithCustomer {
+    id: i64,
+    order_id: Option<String>,
+    customer_id: Option<i64>,
+    customer_name: Option<String>,
+    order_from: Option<String>,
+    product_qty: Option<i64>,
+    price: Option<f64>,
+    exchange_rate: Option<f64>,
+    shipping_fee: Option<f64>,
+    delivery_fee: Option<f64>,
+    cargo_fee: Option<f64>,
+    product_weight: Option<f64>,
+    order_date: Option<String>,
+    arrived_date: Option<String>,
+    shipment_date: Option<String>,
+    user_withdraw_date: Option<String>,
     created_at: Option<String>,
 }
 
@@ -187,6 +229,7 @@ async fn update_shop_settings(
     address: String,
     logo_path: Option<String>,
     customer_id_prefix: Option<String>,
+    order_id_prefix: Option<String>,
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -237,23 +280,25 @@ async fn update_shop_settings(
         };
 
         if let Some(internal_path) = new_internal_logo_path {
-             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ?, customer_id_prefix = ? WHERE id = ?")
+             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ?, customer_id_prefix = ?, order_id_prefix = ? WHERE id = ?")
                 .bind(shop_name)
                 .bind(phone)
                 .bind(address)
                 .bind(internal_path)
                 .bind(customer_id_prefix)
+                .bind(order_id_prefix)
                 .bind(id)
                 .execute(&*pool)
                 .await
                 .map_err(|e| e.to_string())?;
         } else {
              // Keep existing logo
-             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, customer_id_prefix = ? WHERE id = ?")
+             sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, customer_id_prefix = ?, order_id_prefix = ? WHERE id = ?")
                 .bind(shop_name)
                 .bind(phone)
                 .bind(address)
                 .bind(customer_id_prefix)
+                .bind(order_id_prefix)
                 .bind(id)
                 .execute(&*pool)
                 .await
@@ -286,6 +331,11 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     sqlx::query("DROP TABLE IF EXISTS customers")
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    sqlx::query("DROP TABLE IF EXISTS orders")
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -434,6 +484,139 @@ async fn delete_customer(app: AppHandle, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn create_order(
+    app: AppHandle,
+    customer_id: i64,
+    order_from: Option<String>,
+    product_qty: Option<i64>,
+    price: Option<f64>,
+    exchange_rate: Option<f64>,
+    shipping_fee: Option<f64>,
+    delivery_fee: Option<f64>,
+    cargo_fee: Option<f64>,
+    product_weight: Option<f64>,
+    order_date: Option<String>,
+    arrived_date: Option<String>,
+    shipment_date: Option<String>,
+    user_withdraw_date: Option<String>,
+) -> Result<i64, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let id = sqlx::query(
+        "INSERT INTO orders (customer_id, order_from, product_qty, price, exchange_rate, shipping_fee, delivery_fee, cargo_fee, product_weight, order_date, arrived_date, shipment_date, user_withdraw_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(customer_id)
+    .bind(order_from)
+    .bind(product_qty)
+    .bind(price)
+    .bind(exchange_rate)
+    .bind(shipping_fee)
+    .bind(delivery_fee)
+    .bind(cargo_fee)
+    .bind(product_weight)
+    .bind(order_date)
+    .bind(arrived_date)
+    .bind(shipment_date)
+    .bind(user_withdraw_date)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .last_insert_rowid();
+
+    // Auto-generate order_id
+    let prefix: Option<String> = sqlx::query_scalar("SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
+        .fetch_optional(&*pool)
+        .await
+        .unwrap_or(Some("SSO0-".to_string()));
+    
+    let prefix_str = prefix.unwrap_or_else(|| "SSO0-".to_string());
+    let order_id = format!("{}{:05}", prefix_str, id);
+
+    let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
+        .bind(order_id)
+        .bind(id)
+        .execute(&*pool)
+        .await;
+
+    Ok(id)
+}
+
+#[tauri::command]
+async fn get_orders(app: AppHandle) -> Result<Vec<OrderWithCustomer>, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let orders = sqlx::query_as::<_, OrderWithCustomer>(
+        "SELECT o.*, c.name as customer_name FROM orders o LEFT JOIN customers c ON o.customer_id = c.id ORDER BY o.created_at DESC"
+    )
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(orders)
+}
+
+#[tauri::command]
+async fn update_order(
+    app: AppHandle,
+    id: i64,
+    customer_id: i64,
+    order_from: Option<String>,
+    product_qty: Option<i64>,
+    price: Option<f64>,
+    exchange_rate: Option<f64>,
+    shipping_fee: Option<f64>,
+    delivery_fee: Option<f64>,
+    cargo_fee: Option<f64>,
+    product_weight: Option<f64>,
+    order_date: Option<String>,
+    arrived_date: Option<String>,
+    shipment_date: Option<String>,
+    user_withdraw_date: Option<String>,
+) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    sqlx::query(
+        "UPDATE orders SET customer_id = ?, order_from = ?, product_qty = ?, price = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, product_weight = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ? WHERE id = ?",
+    )
+    .bind(customer_id)
+    .bind(order_from)
+    .bind(product_qty)
+    .bind(price)
+    .bind(exchange_rate)
+    .bind(shipping_fee)
+    .bind(delivery_fee)
+    .bind(cargo_fee)
+    .bind(product_weight)
+    .bind(order_date)
+    .bind(arrived_date)
+    .bind(shipment_date)
+    .bind(user_withdraw_date)
+    .bind(id)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_order(app: AppHandle, id: i64) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    sqlx::query("DELETE FROM orders WHERE id = ?")
+        .bind(id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct TableStatus {
     name: String,
@@ -550,7 +733,11 @@ pub fn run() {
             create_customer,
             get_customers,
             update_customer,
-            delete_customer
+            delete_customer,
+            create_order,
+            get_orders,
+            update_order,
+            delete_order
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

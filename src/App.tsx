@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import AppLayout from "./components/AppLayout";
 import OnboardingForm from "./components/OnboardingForm";
 import Dashboard from "./components/Dashboard";
+import Orders from "./components/Orders";
 import Customers from "./components/Customers";
 import Settings from "./components/Settings.tsx";
 import { ThemeProvider } from "./context/ThemeContext";
@@ -104,15 +105,7 @@ function AppRoutes() {
         }
       >
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route
-          path="/orders"
-          element={
-            <PlaceholderPage
-              title="Orders"
-              description="Order management coming soon"
-            />
-          }
-        />
+        <Route path="/orders" element={<Orders />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
@@ -146,26 +139,6 @@ function App() {
         </AuthProvider>
       </SoundProvider>
     </ThemeProvider>
-  );
-}
-
-// Placeholder for pages not yet built
-function PlaceholderPage({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-      <div className="glass-panel p-12 text-center">
-        <h2 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
-          {title}
-        </h2>
-        <p className="text-[var(--color-text-secondary)]">{description}</p>
-      </div>
-    </div>
   );
 }
 
