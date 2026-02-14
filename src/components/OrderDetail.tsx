@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { getOrderById } from "../api/orderApi";
+import { getOrderById, updateOrder } from "../api/orderApi";
 import { getShopSettings, ShopSettings } from "../api/settingApi";
 import { getCustomerById } from "../api/customerApi";
 import { OrderDetail as OrderDetailType } from "../types/order";
@@ -27,6 +27,11 @@ export default function OrderDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+
+  // Editing state
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [tempValue, setTempValue] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -139,6 +144,107 @@ export default function OrderDetail() {
     }
   };
 
+  const handleEditClick = (
+    field: string,
+    value: string | number | undefined | null,
+    type: "date" | "number" = "date",
+  ) => {
+    if (type === "date") {
+      if (typeof value === "string" && value) {
+        // Create a date object from the UTC date string
+        const date = new Date(value);
+        // Format as YYYY-MM-DD for input using local time
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        setTempValue(`${year}-${month}-${day}`);
+      } else {
+        setTempValue("");
+      }
+    } else {
+      setTempValue(value?.toString() || "");
+    }
+    setEditingField(field);
+  };
+
+  const handleSave = async () => {
+    if (!orderDetail || !editingField) return;
+
+    try {
+      setIsUpdating(true);
+
+      const { order, items } = orderDetail;
+
+      // Determine if we are updating a date or a number based on field name
+      const isDateField = [
+        "order_date",
+        "arrived_date",
+        "shipment_date",
+        "user_withdraw_date",
+      ].includes(editingField);
+
+      let newValue: string | number | null = null;
+
+      if (isDateField) {
+        if (tempValue) {
+          const d = new Date(tempValue);
+          if (!isNaN(d.getTime())) {
+            newValue = d.toISOString();
+          }
+        }
+      } else {
+        // Numeric field
+        newValue = tempValue === "" ? 0 : parseFloat(tempValue);
+        if (isNaN(newValue)) newValue = 0;
+      }
+
+      // Construct the update payload
+      const updatedOrder: any = {
+        id: order.id,
+        customer_id: order.customer_id,
+        order_from: order.order_from,
+        items: items.map((item) => ({
+          product_url: item.product_url,
+          product_qty: item.product_qty,
+          price: item.price,
+          product_weight: item.product_weight,
+        })),
+        exchange_rate: order.exchange_rate,
+        shipping_fee: order.shipping_fee,
+        delivery_fee: order.delivery_fee,
+        cargo_fee: order.cargo_fee,
+        order_date: order.order_date,
+        arrived_date: order.arrived_date,
+        shipment_date: order.shipment_date,
+        user_withdraw_date: order.user_withdraw_date,
+        service_fee: order.service_fee,
+        service_fee_type: order.service_fee_type,
+      };
+
+      // Update the specific field
+      updatedOrder[editingField] = newValue;
+
+      await updateOrder(updatedOrder);
+
+      // Reload data to reflect changes
+      await loadData(order.id);
+
+      setEditingField(null);
+      playSound("success");
+    } catch (err) {
+      console.error("Failed to update:", err);
+      // alert(t("common.error"));
+      playSound("error");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditingField(null);
+    setTempValue("");
+  };
+
   const handleBack = () => {
     playSound("click");
     navigate("/orders");
@@ -162,14 +268,14 @@ export default function OrderDetail() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="w-8 h-8 border-4 border-[var(--color-accent-blue)] border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-accent-blue border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (error || !orderDetail) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-secondary)]">
+      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
         <p className="mb-4">{error || t("orders.detail.not_found")}</p>
         <button onClick={handleBack} className="btn-liquid btn-liquid-primary">
           {t("orders.detail.back_to_list")}
@@ -179,7 +285,8 @@ export default function OrderDetail() {
   }
 
   const { order, items } = orderDetail;
-  const customerName = customerDetail?.name || order.customer_name || "N/A";
+  const customerName =
+    customerDetail?.name || order.customer_name || t("common.na", "N/A");
   const customerCode =
     customerDetail?.customer_id || order.customer_id?.toString() || "-";
   const customerPhone = customerDetail?.phone || "-";
@@ -200,6 +307,183 @@ export default function OrderDetail() {
   const exchangeRate = order.exchange_rate || 1;
   const totalWithExchange = orderTotal * exchangeRate;
 
+  const renderEditableDate = (
+    label: string,
+    field: string,
+    value: string | undefined | null,
+  ) => {
+    const isEditing = editingField === field;
+
+    return (
+      <div>
+        <label className="block text-sm text-text-secondary mb-1">
+          {label}
+        </label>
+        {isEditing ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={tempValue}
+              onChange={(e) => setTempValue(e.target.value)}
+              className="bg-glass-white border border-glass-border rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+              autoFocus
+            />
+            <button
+              onClick={handleSave}
+              disabled={isUpdating}
+              className="p-1 text-success hover:bg-success/10 rounded"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
+            <button
+              onClick={handleCancel}
+              disabled={isUpdating}
+              className="p-1 text-text-secondary hover:bg-text-secondary/10 rounded"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2 cursor-pointer group w-fit"
+            onClick={() => handleEditClick(field, value, "date")}
+            title="Click to edit"
+          >
+            <p className="text-text-primary hover:text-accent-blue hover:underline decoration-dashed underline-offset-4 transition-colors">
+              {formatDate(value) || "-"}
+            </p>
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderEditableFee = (
+    label: string,
+    field: string,
+    value: number | undefined | null,
+    suffix?: string,
+  ) => {
+    const isEditing = editingField === field;
+
+    return (
+      <div className="flex justify-between items-center py-2 border-b border-glass-border">
+        <span className="text-text-secondary">{label}</span>
+        {isEditing ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={tempValue}
+              onChange={(e) => setTempValue(e.target.value)}
+              className="w-24 bg-glass-white border border-glass-border rounded px-2 py-1 text-sm text-text-primary text-right focus:outline-none focus:border-accent-blue"
+              autoFocus
+            />
+            <button
+              onClick={handleSave}
+              disabled={isUpdating}
+              className="p-1 text-success hover:bg-success/10 rounded"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
+            <button
+              onClick={handleCancel}
+              disabled={isUpdating}
+              className="p-1 text-text-secondary hover:bg-text-secondary/10 rounded"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2 cursor-pointer group"
+            onClick={() => handleEditClick(field, value, "number")}
+            title="Click to edit"
+          >
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </span>
+            <span className="text-text-primary hover:text-accent-blue hover:underline decoration-dashed underline-offset-4 transition-colors">
+              {(value || 0).toLocaleString()} {suffix && suffix}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <motion.div
@@ -216,7 +500,7 @@ export default function OrderDetail() {
           <div className="flex items-center gap-4">
             <button
               onClick={handleBack}
-              className="p-2 rounded-xl hover:bg-[var(--color-bg-secondary)] transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              className="p-2 rounded-xl hover:bg-glass-white-hover transition-colors text-text-secondary hover:text-text-primary"
             >
               <svg
                 width="24"
@@ -233,10 +517,10 @@ export default function OrderDetail() {
               </svg>
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+              <h1 className="text-2xl font-bold text-text-primary">
                 {t("orders.detail.title")} #{order.order_id || order.id}
               </h1>
-              <p className="text-[var(--color-text-secondary)]">
+              <p className="text-text-secondary">
                 {t("orders.detail.created_at", {
                   date: formatDate(order.created_at),
                 })}
@@ -829,10 +1113,10 @@ export default function OrderDetail() {
           >
             {/* Customer Info Card */}
             <div className="glass-panel p-6">
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+              <h2 className="text-lg font-semibold text-text-primary mb-4">
                 {t("orders.detail.customer_info")}
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-[1.45fr_1fr] gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div
                   className="rounded-2xl p-5 border"
                   style={{
@@ -864,38 +1148,8 @@ export default function OrderDetail() {
                     <span className="text-[#c9b07a]">
                       {t("customers.form.address")}
                     </span>
-                    <span className="text-slate-50 font-medium break-words">
+                    <span className="text-slate-50 font-medium wrap-break-word">
                       {customerAddress}
-                    </span>
-                  </div>
-                </div>
-                <div
-                  className="rounded-2xl p-5 border"
-                  style={{
-                    borderColor: "#e7dcc2",
-                    background:
-                      "linear-gradient(165deg, #fffdf7 0%, #fff8e8 100%)",
-                  }}
-                >
-                  <p className="mt-0 mb-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#7c5a1f]">
-                    {t("orders.invoice.title")}
-                  </p>
-                  <div className="grid grid-cols-[90px_1fr] gap-y-2 gap-x-2 text-sm">
-                    <span className="text-[#9a7a3f]">
-                      {t("orders.form.order_from")}
-                    </span>
-                    <span className="font-bold text-slate-900">
-                      {customerPlatform}
-                    </span>
-                    <span className="text-[#9a7a3f]">Order</span>
-                    <span className="font-bold text-slate-900">
-                      #{order.order_id || order.id}
-                    </span>
-                    <span className="text-[#9a7a3f]">
-                      {t("orders.form.order_date")}
-                    </span>
-                    <span className="font-bold text-slate-900">
-                      {formatDate(order.order_date)}
                     </span>
                   </div>
                 </div>
@@ -904,33 +1158,33 @@ export default function OrderDetail() {
 
             {/* Product Details Card */}
             <div className="glass-panel p-6">
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+              <h2 className="text-lg font-semibold text-text-primary mb-4">
                 {t("orders.detail.product_details")}
               </h2>
               <div className="space-y-4">
                 {items.map((item, index) => (
                   <div
                     key={index}
-                    className="border border-[var(--color-glass-border)] rounded-xl p-4 bg-[var(--color-bg-primary)] hover:border-[var(--color-accent-blue)]/30 transition-colors"
+                    className="border border-glass-border rounded-xl p-4 bg-liquid-bg hover:border-accent-blue/30 transition-colors"
                   >
                     {/* Header with item badge */}
                     <div className="flex items-center justify-between mb-3">
-                      <span className="px-2.5 py-1 rounded-lg bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] text-xs font-semibold">
+                      <span className="px-2.5 py-1 rounded-lg bg-accent-blue/10 text-accent-blue text-xs font-semibold">
                         {t("orders.detail.item_index", { index: index + 1 })}
                       </span>
                     </div>
 
                     {/* Product URL if exists */}
                     {item.product_url && (
-                      <div className="mb-3 pb-3 border-b border-[var(--color-glass-border)]">
-                        <label className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)] mb-1.5 block font-semibold">
+                      <div className="mb-3 pb-3 border-b border-glass-border">
+                        <label className="text-xs uppercase tracking-wide text-text-secondary mb-1.5 block font-semibold">
                           {t("orders.product_link")}
                         </label>
                         <a
                           href={item.product_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[var(--color-accent-blue)] hover:underline break-all text-sm"
+                          className="text-accent-blue hover:underline break-all text-sm"
                         >
                           {item.product_url}
                         </a>
@@ -939,27 +1193,27 @@ export default function OrderDetail() {
 
                     {/* Info Grid */}
                     <div className="grid grid-cols-3 gap-3 mb-3">
-                      <div className="text-center p-2.5 rounded-lg bg-[var(--color-glass-white)]/5 border border-[var(--color-glass-border)]">
-                        <label className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)] block mb-1.5 font-semibold">
+                      <div className="text-center p-2.5 rounded-lg bg-glass-white/5 border border-glass-border">
+                        <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
                           {t("orders.qty")}
                         </label>
-                        <p className="text-xl font-bold text-[var(--color-text-primary)]">
+                        <p className="text-xl font-bold text-text-primary">
                           {item.product_qty || 0}
                         </p>
                       </div>
-                      <div className="text-center p-2.5 rounded-lg bg-[var(--color-glass-white)]/5 border border-[var(--color-glass-border)]">
-                        <label className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)] block mb-1.5 font-semibold">
+                      <div className="text-center p-2.5 rounded-lg bg-glass-white/5 border border-glass-border">
+                        <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
                           {t("orders.price")}
                         </label>
-                        <p className="text-xl font-bold text-[var(--color-text-primary)]">
+                        <p className="text-xl font-bold text-text-primary">
                           {item.price?.toLocaleString()}
                         </p>
                       </div>
-                      <div className="text-center p-2.5 rounded-lg bg-[var(--color-glass-white)]/5 border border-[var(--color-glass-border)]">
-                        <label className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)] block mb-1.5 font-semibold">
+                      <div className="text-center p-2.5 rounded-lg bg-glass-white/5 border border-glass-border">
+                        <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
                           {t("orders.form.weight")}
                         </label>
-                        <p className="text-xl font-bold text-[var(--color-text-primary)]">
+                        <p className="text-xl font-bold text-text-primary">
                           {item.product_weight || 0}{" "}
                           <span className="text-sm">kg</span>
                         </p>
@@ -967,12 +1221,12 @@ export default function OrderDetail() {
                     </div>
 
                     {/* Total Section */}
-                    <div className="pt-3 border-t border-[var(--color-glass-border)]">
+                    <div className="pt-3 border-t border-glass-border">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                        <span className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
                           {t("orders.total")}
                         </span>
-                        <span className="text-xl font-bold text-[var(--color-accent-blue)]">
+                        <span className="text-xl font-bold text-accent-blue">
                           {(
                             (item.price || 0) * (item.product_qty || 0)
                           ).toLocaleString()}
@@ -982,36 +1236,36 @@ export default function OrderDetail() {
                   </div>
                 ))}
 
-                <div className="pt-4 border-t border-[var(--color-glass-border)] grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="pt-4 border-t border-glass-border grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-sm font-bold text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-bold text-text-secondary mb-1">
                       {t("orders.total_qty")}
                     </label>
-                    <p className="text-[var(--color-text-primary)] font-bold">
+                    <p className="text-text-primary font-bold">
                       {order.total_qty}
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-bold text-text-secondary mb-1">
                       {t("orders.total_price")}
                     </label>
-                    <p className="text-[var(--color-text-primary)] font-bold">
+                    <p className="text-text-primary font-bold">
                       {order.total_price?.toLocaleString()}
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-bold text-text-secondary mb-1">
                       {t("orders.total_weight")}
                     </label>
-                    <p className="text-[var(--color-text-primary)] font-bold">
+                    <p className="text-text-primary font-bold">
                       {order.total_weight}
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-bold text-text-secondary mb-1">
                       {t("orders.form.exchange_rate")}
                     </label>
-                    <p className="text-[var(--color-text-primary)] font-bold">
+                    <p className="text-text-primary font-bold">
                       {order.exchange_rate?.toLocaleString()}
                     </p>
                   </div>
@@ -1021,42 +1275,30 @@ export default function OrderDetail() {
 
             {/* Timeline/Dates Card */}
             <div className="glass-panel p-6">
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+              <h2 className="text-lg font-semibold text-text-primary mb-4">
                 {t("orders.detail.timeline")}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                    {t("orders.form.order_date")}
-                  </label>
-                  <p className="text-[var(--color-text-primary)]">
-                    {formatDate(order.order_date)}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                    {t("orders.form.arrived_date")}
-                  </label>
-                  <p className="text-[var(--color-text-primary)]">
-                    {formatDate(order.arrived_date)}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                    {t("orders.form.shipment_date")}
-                  </label>
-                  <p className="text-[var(--color-text-primary)]">
-                    {formatDate(order.shipment_date)}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                    {t("orders.form.user_withdraw_date")}
-                  </label>
-                  <p className="text-[var(--color-text-primary)]">
-                    {formatDate(order.user_withdraw_date)}
-                  </p>
-                </div>
+                {renderEditableDate(
+                  t("orders.form.order_date"),
+                  "order_date",
+                  order.order_date,
+                )}
+                {renderEditableDate(
+                  t("orders.form.arrived_date"),
+                  "arrived_date",
+                  order.arrived_date,
+                )}
+                {renderEditableDate(
+                  t("orders.form.shipment_date"),
+                  "shipment_date",
+                  order.shipment_date,
+                )}
+                {renderEditableDate(
+                  t("orders.form.user_withdraw_date"),
+                  "user_withdraw_date",
+                  order.user_withdraw_date,
+                )}
               </div>
             </div>
           </motion.div>
@@ -1064,57 +1306,52 @@ export default function OrderDetail() {
           {/* Sidebar - Financials */}
           <motion.div variants={itemVariants} className="space-y-6">
             <div className="glass-panel p-6">
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+              <h2 className="text-lg font-semibold text-text-primary mb-4">
                 {t("orders.detail.financial_summary")}
               </h2>
               <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]">
-                  <span className="text-[var(--color-text-secondary)]">
-                    {t("orders.form.service_fee")}
-                    {order.service_fee_type === "percent" &&
-                      ` (${order.service_fee}%)`}
+                <div className="flex justify-between items-center py-2 border-b border-glass-border">
+                  <span className="text-text-secondary">
+                    {t("orders.total_price")}
                   </span>
-                  <span className="text-[var(--color-text-primary)]">
-                    {serviceFeeAmount.toLocaleString()}
+                  <span className="text-text-primary">
+                    {order.total_price?.toLocaleString()}
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]">
-                  <span className="text-[var(--color-text-secondary)]">
-                    {t("orders.form.shipping_fee")}
-                  </span>
-                  <span className="text-[var(--color-text-primary)]">
-                    {order.shipping_fee?.toLocaleString() || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]">
-                  <span className="text-[var(--color-text-secondary)]">
-                    {t("orders.form.delivery_fee")}
-                  </span>
-                  <span className="text-[var(--color-text-primary)]">
-                    {order.delivery_fee?.toLocaleString() || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]">
-                  <span className="text-[var(--color-text-secondary)]">
-                    {t("orders.form.cargo_fee")}
-                  </span>
-                  <span className="text-[var(--color-text-primary)]">
-                    {order.cargo_fee?.toLocaleString() || 0}
-                  </span>
-                </div>
+                {renderEditableFee(
+                  t("orders.form.service_fee"),
+                  "service_fee",
+                  order.service_fee,
+                  order.service_fee_type === "percent" ? "%" : undefined,
+                )}
+                {renderEditableFee(
+                  t("orders.form.shipping_fee"),
+                  "shipping_fee",
+                  order.shipping_fee,
+                )}
+                {renderEditableFee(
+                  t("orders.form.delivery_fee"),
+                  "delivery_fee",
+                  order.delivery_fee,
+                )}
+                {renderEditableFee(
+                  t("orders.form.cargo_fee"),
+                  "cargo_fee",
+                  order.cargo_fee,
+                )}
                 <div className="mt-4 pt-4 flex justify-between items-center">
-                  <span className="font-semibold text-[var(--color-text-primary)]">
+                  <span className="font-semibold text-text-primary">
                     {t("orders.total")}
                   </span>
-                  <span className="font-bold text-xl text-[var(--color-accent-green)]">
+                  <span className="font-bold text-xl text-success">
                     {orderTotal.toLocaleString()}
                   </span>
                 </div>
-                <div className="pt-3 mt-2 border-t border-[var(--color-border)] flex justify-between items-center">
-                  <span className="font-semibold text-[var(--color-text-primary)]">
+                <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-center">
+                  <span className="font-semibold text-text-primary">
                     {t("orders.invoice.total_with_exchange")}
                   </span>
-                  <span className="font-bold text-xl text-[var(--color-accent-blue)]">
+                  <span className="font-bold text-xl text-accent-blue">
                     {totalWithExchange.toLocaleString()}
                   </span>
                 </div>

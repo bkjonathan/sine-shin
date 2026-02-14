@@ -15,6 +15,9 @@ import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
 import { Select } from "./ui/Select";
+import { parseCSV } from "../utils/csvUtils";
+import { processOrderCSV } from "../utils/orderImportUtils";
+import { useRef } from "react";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -48,6 +51,10 @@ export default function Orders() {
     null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Import State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Form State
   // Form State
@@ -250,6 +257,134 @@ export default function Orders() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input
+    e.target.value = "";
+
+    try {
+      setIsImporting(true);
+      const text = await file.text();
+      const records = parseCSV(text);
+
+      if (records.length === 0) {
+        playSound("error");
+        alert(t("orders.import.no_records_found"));
+        return;
+      }
+
+      const { validOrders, errors } = processOrderCSV(records, customers);
+
+      if (errors.length > 0) {
+        console.warn("CSV Import Errors:", errors);
+        const continueImport = window.confirm(
+          t("orders.import.confirm_errors_message", {
+            count: errors.length,
+            errors:
+              errors.slice(0, 5).join("\n") +
+              (errors.length > 5 ? `\n...and ${errors.length - 5} more.` : ""),
+          }),
+        );
+        if (!continueImport) return;
+      }
+
+      if (validOrders.length === 0) {
+        playSound("error");
+        alert(t("orders.import.no_valid_orders"));
+        return;
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const order of validOrders) {
+        try {
+          await createOrder(order);
+          successCount++;
+        } catch (err) {
+          console.error("Failed to import order:", order, err);
+          failCount++;
+        }
+      }
+
+      playSound(successCount > 0 ? "success" : "error");
+      await fetchOrders();
+
+      alert(
+        t("orders.import.complete", {
+          success: successCount,
+          failed: failCount,
+        }) +
+          (errors.length > 0
+            ? t("orders.import.skipped_count", { skipped: errors.length })
+            : ""),
+      );
+    } catch (error) {
+      console.error("Failed to parse CSV:", error);
+      playSound("error");
+      alert(t("orders.import.parse_error"));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleExport = () => {
+    try {
+      if (filteredOrders.length === 0) return;
+
+      const headers = [
+        "Order ID",
+        "Customer Name",
+        "Order From",
+        "Order Date",
+        "Total Qty",
+        "Total Price",
+        "Total Weight",
+        "Status",
+        "Product URL (First Item)",
+      ];
+
+      const csvRows = filteredOrders.map((o) => {
+        const status = o.arrived_date
+          ? "Arrived"
+          : o.shipment_date
+            ? "Shipped"
+            : "Pending";
+
+        return [
+          o.order_id || "-",
+          `"${(o.customer_name || "").replace(/"/g, '""')}"`,
+          o.order_from || "-",
+          o.order_date || "-",
+          o.total_qty || 0,
+          o.total_price || 0,
+          o.total_weight || 0,
+          status,
+          o.first_product_url ? `"${o.first_product_url}"` : "-",
+        ].join(",");
+      });
+
+      const csvContent = [headers.join(","), ...csvRows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+
+      const date = new Date().toISOString().split("T")[0];
+      link.setAttribute("download", `orders_export_${date}.csv`);
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      playSound("success");
+    } catch (error) {
+      console.error("Failed to export orders:", error);
+      playSound("error");
+    }
+  };
+
   return (
     <motion.div
       initial="hidden"
@@ -269,31 +404,85 @@ export default function Orders() {
         className="flex items-center justify-between mb-6"
       >
         <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
+          <h1 className="text-2xl font-bold text-text-primary tracking-tight">
             {t("orders.title")}
           </h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
+          <p className="text-sm text-text-muted mt-1">
             {t("orders.manage_orders")}
           </p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="btn-liquid btn-liquid-primary px-4 py-2 text-sm flex items-center gap-2"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <div className="flex gap-2">
+          <input
+            type="file"
+            accept=".csv"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
           >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          {t("orders.add_order")}
-        </button>
+            {isImporting ? (
+              <div className="w-4 h-4 border-2 border-text-secondary border-t-text-primary rounded-full animate-spin" />
+            ) : (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            )}
+            {t("orders.import_csv")}
+          </button>
+          <button
+            onClick={handleExport}
+            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {t("orders.export_csv")}
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="btn-liquid btn-liquid-primary px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            {t("orders.add_order")}
+          </button>
+        </div>
       </motion.div>
 
       {/* ── Search Bar ── */}
@@ -301,7 +490,7 @@ export default function Orders() {
         <div className="relative max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <svg
-              className="h-4 w-4 text-[var(--color-text-muted)]"
+              className="h-4 w-4 text-text-muted"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -328,11 +517,11 @@ export default function Orders() {
       <motion.div variants={fadeVariants} className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex justify-center items-center py-20">
-            <div className="w-8 h-8 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
           </div>
         ) : filteredOrders.length === 0 ? (
-          <div className="text-center py-20 bg-[var(--color-glass-white)] rounded-xl border border-[var(--color-glass-border)]">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-glass-white-hover)] flex items-center justify-center text-[var(--color-text-muted)]">
+          <div className="text-center py-20 bg-glass-white rounded-xl border border-glass-border">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-glass-white-hover flex items-center justify-center text-text-muted">
               <svg
                 width="32"
                 height="32"
@@ -348,10 +537,10 @@ export default function Orders() {
                 <path d="M16 10a4 4 0 0 1-8 0"></path>
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-[var(--color-text-primary)]">
+            <h3 className="text-lg font-medium text-text-primary">
               {t("orders.no_orders")}
             </h3>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1">
+            <p className="text-sm text-text-muted mt-1">
               {searchTerm
                 ? t("orders.no_orders_search")
                 : t("orders.no_orders_create")}
@@ -367,12 +556,12 @@ export default function Orders() {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="glass-panel p-5 group hover:border-[var(--color-accent-blue)]/30 transition-all duration-300 hover:shadow-lg hover:shadow-[var(--color-accent-blue)]/5 relative overflow-hidden cursor-pointer"
+                  className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
                   onClick={() => navigate(`/orders/${order.id}`)}
                 >
                   <div className="relative z-10">
                     <div className="flex justify-between items-start mb-3">
-                      <div className="bg-[var(--color-glass-white)] px-2 py-1 rounded text-xs font-mono text-[var(--color-text-secondary)] border border-[var(--color-glass-border)]">
+                      <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
                         {order.order_id || t("orders.id_pending")}
                       </div>
 
@@ -382,7 +571,7 @@ export default function Orders() {
                             e.stopPropagation();
                             handleOpenModal(order);
                           }}
-                          className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-accent-blue)] hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors"
+                          className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
                         >
                           <svg
                             width="16"
@@ -404,7 +593,7 @@ export default function Orders() {
                             setOrderToDelete(order);
                             setIsDeleteModalOpen(true);
                           }}
-                          className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-red-500/10 rounded-lg transition-colors"
+                          className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
                         >
                           <svg
                             width="16"
@@ -423,12 +612,12 @@ export default function Orders() {
                       </div>
                     </div>
 
-                    <h3 className="font-semibold text-[var(--color-text-primary)] text-lg mb-1 truncate">
+                    <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
                       {order.customer_name}
                     </h3>
-                    <p className="text-sm text-[var(--color-text-muted)] mb-4">
+                    <p className="text-sm text-text-muted mb-4">
                       {t("orders.from")}{" "}
-                      <span className="text-[var(--color-text-secondary)]">
+                      <span className="text-text-secondary">
                         {order.order_from || "-"}
                       </span>
                     </p>
@@ -437,34 +626,34 @@ export default function Orders() {
                         href={order.first_product_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-[var(--color-accent-blue)] hover:underline mb-2 block truncate"
+                        className="text-xs text-accent-blue hover:underline mb-2 block truncate"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {t("orders.product_link")}
                       </a>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2 text-sm text-[var(--color-text-secondary)] mb-4 bg-[var(--color-glass-white)]/50 p-2 rounded-lg border border-[var(--color-glass-border)]/50">
+                    <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
                       <div>
-                        <span className="text-[var(--color-text-muted)] text-xs block">
+                        <span className="text-text-muted text-xs block">
                           {t("orders.date")}
                         </span>
                         {formatDate(order.order_date)}
                       </div>
                       <div>
-                        <span className="text-[var(--color-text-muted)] text-xs block">
+                        <span className="text-text-muted text-xs block">
                           {t("orders.qty")}
                         </span>
                         {order.total_qty || 0}
                       </div>
                       <div>
-                        <span className="text-[var(--color-text-muted)] text-xs block">
+                        <span className="text-text-muted text-xs block">
                           {t("orders.total")}
                         </span>
                         {(order.total_price || 0).toLocaleString()}
                       </div>
                       <div>
-                        <span className="text-[var(--color-text-muted)] text-xs block">
+                        <span className="text-text-muted text-xs block">
                           {t("orders.weight")}
                         </span>
                         {order.total_weight || 0} kg
@@ -513,7 +702,7 @@ export default function Orders() {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="relative w-full max-w-4xl glass-panel p-6 shadow-2xl border border-[var(--color-glass-border)] max-h-[90vh] overflow-y-auto"
+              className="relative w-full max-w-4xl glass-panel p-6 shadow-2xl border border-glass-border max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
@@ -523,7 +712,7 @@ export default function Orders() {
                 </h2>
                 <button
                   onClick={handleCloseModal}
-                  className="p-2 hover:bg-[var(--color-glass-white-hover)] rounded-full transition-colors"
+                  className="p-2 hover:bg-glass-white-hover rounded-full transition-colors"
                 >
                   <svg
                     width="20"
@@ -548,7 +737,7 @@ export default function Orders() {
               >
                 {/* Section: Basic Info */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
+                  <h3 className="text-sm font-semibold text-text-primary border-b border-glass-border pb-1">
                     {t("orders.modal.basic_info")}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -590,7 +779,7 @@ export default function Orders() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                      <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.exchange_rate")}
                       </label>
                       <input
@@ -608,7 +797,7 @@ export default function Orders() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                      <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.order_date")}
                       </label>
                       <input
@@ -634,8 +823,8 @@ export default function Orders() {
 
                 {/* Section: Items */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-[var(--color-glass-border)] pb-1">
-                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  <div className="flex items-center justify-between border-b border-glass-border pb-1">
+                    <h3 className="text-sm font-semibold text-text-primary">
                       {t("orders.modal.product_details")}
                     </h3>
                     <button
@@ -654,7 +843,7 @@ export default function Orders() {
                           ],
                         })
                       }
-                      className="text-xs flex items-center gap-1 text-[var(--color-accent-blue)] hover:text-[var(--color-accent-blue-hover)] transition-colors"
+                      className="text-xs flex items-center gap-1 text-accent-blue hover:text-accent-blue-hover transition-colors"
                     >
                       <svg
                         width="14"
@@ -677,7 +866,7 @@ export default function Orders() {
                     {formData.items.map((item, index) => (
                       <div
                         key={index}
-                        className="p-4 bg-[var(--color-glass-white)]/30 rounded-lg border border-[var(--color-glass-border)] relative group"
+                        className="p-4 bg-glass-white/30 rounded-lg border border-glass-border relative group"
                       >
                         {formData.items.length > 1 && (
                           <button
@@ -690,7 +879,7 @@ export default function Orders() {
                                 ),
                               })
                             }
-                            className="absolute top-2 right-2 text-[var(--color-text-muted)] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
+                            className="absolute top-2 right-2 text-text-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
                             title={t("common.delete")}
                           >
                             <svg
@@ -711,7 +900,7 @@ export default function Orders() {
 
                         <div className="space-y-3">
                           <div>
-                            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                            <label className="block text-xs font-medium text-text-secondary mb-1">
                               {t("orders.form.product_url")}
                             </label>
                             <input
@@ -729,7 +918,7 @@ export default function Orders() {
 
                           <div className="grid grid-cols-3 gap-3">
                             <div>
-                              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                              <label className="block text-xs font-medium text-text-secondary mb-1">
                                 {t("orders.qty")}
                               </label>
                               <input
@@ -746,7 +935,7 @@ export default function Orders() {
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                              <label className="block text-xs font-medium text-text-secondary mb-1">
                                 {t("orders.price")}
                               </label>
                               <input
@@ -764,7 +953,7 @@ export default function Orders() {
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                              <label className="block text-xs font-medium text-text-secondary mb-1">
                                 {t("orders.form.weight")}
                               </label>
                               <input
@@ -790,12 +979,12 @@ export default function Orders() {
 
                 {/* Section: Fees */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
+                  <h3 className="text-sm font-semibold text-text-primary border-b border-glass-border pb-1">
                     {t("orders.modal.fees")}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                      <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.service_fee_label")}
                       </label>
                       <div className="flex gap-2">
@@ -832,7 +1021,7 @@ export default function Orders() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                      <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.shipping_fee")}
                       </label>
                       <input
@@ -850,7 +1039,7 @@ export default function Orders() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                      <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.delivery_fee")}
                       </label>
                       <input
@@ -868,7 +1057,7 @@ export default function Orders() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                      <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.cargo_fee")}
                       </label>
                       <input
@@ -891,12 +1080,12 @@ export default function Orders() {
                 {/* Section: Status Dates */}
                 {editingOrder && (
                   <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)] border-b border-[var(--color-glass-border)] pb-1">
+                    <h3 className="text-sm font-semibold text-text-primary border-b border-glass-border pb-1">
                       {t("orders.modal.status_dates")}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                        <label className="block text-sm font-medium text-text-secondary mb-1">
                           {t("orders.form.arrived_date")}
                         </label>
                         <input
@@ -918,7 +1107,7 @@ export default function Orders() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                        <label className="block text-sm font-medium text-text-secondary mb-1">
                           {t("orders.form.shipment_date")}
                         </label>
                         <input
@@ -940,7 +1129,7 @@ export default function Orders() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                        <label className="block text-sm font-medium text-text-secondary mb-1">
                           {t("orders.form.user_withdraw_date")}
                         </label>
                         <input
@@ -965,7 +1154,7 @@ export default function Orders() {
                   </div>
                 )}
 
-                <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-[var(--color-glass-border)]">
+                <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-glass-border">
                   <button
                     type="button"
                     onClick={handleCloseModal}

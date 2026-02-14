@@ -80,13 +80,13 @@ function AppRoutes() {
 
   if (isAppLoading || authLoading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center bg-[var(--color-liquid-bg)]">
+      <div className="w-full min-h-screen flex items-center justify-center bg-liquid-bg">
         <div className="liquid-gradient">
           <div className="liquid-blob-3" />
         </div>
         <div className="relative z-10 flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
-          <p className="text-[var(--color-text-muted)] text-sm">Loading...</p>
+          <div className="w-10 h-10 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
+          <p className="text-text-muted text-sm">Loading...</p>
         </div>
       </div>
     );

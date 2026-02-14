@@ -163,6 +163,15 @@
       "item_index": "Item {{index}}",
       "error_loading": "Failed to load details"
     },
+    "import": {
+      "no_records_found": "No valid records found in CSV",
+      "no_valid_orders": "No valid orders to import.",
+      "complete": "Import Complete.\nSuccess: {{success}}\nFailed: {{failed}}",
+      "skipped_count": "\nSkipped (Validation Errors): {{skipped}}",
+      "parse_error": "Failed to parse CSV file",
+      "confirm_errors_title": "Import Issues Found",
+      "confirm_errors_message": "Found {{count}} issues:\n{{errors}}\n\nDo you want to continue importing the valid orders?"
+    },
     "invoice": {
       "download": "Download Invoice",
       "generating": "Generating...",
@@ -344,6 +353,7 @@
     "others": "Others",
     "image": "Image",
     "tel": "Tel",
-    "no": "No"
+    "no": "No",
+    "na": "N/A"
   }
 }

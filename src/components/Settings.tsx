@@ -25,14 +25,10 @@ function ToggleSetting({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between py-4 border-b border-[var(--color-glass-border)] last:border-b-0">
+    <div className="flex items-center justify-between py-4 border-b border-glass-border last:border-b-0">
       <div className="flex-1 mr-4">
-        <p className="text-sm font-medium text-[var(--color-text-primary)]">
-          {label}
-        </p>
-        <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-          {description}
-        </p>
+        <p className="text-sm font-medium text-text-primary">{label}</p>
+        <p className="text-xs text-text-muted mt-0.5">{description}</p>
       </div>
       <input
         type="checkbox"
@@ -206,7 +202,7 @@ function AccountSettings() {
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
-        <div className="w-6 h-6 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
       </div>
     );
   }
@@ -219,7 +215,7 @@ function AccountSettings() {
       transition={{ duration: 0.2 }}
     >
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+        <h2 className="text-lg font-semibold text-text-primary">
           {t("settings.account.title")}
         </h2>
         {message && (
@@ -236,24 +232,24 @@ function AccountSettings() {
           </motion.span>
         )}
       </div>
-      <p className="text-xs text-[var(--color-text-muted)] mb-5">
+      <p className="text-xs text-text-muted mb-5">
         {t("settings.account.subtitle")}
       </p>
 
       <div className="space-y-5">
         {/* Logo Section */}
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-[var(--color-text-secondary)]">
+          <label className="text-sm font-medium text-text-secondary">
             {t("settings.account.shop_logo")}
           </label>
           {/* Debug Info */}
-          <div className="text-[10px] p-2 bg-black/20 rounded font-mono text-[var(--color-text-muted)] break-all hidden">
+          <div className="text-[10px] p-2 bg-black/20 rounded font-mono text-text-muted break-all hidden">
             Raw: {newLogoPath || "none"} <br />
             Preview: {previewSrc || "none"}
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="relative group w-20 h-20 rounded-full bg-[var(--color-glass-white)] border border-[var(--color-glass-border)] overflow-hidden flex items-center justify-center shrink-0">
+            <div className="relative group w-20 h-20 rounded-full bg-glass-white border border-glass-border overflow-hidden flex items-center justify-center shrink-0">
               {previewSrc ? (
                 <img
                   src={previewSrc}
@@ -270,7 +266,7 @@ function AccountSettings() {
                   strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="text-[var(--color-text-muted)]"
+                  className="text-text-muted"
                 >
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                   <circle cx="8.5" cy="8.5" r="1.5" />
@@ -288,7 +284,7 @@ function AccountSettings() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             {t("settings.account.shop_name")}
           </label>
           <input
@@ -300,7 +296,7 @@ function AccountSettings() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             {t("settings.account.phone_number")}
           </label>
           <input
@@ -312,7 +308,7 @@ function AccountSettings() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             {t("settings.account.address")}
           </label>
           <textarea
@@ -323,7 +319,7 @@ function AccountSettings() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             {t("settings.account.customer_id_prefix")}
           </label>
           <input
@@ -333,7 +329,7 @@ function AccountSettings() {
             value={customerIdPrefix}
             onChange={(e) => setCustomerIdPrefix(e.target.value.toUpperCase())}
           />
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          <p className="text-xs text-text-muted mt-1">
             {t("settings.account.customer_id_desc")}
           </p>
         </div>
@@ -396,13 +392,13 @@ function DbStatus() {
   if (loading) return null;
 
   return (
-    <div className="mb-6 p-4 rounded-xl border border-[var(--color-glass-border)] bg-[var(--color-glass-white)]">
+    <div className="mb-6 p-4 rounded-xl border border-glass-border bg-glass-white">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+          <h3 className="text-sm font-semibold text-text-primary">
             {t("settings.data_mgmt.db_status")}
           </h3>
-          <div className="flex gap-3 text-xs text-[var(--color-text-muted)] mt-1">
+          <div className="flex gap-3 text-xs text-text-muted mt-1">
             <span>
               {status?.total_tables || 0} {t("settings.data_mgmt.tables")}
             </span>
@@ -416,7 +412,7 @@ function DbStatus() {
         </div>
         <button
           onClick={fetchStatus}
-          className="p-1.5 hover:bg-[var(--color-glass-white-hover)] rounded-lg text-[var(--color-text-secondary)] transition-colors"
+          className="p-1.5 hover:bg-glass-white-hover rounded-lg text-text-secondary transition-colors"
           title={t("settings.data_mgmt.refresh_status")}
         >
           <svg
@@ -441,12 +437,10 @@ function DbStatus() {
         {status?.tables.map((table) => (
           <div
             key={table.name}
-            className="flex items-center justify-between text-xs py-2 border-b border-[var(--color-glass-border)] last:border-0 last:pb-0"
+            className="flex items-center justify-between text-xs py-2 border-b border-glass-border last:border-0 last:pb-0"
           >
-            <span className="font-mono text-[var(--color-text-secondary)]">
-              {table.name}
-            </span>
-            <span className="font-medium text-[var(--color-text-primary)] bg-[var(--color-glass-white-hover)] px-2 py-0.5 rounded-md">
+            <span className="font-mono text-text-secondary">{table.name}</span>
+            <span className="font-medium text-text-primary bg-glass-white-hover px-2 py-0.5 rounded-md">
               {table.row_count} {t("settings.data_mgmt.rows")}
             </span>
           </div>
@@ -528,10 +522,10 @@ function DataSettings() {
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2 }}
     >
-      <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
+      <h2 className="text-lg font-semibold text-text-primary mb-1">
         {t("settings.data_mgmt.title")}
       </h2>
-      <p className="text-xs text-[var(--color-text-muted)] mb-5">
+      <p className="text-xs text-text-muted mb-5">
         {t("settings.data_mgmt.subtitle")}
       </p>
 
@@ -539,7 +533,7 @@ function DataSettings() {
 
       <div className="space-y-6">
         {/* Backup Section */}
-        <div className="p-4 rounded-xl border border-[var(--color-glass-border)] bg-[var(--color-glass-white)]">
+        <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
           <div className="flex items-start gap-4">
             <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
               <svg
@@ -558,10 +552,10 @@ function DataSettings() {
               </svg>
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-1">
+              <h3 className="text-sm font-semibold text-text-primary mb-1">
                 {t("settings.data_mgmt.backup_title")}
               </h3>
-              <p className="text-xs text-[var(--color-text-muted)] mb-4">
+              <p className="text-xs text-text-muted mb-4">
                 {t("settings.data_mgmt.backup_desc")}
               </p>
 
@@ -613,7 +607,7 @@ function DataSettings() {
               <h3 className="text-sm font-semibold text-red-500 mb-1">
                 {t("settings.data_mgmt.danger_zone")}
               </h3>
-              <p className="text-xs text-[var(--color-text-muted)] mb-4">
+              <p className="text-xs text-text-muted mb-4">
                 {t("settings.data_mgmt.reset_warning")}
               </p>
               <button
@@ -645,7 +639,7 @@ function DataSettings() {
               initial={{ scale: 0.95, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-[var(--color-glass-border)]"
+              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-glass-border"
             >
               <div className="flex flex-col items-center text-center">
                 <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
@@ -664,12 +658,12 @@ function DataSettings() {
                   </svg>
                 </div>
 
-                <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
+                <h3 className="text-lg font-bold text-text-primary mb-2">
                   {t("settings.data_mgmt.modal_title")}
                 </h3>
-                <p className="text-sm text-[var(--color-text-muted)] mb-6">
+                <p className="text-sm text-text-muted mb-6">
                   {t("settings.data_mgmt.modal_message_part1")}
-                  <span className="font-mono font-bold text-[var(--color-text-primary)] mx-1">
+                  <span className="font-mono font-bold text-text-primary mx-1">
                     {RESET_APP_CODE}
                   </span>
                   {t("settings.data_mgmt.modal_message_part2")}
@@ -854,10 +848,10 @@ export default function Settings() {
       className="max-w-4xl mx-auto"
     >
       <motion.div variants={fadeVariants} className="mb-6">
-        <h1 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
+        <h1 className="text-2xl font-bold text-text-primary tracking-tight">
           {t("settings.title")}
         </h1>
-        <p className="text-sm text-[var(--color-text-muted)] mt-1">
+        <p className="text-sm text-text-muted mt-1">
           {t("settings.manage_preferences")}
         </p>
       </motion.div>
@@ -881,8 +875,8 @@ export default function Settings() {
                   transition-all duration-200 text-left
                   ${
                     activeCategory === cat.id
-                      ? "bg-[var(--color-glass-white-hover)] text-[var(--color-text-primary)] shadow-[0_0_12px_rgba(0,0,0,0.1)] border border-[var(--color-glass-border)]"
-                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-glass-white)] hover:text-[var(--color-text-primary)] border border-transparent"
+                      ? "bg-glass-white-hover text-text-primary shadow-[0_0_12px_rgba(0,0,0,0.1)] border border-glass-border"
+                      : "text-text-secondary hover:bg-glass-white hover:text-text-primary border border-transparent"
                   }
                 `}
               >
@@ -902,20 +896,20 @@ export default function Settings() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
+              <h2 className="text-lg font-semibold text-text-primary mb-1">
                 {t("settings.general")}
               </h2>
-              <p className="text-xs text-[var(--color-text-muted)] mb-5">
+              <p className="text-xs text-text-muted mb-5">
                 {t("settings.general_desc")}
               </p>
 
               {/* Language Switcher */}
-              <div className="flex items-center justify-between py-4 border-b border-[var(--color-glass-border)]">
+              <div className="flex items-center justify-between py-4 border-b border-glass-border">
                 <div className="flex-1 mr-4">
-                  <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                  <p className="text-sm font-medium text-text-primary">
                     {t("settings.language")}
                   </p>
-                  <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  <p className="text-xs text-text-muted mt-0.5">
                     {t("settings.language_label")}
                   </p>
                 </div>
@@ -972,10 +966,10 @@ export default function Settings() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
+              <h2 className="text-lg font-semibold text-text-primary mb-1">
                 {t("settings.appearance")}
               </h2>
-              <p className="text-xs text-[var(--color-text-muted)] mb-5">
+              <p className="text-xs text-text-muted mb-5">
                 {t("settings.appearance_desc")}
               </p>
 
@@ -1002,8 +996,8 @@ export default function Settings() {
               />
 
               {/* Theme preview */}
-              <div className="mt-6 pt-4 border-t border-[var(--color-glass-border)]">
-                <p className="text-sm font-medium text-[var(--color-text-primary)] mb-3">
+              <div className="mt-6 pt-4 border-t border-glass-border">
+                <p className="text-sm font-medium text-text-primary mb-3">
                   {t("settings.accent_color")}
                 </p>
                 <div className="flex items-center gap-3">
@@ -1024,7 +1018,7 @@ export default function Settings() {
                         w-8 h-8 rounded-full ${themeItem.color}
                         ring-2 ring-transparent
                         transition-all duration-200 hover:scale-110
-                        ${accentColor === themeItem.id ? "ring-[var(--color-text-primary)] scale-110" : ""}
+                        ${accentColor === themeItem.id ? "ring-text-primary scale-110" : ""}
                       `}
                       title={t(`settings.colors.${themeItem.id}`)}
                     />
