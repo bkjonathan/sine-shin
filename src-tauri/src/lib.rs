@@ -130,6 +130,14 @@ struct OrderDetail {
     items: Vec<OrderItem>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct DashboardStats {
+    total_revenue: f64,
+    total_orders: i64,
+    total_customers: i64,
+    recent_orders: Vec<OrderWithCustomer>,
+}
+
 #[tauri::command]
 async fn register_user(app: AppHandle, name: String, password: String) -> Result<(), String> {
     let db = app.state::<AppDb>();
@@ -862,6 +870,59 @@ async fn get_order(app: AppHandle, id: i64) -> Result<OrderDetail, String> {
     })
 }
 
+#[tauri::command]
+async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // 1. Total Revenue (sum of all order items)
+    let total_revenue: (f64,) = sqlx::query_as("SELECT COALESCE(SUM(price * product_qty), 0.0) FROM order_items")
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. Total Orders
+    let total_orders: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM orders")
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 3. Total Customers
+    let total_customers: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM customers")
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 4. Recent Orders (Top 5)
+    let recent_orders = sqlx::query_as::<_, OrderWithCustomer>(
+        r#"
+        SELECT 
+            o.*, 
+            c.name as customer_name,
+            COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
+            COALESCE(SUM(oi.product_qty), 0) as total_qty,
+            COALESCE(SUM(oi.product_weight), 0) as total_weight,
+            (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
+        FROM orders o 
+        LEFT JOIN customers c ON o.customer_id = c.id 
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+        LIMIT 5
+        "#
+    )
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(DashboardStats {
+        total_revenue: total_revenue.0,
+        total_orders: total_orders.0,
+        total_customers: total_customers.0,
+        recent_orders,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -932,8 +993,10 @@ pub fn run() {
             get_order, // Added
             get_customer_orders, // Added
             update_order,
-            delete_order
+            delete_order,
+            get_dashboard_stats
         ])
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

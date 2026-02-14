@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "react-i18next";
+import { formatCurrency } from "../utils/currency";
 
 interface ShopData {
   shop_name: string;
@@ -11,51 +15,23 @@ interface ShopData {
   customer_id_prefix: string | null;
 }
 
-// ── Mock data for the liquid dashboard ──
-const recentOrders = [
-  {
-    id: "ORD-001",
-    customer: "Sarah Chen",
-    amount: "$234.50",
-    status: "Completed",
-    time: "2 min ago",
-  },
-  {
-    id: "ORD-002",
-    customer: "Mike Johnson",
-    amount: "$89.00",
-    status: "Processing",
-    time: "15 min ago",
-  },
-  {
-    id: "ORD-003",
-    customer: "Emma Davis",
-    amount: "$156.75",
-    status: "Completed",
-    time: "1 hr ago",
-  },
-  {
-    id: "ORD-004",
-    customer: "Alex Kim",
-    amount: "$312.00",
-    status: "Pending",
-    time: "2 hr ago",
-  },
-  {
-    id: "ORD-005",
-    customer: "Lisa Wang",
-    amount: "$67.25",
-    status: "Completed",
-    time: "3 hr ago",
-  },
-];
+interface OrderWithCustomer {
+  id: number;
+  order_id: string | null;
+  customer_id: number | null;
+  customer_name: string | null;
+  total_price: number;
+  // ... other fields if needed for display
+  created_at: string | null;
+  first_product_url: string | null;
+}
 
-const statusColors: Record<string, string> = {
-  Completed: "text-[var(--color-success)] bg-[var(--color-success)]/10",
-  Processing:
-    "text-[var(--color-accent-blue)] bg-[var(--color-accent-blue)]/10",
-  Pending: "text-[var(--color-warning)] bg-[var(--color-warning)]/10",
-};
+interface DashboardStats {
+  total_revenue: number;
+  total_orders: number;
+  total_customers: number;
+  recent_orders: OrderWithCustomer[];
+}
 
 // ── Animation variants ──
 const containerVariants = {
@@ -75,32 +51,37 @@ const itemVariants = {
   },
 };
 
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { useTranslation } from "react-i18next";
-
-// ... existing imports
-
 export default function Dashboard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [shop, setShop] = useState<ShopData | null>(null);
   const [logoSrc, setLogoSrc] = useState("");
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadShopData();
+    loadData();
   }, []);
 
-  const loadShopData = async () => {
+  const loadData = async () => {
     try {
-      const data = await invoke<ShopData>("get_shop_settings");
-      setShop(data);
-      if (data.logo_path) {
-        setLogoSrc(convertFileSrc(data.logo_path));
+      setLoading(true);
+      const [shopData, dashboardStats] = await Promise.all([
+        invoke<ShopData>("get_shop_settings"),
+        invoke<DashboardStats>("get_dashboard_stats"),
+      ]);
+
+      setShop(shopData);
+      setStats(dashboardStats);
+
+      if (shopData.logo_path) {
+        setLogoSrc(convertFileSrc(shopData.logo_path));
       }
     } catch (err) {
-      console.error("Failed to load shop data:", err);
+      console.error("Failed to load dashboard data:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -108,6 +89,14 @@ export default function Dashboard() {
     logout();
     navigate("/login", { replace: true });
   };
+
+  if (loading) {
+    return (
+      <div className="p-8 text-center text-[var(--color-text-muted)]">
+        Loading dashboard...
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -156,32 +145,36 @@ export default function Dashboard() {
         {[
           {
             label: "dashboard.total_revenue",
-            value: "$12,459",
-            change: "+12.5%",
+            value: stats ? formatCurrency(stats.total_revenue) : "-",
+            change: "", // You could calculate this if you had historical data
             positive: true,
             gradient:
               "from-[var(--color-accent-blue)] to-[var(--color-accent-cyan)]",
           },
           {
             label: "dashboard.total_orders",
-            value: "328",
-            change: "+8.2%",
+            value: stats ? stats.total_orders.toString() : "-",
+            change: "",
             positive: true,
             gradient:
               "from-[var(--color-accent-purple)] to-[var(--color-accent-pink)]",
           },
           {
-            label: "dashboard.new_customers",
-            value: "64",
-            change: "+23.1%",
+            label: "dashboard.total_customers",
+            value: stats ? stats.total_customers.toString() : "-",
+            change: "",
             positive: true,
             gradient: "from-emerald-500 to-teal-500",
           },
+          // Placeholder for another stat or you can remove/replace it
           {
             label: "dashboard.avg_order_value",
-            value: "$38.00",
-            change: "-2.4%",
-            positive: false,
+            value:
+              stats && stats.total_orders > 0
+                ? formatCurrency(stats.total_revenue / stats.total_orders)
+                : formatCurrency(0),
+            change: "",
+            positive: true, // simplified
             gradient: "from-amber-500 to-orange-500",
           },
         ].map((stat, i) => (
@@ -200,7 +193,7 @@ export default function Dashboard() {
               <p className="text-2xl font-bold text-[var(--color-text-primary)] mb-1">
                 {stat.value}
               </p>
-              <span
+              {/* <span
                 className={`text-xs font-medium ${
                   stat.positive
                     ? "text-[var(--color-success)]"
@@ -208,7 +201,7 @@ export default function Dashboard() {
                 }`}
               >
                 {stat.change} {t("dashboard.from_last_month")}
-              </span>
+              </span> */}
             </div>
           </motion.div>
         ))}
@@ -223,48 +216,64 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
                 {t("dashboard.recent_activity")}
               </h2>
-              <button className="text-xs font-medium text-[var(--color-accent-blue)] hover:text-[var(--color-accent-purple)] transition-colors">
+              <button
+                onClick={() => navigate("/orders")}
+                className="text-xs font-medium text-[var(--color-accent-blue)] hover:text-[var(--color-accent-purple)] transition-colors"
+              >
                 {t("dashboard.view_all")}
               </button>
             </div>
 
             <div className="space-y-1">
-              {recentOrders.map((order) => (
+              {stats?.recent_orders.map((order) => (
                 <div
                   key={order.id}
+                  onClick={() => navigate(`/orders/${order.id}`)}
                   className="flex items-center justify-between p-3 rounded-xl transition-colors duration-200 hover:bg-white/[0.04] cursor-pointer group"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold text-[var(--color-text-secondary)]">
-                      {order.customer
-                        .split(" ")
-                        .map((n: string) => n[0])
-                        .join("")}
+                      {order.customer_name
+                        ? order.customer_name
+                            .split(" ")
+                            .map((n: string) => n[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2)
+                        : "?"}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-[var(--color-text-primary)] group-hover:text-white transition-colors">
-                        {order.customer}
+                        {order.customer_name || t("common.unknown_customer")}
                       </p>
                       <p className="text-xs text-[var(--color-text-muted)]">
-                        {order.id}
+                        {order.order_id}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[order.status]}`}
+                    {/* Status badge - using default for now as we don't have status field */}
+                    {/* <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors.default}`}
                     >
-                      {order.status}
-                    </span>
+                      New
+                    </span> */}
                     <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-                      {order.amount}
+                      {formatCurrency(order.total_price)}
                     </span>
-                    <span className="text-xs text-[var(--color-text-muted)] w-16 text-right">
-                      {order.time}
+                    <span className="text-xs text-[var(--color-text-muted)] w-24 text-right">
+                      {order.created_at
+                        ? new Date(order.created_at).toLocaleDateString()
+                        : ""}
                     </span>
                   </div>
                 </div>
               ))}
+              {stats?.recent_orders.length === 0 && (
+                <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
+                  {t("dashboard.no_recent_orders")}
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
@@ -281,25 +290,30 @@ export default function Dashboard() {
                   label: "dashboard.actions.new_order",
                   icon: "🛒",
                   desc: "dashboard.actions.new_order_desc",
+                  path: "/orders/new",
                 },
                 {
                   label: "dashboard.actions.add_product",
                   icon: "➕",
                   desc: "dashboard.actions.add_product_desc",
+                  path: "/inventory/new", // check if this route exists or adjust
                 },
                 {
                   label: "dashboard.actions.manage_staff",
                   icon: "👥",
                   desc: "dashboard.actions.manage_staff_desc",
+                  path: "/staff", // check route
                 },
                 {
                   label: "dashboard.actions.reports",
                   icon: "📊",
                   desc: "dashboard.actions.reports_desc",
+                  path: "/reports", // check route
                 },
               ].map((action) => (
                 <button
                   key={action.label}
+                  onClick={() => navigate(action.path)}
                   className="
                     w-full flex items-center gap-3 p-3.5 rounded-xl
                     bg-white/[0.03] border border-white/5
