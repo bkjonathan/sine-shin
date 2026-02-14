@@ -92,7 +92,7 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-[var(--color-text-muted)]">
+      <div className="p-8 text-center text-text-muted">
         Loading dashboard...
       </div>
     );
@@ -121,12 +121,12 @@ export default function Dashboard() {
             </div>
           )}
           <div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
+            <h1 className="text-2xl font-bold text-text-primary tracking-tight">
               {shop
                 ? t("dashboard.welcome_back", { name: shop.shop_name })
                 : t("dashboard.welcome")}
             </h1>
-            <p className="text-sm text-[var(--color-text-muted)]">
+            <p className="text-sm text-text-muted">
               {t("dashboard.happening_today")}
             </p>
           </div>
@@ -148,16 +148,14 @@ export default function Dashboard() {
             value: stats ? formatCurrency(stats.total_revenue) : "-",
             change: "", // You could calculate this if you had historical data
             positive: true,
-            gradient:
-              "from-[var(--color-accent-blue)] to-[var(--color-accent-cyan)]",
+            gradient: "from-accent-blue to-accent-cyan",
           },
           {
             label: "dashboard.total_orders",
             value: stats ? stats.total_orders.toString() : "-",
             change: "",
             positive: true,
-            gradient:
-              "from-[var(--color-accent-purple)] to-[var(--color-accent-pink)]",
+            gradient: "from-accent-purple to-accent-pink",
           },
           {
             label: "dashboard.total_customers",
@@ -179,18 +177,18 @@ export default function Dashboard() {
           },
         ].map((stat, i) => (
           <motion.div key={stat.label} variants={itemVariants}>
-            <div className="glass-panel p-5 group hover:bg-white/[0.08] transition-colors duration-300">
+            <div className="glass-panel p-5 group hover:bg-white/8 transition-colors duration-300">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider">
+                <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
                   {t(stat.label)}
                 </span>
                 <div
-                  className={`w-8 h-8 rounded-lg bg-gradient-to-br ${stat.gradient} flex items-center justify-center opacity-80`}
+                  className={`w-8 h-8 rounded-lg bg-linear-to-br ${stat.gradient} flex items-center justify-center opacity-80`}
                 >
                   <span className="text-white text-sm font-bold">{i + 1}</span>
                 </div>
               </div>
-              <p className="text-2xl font-bold text-[var(--color-text-primary)] mb-1">
+              <p className="text-2xl font-bold text-text-primary mb-1">
                 {stat.value}
               </p>
               {/* <span
@@ -218,7 +216,7 @@ export default function Dashboard() {
               </h2>
               <button
                 onClick={() => navigate("/orders")}
-                className="text-xs font-medium text-[var(--color-accent-blue)] hover:text-[var(--color-accent-purple)] transition-colors"
+                className="text-xs font-medium text-accent-blue hover:text-accent-purple transition-colors"
               >
                 {t("dashboard.view_all")}
               </button>
@@ -229,10 +227,10 @@ export default function Dashboard() {
                 <div
                   key={order.id}
                   onClick={() => navigate(`/orders/${order.id}`)}
-                  className="flex items-center justify-between p-3 rounded-xl transition-colors duration-200 hover:bg-white/[0.04] cursor-pointer group"
+                  className="flex items-center justify-between p-3 rounded-xl transition-colors duration-200 hover:bg-white/4 cursor-pointer group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold text-[var(--color-text-secondary)]">
+                    <div className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold text-text-secondary">
                       {order.customer_name
                         ? order.customer_name
                             .split(" ")
@@ -243,10 +241,10 @@ export default function Dashboard() {
                         : "?"}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-[var(--color-text-primary)] group-hover:text-white transition-colors">
+                      <p className="text-sm font-medium text-text-primary group-hover:text-white transition-colors">
                         {order.customer_name || t("common.unknown_customer")}
                       </p>
-                      <p className="text-xs text-[var(--color-text-muted)]">
+                      <p className="text-xs text-text-muted">
                         {order.order_id}
                       </p>
                     </div>
@@ -258,10 +256,10 @@ export default function Dashboard() {
                     >
                       New
                     </span> */}
-                    <span className="text-sm font-semibold text-[var(--color-text-primary)]">
+                    <span className="text-sm font-semibold text-text-primary">
                       {formatCurrency(order.total_price)}
                     </span>
-                    <span className="text-xs text-[var(--color-text-muted)] w-24 text-right">
+                    <span className="text-xs text-text-muted w-24 text-right">
                       {order.created_at
                         ? new Date(order.created_at).toLocaleDateString()
                         : ""}
@@ -270,7 +268,7 @@ export default function Dashboard() {
                 </div>
               ))}
               {stats?.recent_orders.length === 0 && (
-                <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
+                <div className="text-center py-8 text-text-muted text-sm">
                   {t("dashboard.no_recent_orders")}
                 </div>
               )}
@@ -281,7 +279,7 @@ export default function Dashboard() {
         {/* Quick Actions (1/3 width) */}
         <motion.div variants={itemVariants}>
           <div className="glass-panel p-6">
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-5">
+            <h2 className="text-lg font-semibold text-text-primary mb-5">
               {t("dashboard.quick_actions")}
             </h2>
             <div className="space-y-2">
@@ -316,21 +314,19 @@ export default function Dashboard() {
                   onClick={() => navigate(action.path)}
                   className="
                     w-full flex items-center gap-3 p-3.5 rounded-xl
-                    bg-white/[0.03] border border-white/5
+                    bg-white/3 border border-white/5
                     text-left transition-all duration-200
-                    hover:bg-white/[0.06] hover:border-white/10
+                    hover:bg-white/6 hover:border-white/10
                     hover:shadow-[0_4px_16px_rgba(91,127,255,0.06)]
                     group
                   "
                 >
                   <span className="text-lg">{action.icon}</span>
                   <div>
-                    <p className="text-sm font-medium text-[var(--color-text-primary)] group-hover:text-white transition-colors">
+                    <p className="text-sm font-medium text-text-primary group-hover:text-white transition-colors">
                       {t(action.label)}
                     </p>
-                    <p className="text-xs text-[var(--color-text-muted)]">
-                      {t(action.desc)}
-                    </p>
+                    <p className="text-xs text-text-muted">{t(action.desc)}</p>
                   </div>
                 </button>
               ))}
