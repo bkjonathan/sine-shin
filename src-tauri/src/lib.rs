@@ -8,6 +8,24 @@ use sqlx::{Pool, Sqlite};
 use tauri_plugin_sql::{Migration, MigrationKind};
 use tokio::sync::Mutex;
 
+type AppResult<T> = Result<T, String>;
+
+const DEFAULT_CUSTOMER_ID_PREFIX: &str = "SSC-";
+const DEFAULT_ORDER_ID_PREFIX: &str = "SSO0-";
+const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
+    SELECT
+        o.*,
+        c.name as customer_name,
+        COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
+        COALESCE(SUM(oi.product_qty), 0) as total_qty,
+        COALESCE(SUM(oi.product_weight), 0) as total_weight,
+        (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
+    FROM orders o
+    LEFT JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN order_items oi ON o.id = oi.order_id
+"#;
+const ORDER_WITH_CUSTOMER_GROUP_BY: &str = " GROUP BY o.id ";
+
 // Shared database pool state
 pub struct AppDb(pub Arc<Mutex<Pool<Sqlite>>>);
 
@@ -25,6 +43,37 @@ async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error>> 
     }
 
     Ok(())
+}
+
+fn copy_logo_to_app_data(app: &AppHandle, logo_file_path: &str) -> AppResult<Option<String>> {
+    if logo_file_path.is_empty() {
+        return Ok(None);
+    }
+
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let logos_dir = app_data_dir.join("logos");
+    fs::create_dir_all(&logos_dir).map_err(|e| format!("Failed to create logos dir: {}", e))?;
+
+    let source = PathBuf::from(logo_file_path);
+    if !source.exists() {
+        return Err(format!("Logo file not found: {}", logo_file_path));
+    }
+
+    let file_name = source
+        .file_name()
+        .ok_or("Invalid file name")?
+        .to_string_lossy()
+        .to_string();
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis();
+    let dest_name = format!("{}_{}", timestamp, file_name);
+    let dest = logos_dir.join(dest_name);
+
+    fs::copy(&source, &dest).map_err(|e| format!("Failed to copy logo: {}", e))?;
+    Ok(Some(dest.to_string_lossy().to_string()))
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -205,42 +254,7 @@ async fn save_shop_setup(
     address: String,
     logo_file_path: String,
 ) -> Result<(), String> {
-    // Determine where to store the logo
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
-
-    let logos_dir = app_data_dir.join("logos");
-    fs::create_dir_all(&logos_dir).map_err(|e| format!("Failed to create logos dir: {}", e))?;
-
-    // Copy logo file if a path was provided
-    let internal_logo_path = if !logo_file_path.is_empty() {
-        let source = PathBuf::from(&logo_file_path);
-        if !source.exists() {
-            return Err(format!("Logo file not found: {}", logo_file_path));
-        }
-
-        let file_name = source
-            .file_name()
-            .ok_or("Invalid file name")?
-            .to_string_lossy()
-            .to_string();
-
-        // Add a timestamp prefix to avoid collisions
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| e.to_string())?
-            .as_millis();
-        let dest_name = format!("{}_{}", timestamp, file_name);
-        let dest = logos_dir.join(&dest_name);
-
-        fs::copy(&source, &dest).map_err(|e| format!("Failed to copy logo: {}", e))?;
-
-        Some(dest.to_string_lossy().to_string())
-    } else {
-        None
-    };
+    let internal_logo_path = copy_logo_to_app_data(&app, &logo_file_path)?;
 
     // Insert into the database
     let db = app.state::<AppDb>();
@@ -293,42 +307,9 @@ async fn update_shop_settings(
         .map_err(|e| e.to_string())?;
 
     if let Some(id) = latest_id {
-        // Handle Logo Logic
-        let new_internal_logo_path = if let Some(path) = logo_path {
-            if !path.is_empty() {
-                // Copy logic same as save_shop_setup (could be refactored into helper)
-                let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-                let logos_dir = app_data_dir.join("logos");
-                fs::create_dir_all(&logos_dir).map_err(|e| format!("Failed to create logos dir: {}", e))?;
-
-                let source = PathBuf::from(&path);
-                if !source.exists() {
-                     // If file doesn't exist, maybe ignore or error? 
-                     // Let's warn and skip updating logo if invalid path provided
-                     // Or return error.
-                     return Err(format!("Logo file not found: {}", path));
-                }
-
-                let file_name = source
-                    .file_name()
-                    .ok_or("Invalid file name")?
-                    .to_string_lossy()
-                    .to_string();
-
-                let timestamp = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|e| e.to_string())?
-                    .as_millis();
-                let dest_name = format!("{}_{}", timestamp, file_name);
-                let dest = logos_dir.join(&dest_name);
-
-                fs::copy(&source, &dest).map_err(|e| format!("Failed to copy logo: {}", e))?;
-                Some(dest.to_string_lossy().to_string())
-            } else {
-                None
-            }
-        } else {
-            None
+        let new_internal_logo_path = match logo_path {
+            Some(path) => copy_logo_to_app_data(&app, &path)?,
+            None => None,
         };
 
         if let Some(internal_path) = new_internal_logo_path {
@@ -363,8 +344,6 @@ async fn update_shop_settings(
 
     Ok(())
 }
-
-// ... (previous code)
 
 #[tauri::command]
 async fn reset_app_data(app: AppHandle) -> Result<(), String> {
@@ -406,7 +385,6 @@ async fn reset_app_data(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    // 3. Re-run migrations
     // 3. Re-run migrations explicitly
     if let Err(e) = init_db(&*pool).await {
         return Err(e.to_string());
@@ -465,9 +443,9 @@ async fn create_customer(
     let prefix: Option<String> = sqlx::query_scalar("SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
         .fetch_optional(&*pool)
         .await
-        .unwrap_or(Some("SSC-".to_string())); // Default fallback if DB check fails, though migration should ensure it exists
+        .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string())); // Default fallback if DB check fails, though migration should ensure it exists
     
-    let prefix_str = prefix.unwrap_or_else(|| "SSC-".to_string());
+    let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
     let customer_id = format!("{}{:05}", prefix_str, id);
 
     // 2. Update customer with generated ID
@@ -598,9 +576,9 @@ async fn create_order(
     let prefix: Option<String> = sqlx::query_scalar("SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
         .fetch_optional(&mut *tx)
         .await
-        .unwrap_or(Some("SSO0-".to_string()));
+        .unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
     
-    let prefix_str = prefix.unwrap_or_else(|| "SSO0-".to_string());
+    let prefix_str = prefix.unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
     let order_id = format!("{}{:05}", prefix_str, id);
 
     let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
@@ -619,24 +597,11 @@ async fn get_orders(app: AppHandle) -> Result<Vec<OrderWithCustomer>, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    // Use COALESCE to handle nulls from left join (if no items)
-    // We select the first product_url as a representative image if needed
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(
-        r#"
-        SELECT 
-            o.*, 
-            c.name as customer_name,
-            COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
-            COALESCE(SUM(oi.product_qty), 0) as total_qty,
-            COALESCE(SUM(oi.product_weight), 0) as total_weight,
-            (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
-        FROM orders o 
-        LEFT JOIN customers c ON o.customer_id = c.id 
-        LEFT JOIN order_items oi ON o.id = oi.order_id
-        GROUP BY o.id
-        ORDER BY o.created_at DESC
-        "#
-    )
+    let query = format!(
+        "{} {} ORDER BY o.created_at DESC",
+        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+    );
+    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
     .fetch_all(&*pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -805,23 +770,11 @@ async fn get_customer_orders(app: AppHandle, customer_id: i64) -> Result<Vec<Ord
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(
-        r#"
-        SELECT 
-            o.*, 
-            c.name as customer_name,
-            COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
-            COALESCE(SUM(oi.product_qty), 0) as total_qty,
-            COALESCE(SUM(oi.product_weight), 0) as total_weight,
-            (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
-        FROM orders o 
-        LEFT JOIN customers c ON o.customer_id = c.id 
-        LEFT JOIN order_items oi ON o.id = oi.order_id
-        WHERE o.customer_id = ?
-        GROUP BY o.id
-        ORDER BY o.created_at DESC
-        "#
-    )
+    let query = format!(
+        "{} WHERE o.customer_id = ? {} ORDER BY o.created_at DESC",
+        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+    );
+    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
     .bind(customer_id)
     .fetch_all(&*pool)
     .await
@@ -835,22 +788,11 @@ async fn get_order(app: AppHandle, id: i64) -> Result<OrderDetail, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let order = sqlx::query_as::<_, OrderWithCustomer>(
-        r#"
-        SELECT 
-            o.*, 
-            c.name as customer_name,
-            COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
-            COALESCE(SUM(oi.product_qty), 0) as total_qty,
-            COALESCE(SUM(oi.product_weight), 0) as total_weight,
-            (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
-        FROM orders o 
-        LEFT JOIN customers c ON o.customer_id = c.id 
-        LEFT JOIN order_items oi ON o.id = oi.order_id
-        WHERE o.id = ?
-        GROUP BY o.id
-        "#
-    )
+    let query = format!(
+        "{} WHERE o.id = ? {}",
+        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+    );
+    let order = sqlx::query_as::<_, OrderWithCustomer>(&query)
     .bind(id)
     .fetch_optional(&*pool)
     .await
@@ -894,23 +836,11 @@ async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, String> {
         .map_err(|e| e.to_string())?;
 
     // 4. Recent Orders (Top 5)
-    let recent_orders = sqlx::query_as::<_, OrderWithCustomer>(
-        r#"
-        SELECT 
-            o.*, 
-            c.name as customer_name,
-            COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
-            COALESCE(SUM(oi.product_qty), 0) as total_qty,
-            COALESCE(SUM(oi.product_weight), 0) as total_weight,
-            (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
-        FROM orders o 
-        LEFT JOIN customers c ON o.customer_id = c.id 
-        LEFT JOIN order_items oi ON o.id = oi.order_id
-        GROUP BY o.id
-        ORDER BY o.created_at DESC
-        LIMIT 5
-        "#
-    )
+    let query = format!(
+        "{} {} ORDER BY o.created_at DESC LIMIT 5",
+        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+    );
+    let recent_orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
     .fetch_all(&*pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -1000,4 +930,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
