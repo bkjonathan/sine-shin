@@ -71,6 +71,7 @@
     "avg_order_value": "Avg. Order Value",
     "from_last_month": "from last month",
     "recent_activity": "Recent Activity",
+    "no_recent_orders": "No recent orders",
     "quick_actions": "Quick Actions",
     "view_all": "View All",
     "actions": {
@@ -136,7 +137,6 @@
       "delivery_fee": "Delivery Fee",
       "cargo_fee": "Cargo Fee",
       "arrived_date": "Arrived Date",
-      "shipment_date": "Shipment Date",
       "shipment_date": "Shipment Date",
       "user_withdraw_date": "User Withdraw Date",
       "service_fee_label": "Service Fee",
@@ -269,6 +269,7 @@
     "profile": "Profile",
     "appearance": "Appearance",
     "appearance_desc": "Customize the look and feel",
+    "light_mode": "Light Mode",
     "dark_mode": "Dark Mode",
     "dark_mode_desc": "Switch between light and dark themes",
     "smooth_animations": "Smooth Animations",

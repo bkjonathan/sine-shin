@@ -71,6 +71,7 @@
     "avg_order_value": "ပျမ်းမျှ အော်ဒါတန်ဖိုး",
     "from_last_month": "ပြီးခဲ့သည့်လမှ",
     "recent_activity": "မကြာသေးမီက လှုပ်ရှားမှုများ",
+    "no_recent_orders": "လတ်တလော အမှာစာမရှိပါ",
     "quick_actions": "အမြန် လုပ်ဆောင်ချက်များ",
     "view_all": "အားလုံးကြည့်ရန်",
     "actions": {
@@ -136,7 +137,6 @@
       "delivery_fee": "ပို့ခ",
       "cargo_fee": "ကားခ",
       "arrived_date": "ရောက်ရှိ နေ့စွဲ",
-      "shipment_date": "ပို့ဆောင် နေ့စွဲ",
       "shipment_date": "ပို့ဆောင် နေ့စွဲ",
       "user_withdraw_date": "ထုတ်ယူ နေ့စွဲ",
       "service_fee_label": "ဝန်ဆောင်ခ",
@@ -269,6 +269,7 @@
     "profile": "ပရိုဖိုင်",
     "appearance": "အသွင်အပြင်",
     "appearance_desc": "အသွင်အပြင်ကို စိတ်ကြိုက်ပြင်ဆင်ရန်",
+    "light_mode": "အလင်းမုဒ်",
     "dark_mode": "အမှောင်မုဒ်",
     "dark_mode_desc": "အလင်းနှင့် အမှောင် အပြင်အဆင်များ ပြောင်းလဲရန်",
     "smooth_animations": "ချောမွေ့သော လှုပ်ရှားမှုများ",

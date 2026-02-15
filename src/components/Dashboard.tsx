@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import { formatCurrency } from "../utils/currency";
+import { DollarSign, ShoppingBag, Users, TrendingUp } from "lucide-react";
 
 interface ShopData {
   shop_name: string;
@@ -149,6 +150,7 @@ export default function Dashboard() {
             change: "", // You could calculate this if you had historical data
             positive: true,
             gradient: "from-accent-blue to-accent-cyan",
+            icon: DollarSign,
           },
           {
             label: "dashboard.total_orders",
@@ -156,6 +158,7 @@ export default function Dashboard() {
             change: "",
             positive: true,
             gradient: "from-accent-purple to-accent-pink",
+            icon: ShoppingBag,
           },
           {
             label: "dashboard.total_customers",
@@ -163,6 +166,7 @@ export default function Dashboard() {
             change: "",
             positive: true,
             gradient: "from-emerald-500 to-teal-500",
+            icon: Users,
           },
           // Placeholder for another stat or you can remove/replace it
           {
@@ -174,8 +178,9 @@ export default function Dashboard() {
             change: "",
             positive: true, // simplified
             gradient: "from-amber-500 to-orange-500",
+            icon: TrendingUp,
           },
-        ].map((stat, i) => (
+        ].map((stat) => (
           <motion.div key={stat.label} variants={itemVariants}>
             <div className="glass-panel p-5 group hover:bg-white/8 transition-colors duration-300">
               <div className="flex items-center justify-between mb-3">
@@ -185,7 +190,7 @@ export default function Dashboard() {
                 <div
                   className={`w-8 h-8 rounded-lg bg-linear-to-br ${stat.gradient} flex items-center justify-center opacity-80`}
                 >
-                  <span className="text-white text-sm font-bold">{i + 1}</span>
+                  <stat.icon className="text-white w-5 h-5" />
                 </div>
               </div>
               <p className="text-2xl font-bold text-text-primary mb-1">
@@ -211,7 +216,7 @@ export default function Dashboard() {
         <motion.div variants={itemVariants} className="lg:col-span-2">
           <div className="glass-panel p-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+              <h2 className="text-lg font-semibold text-text-primary">
                 {t("dashboard.recent_activity")}
               </h2>
               <button

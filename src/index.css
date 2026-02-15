@@ -165,85 +165,83 @@
 @layer components {
   /* ── Glass Panel (Primary surface) ── */
   .glass-panel {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--color-glass-white);
     backdrop-filter: blur(20px) saturate(1.5);
     -webkit-backdrop-filter: blur(20px) saturate(1.5);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--color-glass-border);
     border-radius: 1.25rem;
     box-shadow: var(--shadow-glass);
   }
 
   /* ── Glass Sidebar (Deeper blur for navigation) ── */
   .glass-sidebar {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--color-glass-white);
     backdrop-filter: blur(30px) saturate(1.8);
     -webkit-backdrop-filter: blur(30px) saturate(1.8);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid var(--color-glass-border);
   }
 
   /* ── Liquid Gradient Background ── */
   .liquid-gradient {
     position: fixed;
-    inset: 0;
-    z-index: 0;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
     overflow: hidden;
-    pointer-events: none;
+    background: var(--color-liquid-bg);
+    transition: background-color 0.5s ease;
   }
 
-  .liquid-gradient::before,
-  .liquid-gradient::after {
-    content: "";
+  .liquid-blob-1 {
     position: absolute;
-    border-radius: 50%;
-    filter: blur(100px);
-    opacity: 0.4;
-  }
-
-  .liquid-gradient::before {
-    width: 600px;
-    height: 600px;
+    top: -10%;
+    left: -10%;
+    width: 50vw;
+    height: 50vw;
     background: radial-gradient(
       circle,
       var(--color-accent-blue) 0%,
       transparent 70%
     );
-    top: -15%;
-    left: -10%;
-    animation: blob-drift-1 20s ease-in-out infinite;
+    opacity: 0.4;
+    filter: blur(80px);
+    animation: blob-drift-1 20s infinite ease-in-out alternate;
   }
 
-  .liquid-gradient::after {
-    width: 500px;
-    height: 500px;
+  .liquid-blob-2 {
+    position: absolute;
+    bottom: -10%;
+    right: -10%;
+    width: 40vw;
+    height: 40vw;
     background: radial-gradient(
       circle,
       var(--color-accent-purple) 0%,
       transparent 70%
     );
-    bottom: -15%;
-    right: -10%;
-    animation: blob-drift-2 25s ease-in-out infinite;
+    opacity: 0.4;
+    filter: blur(80px);
+    animation: blob-drift-2 25s infinite ease-in-out alternate;
   }
 
-  /* Third blob via a child element */
-  .liquid-gradient .liquid-blob-3 {
+  .liquid-blob-3 {
     position: absolute;
-    width: 450px;
-    height: 450px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60vw;
+    height: 60vw;
     background: radial-gradient(
       circle,
-      var(--color-accent-pink) 0%,
+      var(--color-accent-cyan) 0%,
       transparent 70%
     );
-    border-radius: 50%;
+    opacity: 0.25;
     filter: blur(100px);
-    opacity: 0.3;
-    top: 50%;
-    left: 40%;
-    transform: translate(-50%, -50%);
-    animation: blob-drift-3 22s ease-in-out infinite;
+    animation: blob-drift-3 18s infinite ease-in-out;
   }
-
   /* ── Nav Item Active (Liquid glow pill) ── */
   .nav-item {
     display: flex;
@@ -262,12 +260,12 @@
 
   .nav-item:hover {
     color: var(--color-text-primary);
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--color-glass-white-hover);
   }
 
   .nav-item-active {
-    color: white !important;
-    background: rgba(255, 255, 255, 0.15) !important;
+    color: var(--color-text-primary) !important;
+    background: var(--color-glass-white-hover) !important;
     box-shadow:
       0 0 20px rgba(91, 127, 255, 0.15),
       inset 0 0 12px rgba(255, 255, 255, 0.05);
@@ -277,8 +275,8 @@
   .input-liquid {
     width: 100%;
     padding: 0.875rem 1.25rem;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--color-glass-white);
+    border: 1px solid var(--color-glass-border);
     border-radius: 0.875rem;
     color: var(--color-text-primary);
     font-size: 0.9rem;
@@ -293,7 +291,7 @@
 
   .input-liquid:focus {
     border-color: transparent;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--color-glass-white-hover);
     box-shadow:
       0 0 0 3px rgba(91, 127, 255, 0.25),
       0 0 20px rgba(91, 127, 255, 0.1);
@@ -306,14 +304,14 @@
     justify-content: center;
     gap: 0.5rem;
     padding: 0.875rem 2rem;
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--color-glass-white);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    color: white;
+    color: var(--color-text-primary);
     font-weight: 600;
     font-size: 0.9rem;
     font-family: inherit;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--color-glass-border-light);
     border-radius: 100px;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -321,7 +319,7 @@
   }
 
   .btn-liquid:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--color-glass-white-hover);
     transform: translateY(-1px);
     box-shadow: 0 8px 24px rgba(91, 127, 255, 0.25);
   }
@@ -342,6 +340,7 @@
       var(--color-accent-purple) 100%
     );
     border: none;
+    color: white; /* Keep primary button text white */
     box-shadow: 0 4px 20px rgba(91, 127, 255, 0.3);
   }
 
@@ -357,7 +356,7 @@
 
   .btn-liquid-ghost {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid var(--color-glass-border);
     box-shadow: none;
     color: var(--color-text-secondary);
     backdrop-filter: none;
@@ -365,9 +364,9 @@
   }
 
   .btn-liquid-ghost:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--color-glass-white);
     color: var(--color-text-primary);
-    border-color: rgba(255, 255, 255, 0.25);
+    border-color: var(--color-glass-border-light);
     box-shadow: none;
   }
 

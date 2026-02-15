@@ -6,6 +6,13 @@ use tauri::Manager;
 pub struct AppSettings {
     pub language: String,
     pub sound_effect: bool,
+    pub theme: String,
+    #[serde(default = "default_accent_color")]
+    pub accent_color: String,
+}
+
+fn default_accent_color() -> String {
+    "blue".to_string()
 }
 
 impl Default for AppSettings {
@@ -13,6 +20,8 @@ impl Default for AppSettings {
         Self {
             language: "en".to_string(),
             sound_effect: true,
+            theme: "dark".to_string(),
+            accent_color: "blue".to_string(),
         }
     }
 }

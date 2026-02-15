@@ -50,10 +50,12 @@ export default function Login() {
   return (
     <div
       data-tauri-drag-region
-      className="w-full min-h-screen flex items-center justify-center overflow-hidden bg-[var(--color-liquid-bg)]"
+      className="w-full min-h-screen flex items-center justify-center overflow-hidden"
     >
       {/* ── Animated Mesh Gradient Background ── */}
       <div className="liquid-gradient">
+        <div className="liquid-blob-1" />
+        <div className="liquid-blob-2" />
         <div className="liquid-blob-3" />
       </div>
 

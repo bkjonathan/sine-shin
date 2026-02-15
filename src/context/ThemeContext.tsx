@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 type Theme = "light" | "dark";
 type AccentColor = "blue" | "purple" | "pink" | "cyan" | "green";
@@ -30,26 +31,58 @@ const DEFAULT_SETTINGS: ThemeSettings = {
 };
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<ThemeSettings>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored
-      ? { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
-      : DEFAULT_SETTINGS;
-  });
+  const [settings, setSettings] = useState<ThemeSettings>(DEFAULT_SETTINGS);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load settings from backend on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        if (window.__TAURI_INTERNALS__) {
+          const appSettings = await invoke<{
+            language: string;
+            sound_effect: boolean;
+            theme: string;
+            accent_color: string;
+          }>("get_app_settings");
+
+          // We only store theme in backend for now, other visual prefs still in local storage or could be moved too.
+          // For now, let's prioritize the backend "theme" field if it exists.
+          if (appSettings.theme) {
+            const validTheme = appSettings.theme === "light" ? "light" : "dark";
+            setSettings((prev) => ({
+              ...prev,
+              theme: validTheme,
+              accentColor: (appSettings.accent_color as AccentColor) || "blue",
+            }));
+          }
+        } else {
+          // Fallback for browser mode
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (stored) {
+            setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(stored) });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load theme settings:", err);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+    loadSettings();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    applyTheme(settings);
-  }, [settings]);
+    if (isLoaded) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      applyTheme(settings);
+    }
+  }, [settings, isLoaded]);
 
   const applyTheme = (s: ThemeSettings) => {
     const root = document.documentElement;
-
-    // 1. Set theme attribute for CSS selectors
     root.setAttribute("data-theme", s.theme);
 
-    // 2. Set accent color CSS variables
-    // These mappings correspond to Tailwind colors or hex codes
     const accents: Record<AccentColor, { primary: string; secondary: string }> =
       {
         blue: { primary: "#5b7fff", secondary: "#4c66cc" },
@@ -63,12 +96,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty("--color-accent-primary", colors.primary);
     root.style.setProperty("--color-accent-secondary", colors.secondary);
 
-    // Also set specific semantic variables if needed,
-    // or we can just rely on generic --color-accent-primary in CSS.
-    // Let's update the specific ones used in existing CSS if we want to override them directly,
-    // but the plan is to refactor CSS to use generic variables.
-
-    // 3. Handle animations
     if (!s.animations) {
       root.style.setProperty("--transition-speed", "0s");
       root.classList.add("disable-animations");
@@ -77,7 +104,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.classList.remove("disable-animations");
     }
 
-    // 4. Handle compact mode
     if (s.compactMode) {
       root.classList.add("compact-mode");
     } else {
@@ -85,11 +111,44 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateBackend = async (newTheme: Theme, newAccent: AccentColor) => {
+    if (window.__TAURI_INTERNALS__) {
+      try {
+        // We need to fetch current settings first to preserve other values like language/sound
+        const currentSettings = await invoke<{
+          language: string;
+          sound_effect: boolean;
+          theme: String;
+          accent_color: String;
+        }>("get_app_settings");
+
+        await invoke("update_app_settings", {
+          settings: {
+            ...currentSettings,
+            theme: newTheme,
+            accent_color: newAccent,
+          },
+        });
+      } catch (err) {
+        console.error("Failed to sync theme to backend:", err);
+      }
+    }
+  };
+
   const updateSetting = <K extends keyof ThemeSettings>(
     key: K,
     value: ThemeSettings[K],
   ) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+    setSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      // If updating theme or accent, sync to backend
+      if (key === "theme") {
+        updateBackend(value as Theme, next.accentColor);
+      } else if (key === "accentColor") {
+        updateBackend(next.theme, value as AccentColor);
+      }
+      return next;
+    });
   };
 
   const value: ThemeContextType = {

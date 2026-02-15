@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { invoke } from "@tauri-apps/api/core";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
+import { useTheme } from "../context/ThemeContext";
 
 // ── Slide animation variants ──
 const slideVariants = {
@@ -33,12 +33,12 @@ const slideTransition = {
 
 export default function OnboardingForm() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { theme, setTheme, accentColor, setAccentColor } = useTheme();
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const { i18n } = useTranslation();
 
   const toggleLanguage = async () => {
     const newLang = i18n.language === "en" ? "mm" : "en";
@@ -117,11 +117,11 @@ export default function OnboardingForm() {
 
   const handleNext = () => {
     setError("");
-    if (currentStep === 1 && !shopName.trim()) {
+    if (currentStep === 2 && !shopName.trim()) {
       setError(t("auth.onboarding.error_shop_name"));
       return;
     }
-    if (currentStep === 3) {
+    if (currentStep === 4) {
       if (!username.trim() || !password.trim()) {
         setError(t("auth.onboarding.error_credentials"));
         return;
@@ -133,7 +133,7 @@ export default function OnboardingForm() {
     }
 
     setDirection(1);
-    setCurrentStep((prev) => Math.min(prev + 1, 3));
+    setCurrentStep((prev) => Math.min(prev + 1, 4));
   };
 
   const handleBack = () => {
@@ -159,6 +159,17 @@ export default function OnboardingForm() {
           name: username.trim(),
           password: password,
         });
+
+        // Save theme preference
+        const currentSettings = await invoke<{
+          language: string;
+          sound_effect: boolean;
+          theme: string;
+        }>("get_app_settings");
+
+        await invoke("update_app_settings", {
+          settings: { ...currentSettings, theme: theme },
+        });
       } else {
         // Browser mode — mark onboarding as done
         localStorage.setItem("browser_onboarded", "true");
@@ -183,10 +194,12 @@ export default function OnboardingForm() {
   return (
     <div
       data-tauri-drag-region
-      className="w-full min-h-screen flex items-center justify-center overflow-hidden bg-liquid-bg"
+      className="w-full min-h-screen flex items-center justify-center overflow-hidden"
     >
       {/* ── Animated Mesh Gradient Background ── */}
       <div className="liquid-gradient">
+        <div className="liquid-blob-1" />
+        <div className="liquid-blob-2" />
         <div className="liquid-blob-3" />
       </div>
 
@@ -196,20 +209,20 @@ export default function OnboardingForm() {
           onClick={toggleLanguage}
           className="
             flex items-center gap-2 px-3 py-1.5 rounded-full
-            bg-white/10 hover:bg-white/20 backdrop-blur-md
-            border border-white/10 transition-all duration-300
-            text-sm text-white font-medium
+            bg-[var(--color-glass-white)] hover:bg-[var(--color-glass-white-hover)] backdrop-blur-md
+            border border-[var(--color-glass-border)] transition-all duration-300
+            text-sm text-text-primary font-medium
             group
           "
         >
           <span
-            className={`opacity-60 group-hover:opacity-100 ${i18n.language === "en" ? "text-[var(--color-accent-blue)] font-bold opacity-100" : ""}`}
+            className={`opacity-60 group-hover:opacity-100 ${i18n.language === "en" ? "text-accent-blue font-bold opacity-100" : ""}`}
           >
             EN
           </span>
-          <div className="h-3 w-px bg-white/20" />
+          <div className="h-3 w-px bg-[var(--color-glass-border-light)]" />
           <span
-            className={`opacity-60 group-hover:opacity-100 ${i18n.language === "mm" ? "text-[var(--color-accent-blue)] font-bold opacity-100" : ""}`}
+            className={`opacity-60 group-hover:opacity-100 ${i18n.language === "mm" ? "text-accent-blue font-bold opacity-100" : ""}`}
           >
             MM
           </span>
@@ -236,24 +249,26 @@ export default function OnboardingForm() {
 
       {/* ── Step indicators (dots) ── */}
       <div className="fixed top-8 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3">
-        {[0, 1, 2, 3].map((step) => (
+        {[0, 1, 2, 3, 4].map((step) => (
           <div key={step} className="relative flex items-center justify-center">
             <div
               className={`
                 w-2.5 h-2.5 rounded-full transition-all duration-500
                 ${
                   currentStep === step
-                    ? "bg-white scale-125 shadow-[0_0_12px_rgba(255,255,255,0.5)]"
+                    ? "bg-text-primary scale-125 shadow-[0_0_12px_rgba(255,255,255,0.5)]"
                     : currentStep > step
-                      ? "bg-white/60"
-                      : "bg-white/20"
+                      ? "bg-text-primary/60"
+                      : "bg-text-primary/20"
                 }
               `}
             />
-            {step < 3 && (
+            {step < 4 && (
               <div
                 className={`w-8 h-px ml-3 transition-all duration-500 ${
-                  currentStep > step ? "bg-white/40" : "bg-white/10"
+                  currentStep > step
+                    ? "bg-text-primary/40"
+                    : "bg-text-primary/10"
                 }`}
               />
             )}
@@ -271,7 +286,7 @@ export default function OnboardingForm() {
                 initial={{ opacity: 0, height: 0, marginBottom: 0 }}
                 animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[var(--color-error)] text-sm"
+                className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-error text-sm"
               >
                 {error}
               </motion.div>
@@ -293,7 +308,7 @@ export default function OnboardingForm() {
                 className="text-center py-8"
               >
                 {/* App icon */}
-                <div className="mx-auto w-20 h-20 rounded-[1.25rem] bg-gradient-to-br from-[var(--color-accent-blue)] to-[var(--color-accent-purple)] flex items-center justify-center mb-6 shadow-[0_8px_30px_rgba(91,127,255,0.3)]">
+                <div className="mx-auto w-20 h-20 rounded-[1.25rem] bg-linear-to-br from-accent-blue to-accent-purple flex items-center justify-center mb-6 shadow-[0_8px_30px_rgba(91,127,255,0.3)]">
                   <svg
                     width="36"
                     height="36"
@@ -309,10 +324,10 @@ export default function OnboardingForm() {
                   </svg>
                 </div>
 
-                <h1 className="text-3xl font-bold text-white mb-3 tracking-tight">
+                <h1 className="text-3xl font-bold text-text-primary mb-3 tracking-tight">
                   {t("auth.onboarding.welcome_title")}
                 </h1>
-                <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed mb-10 max-w-[280px] mx-auto">
+                <p className="text-text-secondary text-sm leading-relaxed mb-10 max-w-[280px] mx-auto">
                   {t("auth.onboarding.welcome_subtitle")}
                 </p>
 
@@ -337,8 +352,163 @@ export default function OnboardingForm() {
               </motion.div>
             )}
 
-            {/* Step 1: Details */}
+            {/* Step 0.5: Theme Selection */}
             {currentStep === 1 && (
+              <motion.div
+                key="step-theme"
+                custom={direction}
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={slideTransition}
+                className="space-y-6"
+              >
+                <div className="text-center mb-6">
+                  <h2 className="text-xl font-bold text-text-primary mb-1">
+                    {t("settings.appearance")}
+                  </h2>
+                  <p className="text-sm text-text-muted">
+                    {t("settings.appearance_desc")}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => setTheme("light")}
+                    className={`
+                      relative p-4 rounded-xl border-2 transition-all duration-300
+                      flex flex-col items-center gap-3
+                      ${
+                        theme === "light"
+                          ? "bg-[var(--color-glass-white)] border-accent-blue shadow-[0_0_20px_rgba(91,127,255,0.15)]"
+                          : "bg-[var(--color-glass-white)] border-[var(--color-glass-border)] hover:border-[var(--color-glass-border-light)] hover:bg-[var(--color-glass-white-hover)]"
+                      }
+                    `}
+                  >
+                    <div className="w-full aspect-video rounded-lg bg-[#f4f5fa] border border-gray-200 relative overflow-hidden">
+                      <div className="absolute top-2 left-2 w-8 h-2 bg-white rounded-sm shadow-sm" />
+                      <div className="absolute top-6 left-2 right-2 bottom-2 bg-white rounded-sm shadow-sm" />
+                    </div>
+                    <span
+                      className={`text-sm font-medium ${theme === "light" ? "text-text-primary" : "text-text-secondary"}`}
+                    >
+                      {t("settings.light_mode")}
+                    </span>
+                    {theme === "light" && (
+                      <div className="absolute top-2 right-2 w-5 h-5 bg-accent-blue rounded-full flex items-center justify-center">
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="white"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setTheme("dark")}
+                    className={`
+                      relative p-4 rounded-xl border-2 transition-all duration-300
+                      flex flex-col items-center gap-3
+                      ${
+                        theme === "dark"
+                          ? "bg-[var(--color-glass-white)] border-accent-blue shadow-[0_0_20px_rgba(91,127,255,0.15)]"
+                          : "bg-[var(--color-glass-white)] border-[var(--color-glass-border)] hover:border-[var(--color-glass-border-light)] hover:bg-[var(--color-glass-white-hover)]"
+                      }
+                    `}
+                  >
+                    <div className="w-full aspect-video rounded-lg bg-[#0a0a1a] border border-white/10 relative overflow-hidden">
+                      <div className="absolute top-2 left-2 w-8 h-2 bg-white/10 rounded-sm" />
+                      <div className="absolute top-6 left-2 right-2 bottom-2 bg-white/5 rounded-sm" />
+                    </div>
+                    <span
+                      className={`text-sm font-medium ${theme === "dark" ? "text-text-primary" : "text-text-secondary"}`}
+                    >
+                      {t("settings.dark_mode")}
+                    </span>
+                    {theme === "dark" && (
+                      <div className="absolute top-2 right-2 w-5 h-5 bg-accent-blue rounded-full flex items-center justify-center">
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="white"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="text-sm font-medium text-text-primary mb-3">
+                    {t("settings.accent_color")}
+                  </h3>
+                  <div className="flex items-center justify-center gap-4">
+                    {(["blue", "purple", "pink", "cyan", "green"] as const).map(
+                      (color) => (
+                        <button
+                          key={color}
+                          onClick={() => setAccentColor(color)}
+                          className={`
+                          w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300
+                          ${
+                            accentColor === color
+                              ? "scale-110 ring-2 ring-offset-2 ring-offset-glass-bg ring-text-primary shadow-lg"
+                              : "hover:scale-110 hover:shadow-md opacity-80 hover:opacity-100"
+                          }
+                        `}
+                          style={{
+                            background: `var(--color-accent-${color === "blue" ? "primary" : color === "purple" ? "purple" : color === "pink" ? "pink" : color === "cyan" ? "cyan" : "green"})`,
+                            backgroundColor:
+                              color === "blue"
+                                ? "#5b7fff"
+                                : color === "purple"
+                                  ? "#a855f7"
+                                  : color === "pink"
+                                    ? "#ec4899"
+                                    : color === "cyan"
+                                      ? "#06b6d4"
+                                      : "#10b981",
+                          }}
+                        >
+                          {accentColor === color && (
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="white"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 1: Details */}
+            {currentStep === 2 && (
               <motion.div
                 key="step-1"
                 custom={direction}
@@ -350,18 +520,18 @@ export default function OnboardingForm() {
                 className="space-y-6"
               >
                 <div className="text-center mb-2">
-                  <h2 className="text-xl font-bold text-white mb-1">
+                  <h2 className="text-xl font-bold text-text-primary mb-1">
                     {t("auth.onboarding.step1_title")}
                   </h2>
-                  <p className="text-sm text-[var(--color-text-muted)]">
+                  <p className="text-sm text-text-muted">
                     {t("auth.onboarding.step1_subtitle")}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     {t("auth.onboarding.shop_name")}{" "}
-                    <span className="text-[var(--color-error)]">*</span>
+                    <span className="text-error">*</span>
                   </label>
                   <input
                     type="text"
@@ -374,7 +544,7 @@ export default function OnboardingForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     {t("auth.onboarding.phone_number")}
                   </label>
                   <input
@@ -387,7 +557,7 @@ export default function OnboardingForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     {t("settings.account.address")}
                   </label>
                   <textarea
@@ -401,7 +571,7 @@ export default function OnboardingForm() {
             )}
 
             {/* Step 2: Logo */}
-            {currentStep === 2 && (
+            {currentStep === 3 && (
               <motion.div
                 key="step-2"
                 custom={direction}
@@ -413,10 +583,10 @@ export default function OnboardingForm() {
                 className="space-y-6"
               >
                 <div className="text-center mb-2">
-                  <h2 className="text-xl font-bold text-white mb-1">
+                  <h2 className="text-xl font-bold text-text-primary mb-1">
                     {t("auth.onboarding.step2_title")}
                   </h2>
-                  <p className="text-sm text-[var(--color-text-muted)]">
+                  <p className="text-sm text-text-muted">
                     {t("auth.onboarding.step2_subtitle")}
                   </p>
                 </div>
@@ -427,11 +597,11 @@ export default function OnboardingForm() {
                     onClick={handlePickLogo}
                     className="
                       w-40 h-40 rounded-full
-                      bg-white/5 backdrop-blur-lg
-                      border-2 border-dashed border-white/15
+                      bg-[var(--color-glass-white)] backdrop-blur-lg
+                      border-2 border-dashed border-[var(--color-glass-border)]
                       flex flex-col items-center justify-center gap-2
                       cursor-pointer transition-all duration-300
-                      hover:border-[var(--color-accent-blue)] hover:bg-white/8
+                      hover:border-accent-blue hover:bg-[var(--color-glass-white-hover)]
                       hover:shadow-[0_0_30px_rgba(91,127,255,0.15)]
                       group overflow-hidden
                     "
@@ -453,7 +623,7 @@ export default function OnboardingForm() {
                           strokeWidth="1.5"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="text-[var(--color-text-muted)] group-hover:text-[var(--color-accent-blue)] transition-colors"
+                          className="text-text-muted group-hover:text-accent-blue transition-colors"
                         >
                           <rect
                             x="3"
@@ -466,7 +636,7 @@ export default function OnboardingForm() {
                           <circle cx="8.5" cy="8.5" r="1.5" />
                           <polyline points="21 15 16 10 5 21" />
                         </svg>
-                        <span className="text-xs text-[var(--color-text-muted)] group-hover:text-[var(--color-accent-blue)] transition-colors">
+                        <span className="text-xs text-text-muted group-hover:text-accent-blue transition-colors">
                           {t("auth.onboarding.choose_image")}
                         </span>
                       </>
@@ -474,7 +644,7 @@ export default function OnboardingForm() {
                   </button>
                 </div>
                 {logoPath && (
-                  <p className="text-center text-xs text-[var(--color-text-muted)] truncate max-w-[300px] mx-auto">
+                  <p className="text-center text-xs text-text-muted truncate max-w-[300px] mx-auto">
                     {logoPath.split("/").pop()}
                   </p>
                 )}
@@ -482,7 +652,7 @@ export default function OnboardingForm() {
             )}
 
             {/* Step 3: User Account */}
-            {currentStep === 3 && (
+            {currentStep === 4 && (
               <motion.div
                 key="step-3"
                 custom={direction}
@@ -494,18 +664,18 @@ export default function OnboardingForm() {
                 className="space-y-6"
               >
                 <div className="text-center mb-2">
-                  <h2 className="text-xl font-bold text-white mb-1">
+                  <h2 className="text-xl font-bold text-text-primary mb-1">
                     {t("auth.onboarding.step3_title")}
                   </h2>
-                  <p className="text-sm text-[var(--color-text-muted)]">
+                  <p className="text-sm text-text-muted">
                     {t("auth.onboarding.step3_subtitle")}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     {t("auth.login.username")}{" "}
-                    <span className="text-[var(--color-error)]">*</span>
+                    <span className="text-error">*</span>
                   </label>
                   <input
                     type="text"
@@ -517,9 +687,9 @@ export default function OnboardingForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     {t("auth.login.password")}{" "}
-                    <span className="text-[var(--color-error)]">*</span>
+                    <span className="text-error">*</span>
                   </label>
                   <input
                     type="password"
@@ -531,9 +701,9 @@ export default function OnboardingForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     {t("auth.onboarding.confirm_password")}{" "}
-                    <span className="text-[var(--color-error)]">*</span>
+                    <span className="text-error">*</span>
                   </label>
                   <input
                     type="password"
@@ -569,7 +739,7 @@ export default function OnboardingForm() {
                 {t("auth.onboarding.back")}
               </button>
 
-              {currentStep < 3 ? (
+              {currentStep < 4 ? (
                 <button
                   className="btn-liquid btn-liquid-primary"
                   onClick={handleNext}
@@ -596,7 +766,7 @@ export default function OnboardingForm() {
                 >
                   {isSubmitting ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-[var(--color-glass-border)] border-t-white rounded-full animate-spin" />
                       {t("auth.onboarding.saving")}
                     </>
                   ) : (
@@ -623,7 +793,7 @@ export default function OnboardingForm() {
         </div>
 
         {/* Footer note */}
-        <p className="text-center text-xs text-white/25 mt-6">
+        <p className="text-center text-xs text-text-primary/25 mt-6">
           {t("auth.onboarding.footer_note")}
         </p>
       </div>

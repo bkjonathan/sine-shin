@@ -117,9 +117,11 @@ export default function AppLayout() {
   const { t } = useTranslation();
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-liquid-bg)]">
+    <div className="flex h-screen w-screen overflow-hidden">
       {/* ── Liquid Gradient Background (Bottom Layer) ── */}
       <div className="liquid-gradient">
+        <div className="liquid-blob-1" />
+        <div className="liquid-blob-2" />
         <div className="liquid-blob-3" />
       </div>
 
@@ -152,12 +154,10 @@ export default function AppLayout() {
 
         {/* App branding */}
         <div className="px-5 pb-4">
-          <h1 className="text-lg font-bold text-[var(--color-text-primary)] tracking-tight">
+          <h1 className="text-lg font-bold text-text-primary tracking-tight">
             {t("app.title")}
           </h1>
-          <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            {t("app.subtitle")}
-          </p>
+          <p className="text-xs text-text-muted mt-0.5">{t("app.subtitle")}</p>
         </div>
 
         {/* Navigation */}
@@ -180,14 +180,14 @@ export default function AppLayout() {
         {/* Bottom section */}
         <div className="p-4 border-t border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-accent-blue)] to-[var(--color-accent-purple)] flex items-center justify-center text-xs font-bold text-white">
+            <div className="w-8 h-8 rounded-full bg-linear-to-br from-accent-blue to-accent-purple flex items-center justify-center text-xs font-bold text-white">
               S
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+              <p className="text-sm font-medium text-text-primary truncate">
                 {t("nav.admin")}
               </p>
-              <p className="text-xs text-[var(--color-text-muted)] truncate">
+              <p className="text-xs text-text-muted truncate">
                 {t("nav.owner")}
               </p>
             </div>
@@ -222,19 +222,19 @@ export default function AppLayout() {
             <div className="no-drag flex items-center h-full">
               <button
                 onClick={() => appWindow.minimize()}
-                className="h-full px-4 hover:bg-white/10 transition-colors flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                className="h-full px-4 hover:bg-white/10 transition-colors flex items-center justify-center text-text-muted hover:text-text-primary"
               >
                 <Icons.Minimize />
               </button>
               <button
                 onClick={() => appWindow.toggleMaximize()}
-                className="h-full px-4 hover:bg-white/10 transition-colors flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                className="h-full px-4 hover:bg-white/10 transition-colors flex items-center justify-center text-text-muted hover:text-text-primary"
               >
                 <Icons.Maximize />
               </button>
               <button
                 onClick={() => appWindow.close()}
-                className="h-full px-4 hover:bg-red-500/80 transition-colors flex items-center justify-center text-[var(--color-text-muted)] hover:text-white"
+                className="h-full px-4 hover:bg-red-500/80 transition-colors flex items-center justify-center text-text-muted hover:text-white"
               >
                 <Icons.Close />
               </button>

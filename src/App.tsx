@@ -95,8 +95,10 @@ function AppRoutes() {
 
   if (isAppLoading || authLoading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center bg-liquid-bg">
+      <div className="w-full min-h-screen flex items-center justify-center">
         <div className="liquid-gradient">
+          <div className="liquid-blob-1" />
+          <div className="liquid-blob-2" />
           <div className="liquid-blob-3" />
         </div>
         <div className="relative z-10 flex flex-col items-center gap-4">
