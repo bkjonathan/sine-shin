@@ -5,6 +5,7 @@ import React, {
   useState,
   useRef,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 type SoundType = "click" | "success" | "error" | "switch" | "delete";
 
@@ -16,20 +17,43 @@ interface SoundContextType {
 
 const SoundContext = createContext<SoundContextType | undefined>(undefined);
 
-const STORAGE_KEY = "sine_shin_sound_settings";
-
 export function SoundProvider({ children }: { children: React.ReactNode }) {
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : true; // Default to true
-  });
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
   // Keep audio context ref to avoid recreating it constantly
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(soundEnabled));
-  }, [soundEnabled]);
+    // Fetch initial sound setting from backend
+    const fetchSettings = async () => {
+      try {
+        const settings = await invoke<{ sound_effect: boolean }>(
+          "get_app_settings",
+        );
+        setSoundEnabled(settings.sound_effect);
+      } catch (err) {
+        console.error("Failed to fetch sound settings:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const updateBackend = async (enabled: boolean) => {
+    try {
+      // We need to fetch current settings first to preserve other values like language
+      // Or we can just send the partial update if the backend supported it, but our command takes the full struct.
+      // So we must fetch first.
+      const currentSettings = await invoke<{
+        language: string;
+        sound_effect: boolean;
+      }>("get_app_settings");
+      await invoke("update_app_settings", {
+        settings: { ...currentSettings, sound_effect: enabled },
+      });
+    } catch (err) {
+      console.error("Failed to update sound settings:", err);
+    }
+  };
 
   // Unlock AudioContext on first interaction
   useEffect(() => {
@@ -71,6 +95,32 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("keydown", unlockAudio);
     };
   }, []);
+
+  // Global click listener for sound effects
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (!soundEnabled) return;
+
+      const target = e.target as HTMLElement;
+      // Check if the clicked element or its parents are interactive
+      const interactiveElement = target.closest(
+        'button, a, [role="button"], input[type="submit"], input[type="button"], .cursor-pointer, .btn-liquid, .glass-panel',
+      );
+
+      if (interactiveElement) {
+        playSound("click");
+      }
+    };
+
+    window.addEventListener("click", handleGlobalClick);
+
+    return () => {
+      window.removeEventListener("click", handleGlobalClick);
+    };
+  }, [soundEnabled]); // Re-bind if soundEnabled changes, though playSound ref usage would be better to avoid re-binding.
+  // Since playSound depends on soundEnabled currently, we need it in dependency or use a ref for enabled state.
+  // Ideally, playSound should check a ref, but re-binding is acceptable for a setting toggle.
+
   // Helper to ensure AudioContext is ready
   const ensureAudioContext = async () => {
     let ctx = audioContextRef.current;
@@ -97,6 +147,8 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
   };
 
   const playSound = async (type: SoundType) => {
+    // soundEnabled is checked here, but for the global listener we check it inside the handler
+    // to avoid playing when disabled.
     if (!soundEnabled) return;
 
     try {
@@ -187,7 +239,11 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleSound = () => {
-    setSoundEnabled((prev) => !prev);
+    setSoundEnabled((prev) => {
+      const newState = !prev;
+      updateBackend(newState);
+      return newState;
+    });
   };
 
   return (

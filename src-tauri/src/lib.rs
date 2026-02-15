@@ -21,6 +21,7 @@ use crate::commands::order::{
 };
 use crate::commands::shop::{get_shop_settings, save_shop_setup, update_shop_settings};
 use crate::commands::system::{backup_database, get_db_status, reset_app_data};
+use crate::commands::settings::{get_app_settings, update_app_settings, AppSettings};
 use crate::db::init_db;
 use crate::state::AppDb;
 
@@ -48,6 +49,16 @@ pub fn run() {
                 .app_data_dir()
                 .expect("Failed to get app data dir");
             fs::create_dir_all(&app_data_dir).expect("Failed to create app data dir");
+            
+            // Initialize settings.json if it doesn't exist
+            let settings_path = app_data_dir.join("settings.json");
+            if !settings_path.exists() {
+                let default_settings = AppSettings::default();
+                let settings_json = serde_json::to_string_pretty(&default_settings)
+                    .expect("Failed to serialize default settings");
+                fs::write(&settings_path, settings_json).expect("Failed to write settings.json");
+            }
+
             let db_path = app_data_dir.join("shop.db");
             let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
 
@@ -93,7 +104,9 @@ pub fn run() {
             get_customer_orders,
             update_order,
             delete_order,
-            get_dashboard_stats
+            get_dashboard_stats,
+            get_app_settings,
+            update_app_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

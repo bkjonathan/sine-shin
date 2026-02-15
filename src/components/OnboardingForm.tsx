@@ -38,10 +38,32 @@ export default function OnboardingForm() {
   const [direction, setDirection] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const { i18n } = useTranslation();
+
+  const toggleLanguage = async () => {
+    const newLang = i18n.language === "en" ? "mm" : "en";
+    await i18n.changeLanguage(newLang);
+
+    // Update backend settings if available
+    if (window.__TAURI_INTERNALS__) {
+      try {
+        const currentSettings = await invoke<{
+          language: string;
+          sound_effect: boolean;
+        }>("get_app_settings");
+        await invoke("update_app_settings", {
+          settings: { ...currentSettings, language: newLang },
+        });
+      } catch (err) {
+        console.error("Failed to update language setting:", err);
+      }
+    }
+  };
 
   // Form data
   const [shopName, setShopName] = useState("");
   const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [logoPath, setLogoPath] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
 
@@ -129,7 +151,7 @@ export default function OnboardingForm() {
         await invoke("save_shop_setup", {
           name: shopName.trim(),
           phone: phone.trim(),
-          address: "",
+          address: address.trim(),
           logoFilePath: logoPath,
         });
 
@@ -159,10 +181,39 @@ export default function OnboardingForm() {
   };
 
   return (
-    <div className="w-full min-h-screen flex items-center justify-center overflow-hidden bg-[var(--color-liquid-bg)]">
+    <div
+      data-tauri-drag-region
+      className="w-full min-h-screen flex items-center justify-center overflow-hidden bg-liquid-bg"
+    >
       {/* ── Animated Mesh Gradient Background ── */}
       <div className="liquid-gradient">
         <div className="liquid-blob-3" />
+      </div>
+
+      {/* ── Language Switcher ── */}
+      <div className="fixed top-6 right-6 z-50">
+        <button
+          onClick={toggleLanguage}
+          className="
+            flex items-center gap-2 px-3 py-1.5 rounded-full
+            bg-white/10 hover:bg-white/20 backdrop-blur-md
+            border border-white/10 transition-all duration-300
+            text-sm text-white font-medium
+            group
+          "
+        >
+          <span
+            className={`opacity-60 group-hover:opacity-100 ${i18n.language === "en" ? "text-[var(--color-accent-blue)] font-bold opacity-100" : ""}`}
+          >
+            EN
+          </span>
+          <div className="h-3 w-px bg-white/20" />
+          <span
+            className={`opacity-60 group-hover:opacity-100 ${i18n.language === "mm" ? "text-[var(--color-accent-blue)] font-bold opacity-100" : ""}`}
+          >
+            MM
+          </span>
+        </button>
       </div>
 
       {/* ── Extra animated blobs for onboarding page ── */}
@@ -332,6 +383,18 @@ export default function OnboardingForm() {
                     placeholder={t("auth.onboarding.enter_phone")}
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                    {t("settings.account.address")}
+                  </label>
+                  <textarea
+                    className="input-liquid min-h-[80px] py-2"
+                    placeholder={t("settings.account.address_placeholder")}
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
                   />
                 </div>
               </motion.div>

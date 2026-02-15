@@ -48,7 +48,10 @@ export default function Login() {
   };
 
   return (
-    <div className="w-full min-h-screen flex items-center justify-center overflow-hidden bg-[var(--color-liquid-bg)]">
+    <div
+      data-tauri-drag-region
+      className="w-full min-h-screen flex items-center justify-center overflow-hidden bg-[var(--color-liquid-bg)]"
+    >
       {/* ── Animated Mesh Gradient Background ── */}
       <div className="liquid-gradient">
         <div className="liquid-blob-3" />

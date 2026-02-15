@@ -13,6 +13,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import "./index.css";
+import { useTranslation } from "react-i18next";
 
 import Login from "./components/Login";
 
@@ -24,7 +25,21 @@ function AppRoutes() {
 
   useEffect(() => {
     checkOnboarding();
+    loadSettings();
   }, []);
+
+  const { i18n } = useTranslation();
+
+  const loadSettings = async () => {
+    try {
+      const settings = await invoke<{ language: string }>("get_app_settings");
+      if (settings.language && settings.language !== i18n.language) {
+        i18n.changeLanguage(settings.language);
+      }
+    } catch (err) {
+      console.error("Failed to load app settings:", err);
+    }
+  };
 
   // Re-navigate when auth state changes (e.g. after login)
   useEffect(() => {
