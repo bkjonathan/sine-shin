@@ -196,7 +196,8 @@
       "success_saved": "Invoice saved successfully!",
       "error_element_not_found": "Error: Invoice element not found",
       "error_blob_generation": "Failed to generate image blob",
-      "error_download_failed": "Download failed"
+      "error_download_failed": "Download failed",
+      "print": "Print Invoice"
     }
   },
   "customers": {

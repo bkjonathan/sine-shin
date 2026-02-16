@@ -25,6 +25,12 @@ use crate::commands::settings::{get_app_settings, update_app_settings, AppSettin
 use crate::db::init_db;
 use crate::state::AppDb;
 
+#[tauri::command]
+fn print_window(window: tauri::WebviewWindow) -> tauri::Result<()> {
+    window.print()?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -106,7 +112,9 @@ pub fn run() {
             delete_order,
             get_dashboard_stats,
             get_app_settings,
-            update_app_settings
+            get_app_settings,
+            update_app_settings,
+            print_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

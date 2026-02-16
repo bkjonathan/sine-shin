@@ -196,7 +196,8 @@
       "success_saved": "ဘောက်ချာ သိမ်းဆည်းပြီးပါပြီ",
       "error_element_not_found": "အမှား: ဘောက်ချာ အစိတ်အပိုင်း ရှာမတွေ့ပါ",
       "error_blob_generation": "ပုံရိပ် ထုတ်လုပ်၍ မရပါ",
-      "error_download_failed": "ဒေါင်းလုဒ် မအောင်မြင်ပါ"
+      "error_download_failed": "ဒေါင်းလုဒ် မအောင်မြင်ပါ",
+      "print": "ဘောက်ချာ ပရင့်ထုတ်မည်"
     }
   },
   "customers": {

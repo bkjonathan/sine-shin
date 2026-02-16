@@ -529,3 +529,48 @@
 .animate-pulse-glow {
   animation: pulse-glow 3s ease-in-out infinite;
 }
+
+/* ═══════════════════════════════════════════════
+   PRINT STYLES
+   ═══════════════════════════════════════════════ */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #invoice-print-container,
+  #invoice-print-container * {
+    visibility: visible;
+  }
+
+  #invoice-print-container {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    height: 100%;
+    margin: 0;
+    padding: 15mm !important;
+    background: white;
+    z-index: 9999;
+    box-sizing: border-box !important;
+
+    /* Reset screen styles */
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Hide the wrapper that might be positioning it off-screen */
+  .print-source-wrapper {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    display: block !important;
+  }
+}

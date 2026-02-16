@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, SetStateAction } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -12,9 +12,10 @@ import { useSound } from "../context/SoundContext";
 import html2canvas from "html2canvas";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { formatDate } from "../utils/date";
 import QRCode from "qrcode";
+import DatePicker from "./ui/DatePicker";
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -177,6 +178,16 @@ export default function OrderDetail() {
       playSound("error");
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handlePrintInvoice = async () => {
+    try {
+      await invoke("print_window");
+    } catch (error) {
+      console.error("Failed to print:", error);
+      // Fallback to window.print if backend command fails (though unlikely if configured correctly)
+      window.print();
     }
   };
 
@@ -357,13 +368,22 @@ export default function OrderDetail() {
         </label>
         {isEditing ? (
           <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={tempValue}
-              onChange={(e) => setTempValue(e.target.value)}
-              className="bg-glass-white border border-glass-border rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
-              autoFocus
-            />
+            <div className="w-[180px]">
+              <DatePicker
+                selected={tempValue ? new Date(tempValue) : null}
+                onChange={(date: {
+                  toISOString: () => SetStateAction<string>;
+                }) => setTempValue(date ? date.toISOString() : "")}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Select date"
+                placement="top-start"
+                autoFocus
+                className="!py-1"
+                showMonthDropdown
+                showYearDropdown
+                dropdownMode="select"
+              />
+            </div>
             <button
               onClick={handleSave}
               disabled={isUpdating}
@@ -590,11 +610,32 @@ export default function OrderDetail() {
               ? t("orders.invoice.generating")
               : t("orders.invoice.download")}
           </button>
+          <button
+            onClick={handlePrintInvoice}
+            className="btn-liquid btn-liquid-secondary flex items-center gap-2"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="6 9 6 2 18 2 18 9"></polyline>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+              <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+            {t("orders.invoice.print")}
+          </button>
         </motion.div>
 
         {/* Hidden Invoice Layout for Capture */}
-        <div className="fixed left-[-9999px] top-[-9999px]">
+        <div className="fixed left-[-9999px] top-[-9999px] print-source-wrapper">
           <div
+            id="invoice-print-container"
             ref={invoiceRef}
             style={{
               width: "800px",
