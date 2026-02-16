@@ -8,13 +8,18 @@ export interface AppSettings {
   accent_color: string;
   currency: string;
   currency_symbol: string;
+  exchange_currency: string;
+  exchange_currency_symbol: string;
   invoice_printer_name: string;
   silent_invoice_print: boolean;
 }
 
 interface AppSettingsContextType extends AppSettings {
+  setLanguage: (language: string) => void;
   setCurrency: (currency: string) => void;
   setCurrencySymbol: (symbol: string) => void;
+  setExchangeCurrency: (currency: string) => void;
+  setExchangeCurrencySymbol: (symbol: string) => void;
   setInvoicePrinterName: (name: string) => void;
   setSilentInvoicePrint: (enabled: boolean) => void;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
@@ -32,6 +37,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   accent_color: "blue",
   currency: "USD",
   currency_symbol: "$",
+  exchange_currency: "MMK",
+  exchange_currency_symbol: "Ks",
   invoice_printer_name: "",
   silent_invoice_print: true,
 };
@@ -75,9 +82,14 @@ export function AppSettingsProvider({
     }
   };
 
+  const setLanguage = (language: string) => updateSettings({ language });
   const setCurrency = (currency: string) => updateSettings({ currency });
   const setCurrencySymbol = (symbol: string) =>
     updateSettings({ currency_symbol: symbol });
+  const setExchangeCurrency = (currency: string) =>
+    updateSettings({ exchange_currency: currency });
+  const setExchangeCurrencySymbol = (symbol: string) =>
+    updateSettings({ exchange_currency_symbol: symbol });
   const setInvoicePrinterName = (name: string) =>
     updateSettings({ invoice_printer_name: name });
   const setSilentInvoicePrint = (enabled: boolean) =>
@@ -106,8 +118,11 @@ export function AppSettingsProvider({
 
   const value = {
     ...settings,
+    setLanguage,
     setCurrency,
     setCurrencySymbol,
+    setExchangeCurrency,
+    setExchangeCurrencySymbol,
     setInvoicePrinterName,
     setSilentInvoicePrint,
     updateSettings,

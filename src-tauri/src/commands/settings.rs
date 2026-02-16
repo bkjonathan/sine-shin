@@ -13,6 +13,10 @@ pub struct AppSettings {
     pub currency: String,
     #[serde(default = "default_currency_symbol")]
     pub currency_symbol: String,
+    #[serde(default = "default_exchange_currency")]
+    pub exchange_currency: String,
+    #[serde(default = "default_exchange_currency_symbol")]
+    pub exchange_currency_symbol: String,
     #[serde(default)]
     pub invoice_printer_name: String,
     #[serde(default = "default_silent_invoice_print")]
@@ -31,6 +35,14 @@ fn default_currency_symbol() -> String {
     "$".to_string()
 }
 
+fn default_exchange_currency() -> String {
+    "MMK".to_string()
+}
+
+fn default_exchange_currency_symbol() -> String {
+    "Ks".to_string()
+}
+
 fn default_silent_invoice_print() -> bool {
     true
 }
@@ -44,6 +56,8 @@ impl Default for AppSettings {
             accent_color: "blue".to_string(),
             currency: "USD".to_string(),
             currency_symbol: "$".to_string(),
+            exchange_currency: "MMK".to_string(),
+            exchange_currency_symbol: "Ks".to_string(),
             invoice_printer_name: String::new(),
             silent_invoice_print: true,
         }

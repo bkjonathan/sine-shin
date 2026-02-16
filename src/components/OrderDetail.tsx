@@ -24,6 +24,7 @@ export default function OrderDetail() {
   const { playSound } = useSound();
   const {
     formatPrice,
+    exchange_currency_symbol,
     invoice_printer_name,
     silent_invoice_print,
   } = useAppSettings();
@@ -369,6 +370,13 @@ export default function OrderDetail() {
     serviceFeeAmount;
   const exchangeRate = order.exchange_rate || 1;
   const totalWithExchange = orderTotal * exchangeRate;
+  const formatExchangePrice = (amount: number) => {
+    const formattedNumber = new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount);
+    return `${exchange_currency_symbol} ${formattedNumber}`;
+  };
 
   const renderEditableDate = (
     label: string,
@@ -1057,7 +1065,7 @@ export default function OrderDetail() {
                 >
                   <span>{t("orders.form.exchange_rate")}</span>
                   <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                    {formatPrice(exchangeRate)}
+                    {formatExchangePrice(exchangeRate)}
                   </span>
                 </div>
                 <div
@@ -1085,7 +1093,7 @@ export default function OrderDetail() {
                   }}
                 >
                   <span>{t("orders.invoice.total_with_exchange")}</span>
-                  <span>{formatPrice(totalWithExchange)}</span>
+                  <span>{formatExchangePrice(totalWithExchange)}</span>
                 </div>
               </div>
             </div>
@@ -1312,7 +1320,7 @@ export default function OrderDetail() {
                       {t("orders.form.exchange_rate")}
                     </label>
                     <p className="text-text-primary font-bold">
-                      {formatPrice(order.exchange_rate || 0)}
+                      {formatExchangePrice(order.exchange_rate || 0)}
                     </p>
                   </div>
                 </div>
@@ -1398,7 +1406,7 @@ export default function OrderDetail() {
                     {t("orders.invoice.total_with_exchange")}
                   </span>
                   <span className="font-bold text-xl text-accent-blue">
-                    {formatPrice(totalWithExchange)}
+                    {formatExchangePrice(totalWithExchange)}
                   </span>
                 </div>
               </div>

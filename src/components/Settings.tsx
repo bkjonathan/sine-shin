@@ -747,10 +747,16 @@ export default function Settings() {
 
   // App Settings
   const {
+    language,
+    setLanguage,
     currency,
     setCurrency,
     currency_symbol,
     setCurrencySymbol,
+    exchange_currency,
+    setExchangeCurrency,
+    exchange_currency_symbol,
+    setExchangeCurrencySymbol,
     invoice_printer_name,
     setInvoicePrinterName,
     silent_invoice_print,
@@ -933,8 +939,12 @@ export default function Settings() {
                       { value: "en", label: "English" },
                       { value: "mm", label: "မြန်မာ" },
                     ]}
-                    value={i18n.language}
-                    onChange={(val) => i18n.changeLanguage(val.toString())}
+                    value={language}
+                    onChange={(val) => {
+                      const nextLang = val.toString();
+                      i18n.changeLanguage(nextLang);
+                      setLanguage(nextLang);
+                    }}
                     placeholder="Select Language"
                   />
                 </div>
@@ -970,6 +980,34 @@ export default function Settings() {
                       placeholder={t("settings.currency_symbol_placeholder")}
                       value={currency_symbol}
                       onChange={(e) => setCurrencySymbol(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1.5">
+                      {t("settings.exchange_currency_code")}
+                    </label>
+                    <input
+                      type="text"
+                      className="input-liquid w-full uppercase"
+                      placeholder={t("settings.exchange_currency_code_placeholder")}
+                      value={exchange_currency}
+                      onChange={(e) =>
+                        setExchangeCurrency(e.target.value.toUpperCase())
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1.5">
+                      {t("settings.exchange_currency_symbol")}
+                    </label>
+                    <input
+                      type="text"
+                      className="input-liquid w-full"
+                      placeholder={t(
+                        "settings.exchange_currency_symbol_placeholder",
+                      )}
+                      value={exchange_currency_symbol}
+                      onChange={(e) => setExchangeCurrencySymbol(e.target.value)}
                     />
                   </div>
                 </div>
