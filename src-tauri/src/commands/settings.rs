@@ -9,10 +9,22 @@ pub struct AppSettings {
     pub theme: String,
     #[serde(default = "default_accent_color")]
     pub accent_color: String,
+    #[serde(default = "default_currency")]
+    pub currency: String,
+    #[serde(default = "default_currency_symbol")]
+    pub currency_symbol: String,
 }
 
 fn default_accent_color() -> String {
     "blue".to_string()
+}
+
+fn default_currency() -> String {
+    "USD".to_string()
+}
+
+fn default_currency_symbol() -> String {
+    "$".to_string()
 }
 
 impl Default for AppSettings {
@@ -22,6 +34,8 @@ impl Default for AppSettings {
             sound_effect: true,
             theme: "dark".to_string(),
             accent_color: "blue".to_string(),
+            currency: "USD".to_string(),
+            currency_symbol: "$".to_string(),
         }
     }
 }

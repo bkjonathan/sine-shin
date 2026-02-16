@@ -18,6 +18,7 @@ import { Select } from "./ui/Select";
 import { parseCSV } from "../utils/csvUtils";
 import { processOrderCSV } from "../utils/orderImportUtils";
 import { useRef } from "react";
+import { useAppSettings } from "../context/AppSettingsContext";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -43,6 +44,7 @@ export default function Orders() {
   const [searchTerm, setSearchTerm] = useState("");
   const { playSound } = useSound();
   const { t } = useTranslation();
+  const { formatPrice } = useAppSettings();
   const navigate = useNavigate();
 
   // Modal State
@@ -650,7 +652,7 @@ export default function Orders() {
                         <span className="text-text-muted text-xs block">
                           {t("orders.total")}
                         </span>
-                        {(order.total_price || 0).toLocaleString()}
+                        {formatPrice(order.total_price || 0)}
                       </div>
                       <div>
                         <span className="text-text-muted text-xs block">

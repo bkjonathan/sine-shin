@@ -7,18 +7,21 @@ import { getShopSettings, ShopSettings } from "../api/settingApi";
 import { getCustomerById } from "../api/customerApi";
 import { OrderDetail as OrderDetailType } from "../types/order";
 import { Customer } from "../types/customer";
+import { useAppSettings } from "../context/AppSettingsContext";
 import { useSound } from "../context/SoundContext";
 import html2canvas from "html2canvas";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { formatDate } from "../utils/date";
+import QRCode from "qrcode";
 
 export default function OrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { playSound } = useSound();
+  const { formatPrice } = useAppSettings();
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const [orderDetail, setOrderDetail] = useState<OrderDetailType | null>(null);
@@ -32,6 +35,7 @@ export default function OrderDetail() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [tempValue, setTempValue] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
 
   useEffect(() => {
     if (id) {
@@ -56,8 +60,40 @@ export default function OrderDetail() {
             orderData.order.customer_id,
           );
           setCustomerDetail(customerData);
+
+          // Generate QR Code
+          const qrData = {
+            orderId: orderData.order.order_id || orderData.order.id,
+            customer: {
+              name: customerData.name,
+              phone: customerData.phone,
+              city: customerData.city,
+              address: customerData.address,
+              customer_id: customerData.customer_id,
+            },
+          };
+
+          try {
+            const url = await QRCode.toDataURL(JSON.stringify(qrData));
+            setQrCodeUrl(url);
+          } catch (err) {
+            console.error("Error generating QR code:", err);
+          }
         } catch (customerErr) {
           console.error("Failed to fetch customer details:", customerErr);
+        }
+      } else {
+        // Generate QR Code without customer details if not available
+        const qrData = {
+          orderId: orderData.order.order_id || orderData.order.id,
+          customer: null,
+        };
+
+        try {
+          const url = await QRCode.toDataURL(JSON.stringify(qrData));
+          setQrCodeUrl(url);
+        } catch (err) {
+          console.error("Error generating QR code:", err);
         }
       }
     } catch (err) {
@@ -791,7 +827,7 @@ export default function OrderDetail() {
                         textTransform: "uppercase",
                       }}
                     >
-                      {t("orders.invoice.item_desc")}
+                      {t("orders.product_link")}
                     </th>
                     <th
                       style={{
@@ -850,18 +886,13 @@ export default function OrderDetail() {
                         {String(index + 1).padStart(2, "0")}
                       </td>
                       <td style={{ padding: "16px 0", fontWeight: "500" }}>
-                        {t("orders.detail.product_order_from", {
-                          platform: customerPlatform || "Online",
-                        })}
                         {item.product_url && (
                           <div
                             style={{
                               fontSize: "12px",
-                              color: "#94a3b8",
+                              color: "#0f172a",
                               marginTop: "4px",
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
+                              wordBreak: "break-all",
                               maxWidth: "300px",
                             }}
                           >
@@ -873,7 +904,7 @@ export default function OrderDetail() {
                         {item.product_qty}
                       </td>
                       <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        {item.price?.toLocaleString()}
+                        {formatPrice(item.price || 0)}
                       </td>
                       <td
                         style={{
@@ -882,121 +913,33 @@ export default function OrderDetail() {
                           fontWeight: "600",
                         }}
                       >
-                        {(
-                          (item.price || 0) * (item.product_qty || 1)
-                        ).toLocaleString()}
+                        {formatPrice(
+                          (item.price || 0) * (item.product_qty || 1),
+                        )}
                       </td>
                     </tr>
                   ))}
-                  {/* Additional Fees */}
-                  {serviceFeeAmount > 0 && (
-                    <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td
-                        style={{
-                          padding: "16px 0",
-                          color: "#94a3b8",
-                          fontWeight: "500",
-                        }}
-                      >
-                        {t("orders.detail.fee")}
-                      </td>
-                      <td style={{ padding: "16px 0" }}>
-                        {t("orders.form.service_fee")}
-                        {order.service_fee_type === "percent" &&
-                          ` (${order.service_fee}%)`}
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        -
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        -
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        {serviceFeeAmount.toLocaleString()}
-                      </td>
-                    </tr>
-                  )}
-                  {(order.shipping_fee || 0) > 0 && (
-                    <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td
-                        style={{
-                          padding: "16px 0",
-                          color: "#94a3b8",
-                          fontWeight: "500",
-                        }}
-                      >
-                        {t("orders.detail.fee")}
-                      </td>
-                      <td style={{ padding: "16px 0" }}>
-                        {t("orders.form.shipping_fee")}
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        -
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        -
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        {order.shipping_fee?.toLocaleString()}
-                      </td>
-                    </tr>
-                  )}
-                  {(order.delivery_fee || 0) > 0 && (
-                    <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td
-                        style={{
-                          padding: "16px 0",
-                          color: "#94a3b8",
-                          fontWeight: "500",
-                        }}
-                      >
-                        {t("orders.detail.fee")}
-                      </td>
-                      <td style={{ padding: "16px 0" }}>
-                        {t("orders.form.delivery_fee")}
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        -
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        -
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        {order.delivery_fee?.toLocaleString()}
-                      </td>
-                    </tr>
-                  )}
-                  {(order.cargo_fee || 0) > 0 && (
-                    <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td
-                        style={{
-                          padding: "16px 0",
-                          color: "#94a3b8",
-                          fontWeight: "500",
-                        }}
-                      >
-                        {t("orders.detail.fee")}
-                      </td>
-                      <td style={{ padding: "16px 0" }}>
-                        {t("orders.form.cargo_fee")}
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        -
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        -
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        {order.cargo_fee?.toLocaleString()}
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
 
-            {/* Total Section */}
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            {/* Total Section with QR Code */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-end",
+              }}
+            >
+              <div style={{ textAlign: "left" }}>
+                {qrCodeUrl && (
+                  <img
+                    src={qrCodeUrl}
+                    alt="Order QR Code"
+                    style={{ width: "100px", height: "100px" }}
+                  />
+                )}
+              </div>
               <div
                 style={{
                   width: "50%",
@@ -1017,7 +960,7 @@ export default function OrderDetail() {
                 >
                   <span>{t("orders.invoice.subtotal")}</span>
                   <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                    {(order.total_price || 0).toLocaleString()}
+                    {formatPrice(order.total_price || 0)}
                   </span>
                 </div>
                 <div
@@ -1052,7 +995,7 @@ export default function OrderDetail() {
                 >
                   <span>{t("orders.form.exchange_rate")}</span>
                   <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                    {exchangeRate.toLocaleString()}
+                    {formatPrice(exchangeRate)}
                   </span>
                 </div>
                 <div
@@ -1065,7 +1008,7 @@ export default function OrderDetail() {
                   }}
                 >
                   <span>{t("orders.invoice.total")}</span>
-                  <span>{orderTotal.toLocaleString()}</span>
+                  <span>{formatPrice(orderTotal)}</span>
                 </div>
                 <div
                   style={{
@@ -1080,7 +1023,7 @@ export default function OrderDetail() {
                   }}
                 >
                   <span>{t("orders.invoice.total_with_exchange")}</span>
-                  <span>{totalWithExchange.toLocaleString()} Kyats</span>
+                  <span>{formatPrice(totalWithExchange)}</span>
                 </div>
               </div>
             </div>
@@ -1116,41 +1059,82 @@ export default function OrderDetail() {
               <h2 className="text-lg font-semibold text-text-primary mb-4">
                 {t("orders.detail.customer_info")}
               </h2>
-              <div className="grid grid-cols-1 gap-4">
-                <div
-                  className="rounded-2xl p-5 border"
-                  style={{
-                    borderColor: "#d6c08a",
-                    background:
-                      "linear-gradient(140deg, #0f172a 0%, #1e293b 62%, #111827 100%)",
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <p className="text-[22px] font-bold text-slate-50 m-0 tracking-wide">
-                    {customerName}
-                  </p>
-                  <p className="text-xs font-semibold text-amber-200 mt-1 mb-0">
-                    {t("customers.id_label")}: {customerCode}
-                  </p>
-                  <div className="grid grid-cols-[110px_1fr] gap-y-1.5 gap-x-2 mt-4 text-sm">
-                    <span className="text-[#c9b07a]">
-                      {t("customers.form.phone")}
-                    </span>
-                    <span className="text-slate-50 font-medium">
-                      {customerPhone}
-                    </span>
-                    <span className="text-[#c9b07a]">
-                      {t("customers.form.city")}
-                    </span>
-                    <span className="text-slate-50 font-medium">
-                      {customerCity}
-                    </span>
-                    <span className="text-[#c9b07a]">
+              <div className="border border-glass-border rounded-xl p-6 bg-liquid-bg hover:border-accent-blue/30 transition-colors">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-glass-border gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-text-primary">
+                      {customerName}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-accent-blue/10 text-accent-blue border border-accent-blue/20">
+                        {t("customers.id_label")}: {customerCode}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-glass-white/10 text-text-secondary border border-glass-border">
+                        {customerPlatform}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
+                        {t("customers.form.phone")}
+                      </label>
+                      <p className="text-text-primary font-medium flex items-center gap-2">
+                        <svg
+                          className="w-4 h-4 text-accent-blue"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                          />
+                        </svg>
+                        {customerPhone}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
+                        {t("customers.form.city")}
+                      </label>
+                      <p className="text-text-primary font-medium flex items-center gap-2">
+                        <svg
+                          className="w-4 h-4 text-accent-blue"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                        </svg>
+                        {customerCity}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
                       {t("customers.form.address")}
-                    </span>
-                    <span className="text-slate-50 font-medium wrap-break-word">
+                    </label>
+                    <p className="text-text-primary font-medium leading-relaxed bg-glass-white/5 p-3 rounded-lg border border-glass-border min-h-[80px]">
                       {customerAddress}
-                    </span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1206,7 +1190,7 @@ export default function OrderDetail() {
                           {t("orders.price")}
                         </label>
                         <p className="text-xl font-bold text-text-primary">
-                          {item.price?.toLocaleString()}
+                          {formatPrice(item.price || 0)}
                         </p>
                       </div>
                       <div className="text-center p-2.5 rounded-lg bg-glass-white/5 border border-glass-border">
@@ -1227,9 +1211,9 @@ export default function OrderDetail() {
                           {t("orders.total")}
                         </span>
                         <span className="text-xl font-bold text-accent-blue">
-                          {(
-                            (item.price || 0) * (item.product_qty || 0)
-                          ).toLocaleString()}
+                          {formatPrice(
+                            (item.price || 0) * (item.product_qty || 0),
+                          )}
                         </span>
                       </div>
                     </div>
@@ -1250,7 +1234,7 @@ export default function OrderDetail() {
                       {t("orders.total_price")}
                     </label>
                     <p className="text-text-primary font-bold">
-                      {order.total_price?.toLocaleString()}
+                      {formatPrice(order.total_price || 0)}
                     </p>
                   </div>
                   <div>
@@ -1266,7 +1250,7 @@ export default function OrderDetail() {
                       {t("orders.form.exchange_rate")}
                     </label>
                     <p className="text-text-primary font-bold">
-                      {order.exchange_rate?.toLocaleString()}
+                      {formatPrice(order.exchange_rate || 0)}
                     </p>
                   </div>
                 </div>
@@ -1315,7 +1299,7 @@ export default function OrderDetail() {
                     {t("orders.total_price")}
                   </span>
                   <span className="text-text-primary">
-                    {order.total_price?.toLocaleString()}
+                    {formatPrice(order.total_price || 0)}
                   </span>
                 </div>
                 {renderEditableFee(
@@ -1344,7 +1328,7 @@ export default function OrderDetail() {
                     {t("orders.total")}
                   </span>
                   <span className="font-bold text-xl text-success">
-                    {orderTotal.toLocaleString()}
+                    {formatPrice(orderTotal)}
                   </span>
                 </div>
                 <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-center">
@@ -1352,7 +1336,7 @@ export default function OrderDetail() {
                     {t("orders.invoice.total_with_exchange")}
                   </span>
                   <span className="font-bold text-xl text-accent-blue">
-                    {totalWithExchange.toLocaleString()}
+                    {formatPrice(totalWithExchange)}
                   </span>
                 </div>
               </div>

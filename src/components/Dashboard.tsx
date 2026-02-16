@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
-import { formatCurrency } from "../utils/currency";
+import { useAppSettings } from "../context/AppSettingsContext";
 import { DollarSign, ShoppingBag, Users, TrendingUp } from "lucide-react";
 
 interface ShopData {
@@ -54,6 +54,7 @@ const itemVariants = {
 
 export default function Dashboard() {
   const { t } = useTranslation();
+  const { formatPrice } = useAppSettings();
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [shop, setShop] = useState<ShopData | null>(null);
@@ -146,7 +147,7 @@ export default function Dashboard() {
         {[
           {
             label: "dashboard.total_revenue",
-            value: stats ? formatCurrency(stats.total_revenue) : "-",
+            value: stats ? formatPrice(stats.total_revenue) : "-",
             change: "", // You could calculate this if you had historical data
             positive: true,
             gradient: "from-accent-blue to-accent-cyan",
@@ -173,8 +174,8 @@ export default function Dashboard() {
             label: "dashboard.avg_order_value",
             value:
               stats && stats.total_orders > 0
-                ? formatCurrency(stats.total_revenue / stats.total_orders)
-                : formatCurrency(0),
+                ? formatPrice(stats.total_revenue / stats.total_orders)
+                : formatPrice(0),
             change: "",
             positive: true, // simplified
             gradient: "from-amber-500 to-orange-500",
@@ -262,7 +263,7 @@ export default function Dashboard() {
                       New
                     </span> */}
                     <span className="text-sm font-semibold text-text-primary">
-                      {formatCurrency(order.total_price)}
+                      {formatPrice(order.total_price)}
                     </span>
                     <span className="text-xs text-text-muted w-24 text-right">
                       {order.created_at

@@ -6,6 +6,7 @@ import { getCustomerById, getCustomerOrders } from "../api/customerApi";
 import { Customer } from "../types/customer";
 import { OrderWithCustomer } from "../types/order";
 import { useSound } from "../context/SoundContext";
+import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
 
 const fadeVariants = {
@@ -22,6 +23,7 @@ export default function CustomerDetail() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { playSound } = useSound();
+  const { formatPrice } = useAppSettings();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
@@ -255,7 +257,7 @@ export default function CustomerDetail() {
                           {order.total_qty || 0}
                         </td>
                         <td className="px-4 py-3 text-right text-[var(--color-text-secondary)]">
-                          {order.total_price?.toLocaleString()}
+                          {formatPrice(order.total_price || 0)}
                         </td>
                       </tr>
                     ))

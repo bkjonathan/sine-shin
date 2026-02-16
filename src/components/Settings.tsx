@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Select } from "./ui/Select";
 import { useTheme } from "../context/ThemeContext";
 import { useSound } from "../context/SoundContext";
+import { useAppSettings } from "../context/AppSettingsContext";
 import { RESET_APP_CODE } from "../cheapcode";
 
 // ── Settings Categories ──
@@ -744,6 +745,10 @@ export default function Settings() {
   // Sound Context
   const { soundEnabled, toggleSound, playSound } = useSound();
 
+  // App Settings
+  const { currency, setCurrency, currency_symbol, setCurrencySymbol } =
+    useAppSettings();
+
   // ── Settings Categories ──
   const categories = [
     {
@@ -924,6 +929,41 @@ export default function Settings() {
                     onChange={(val) => i18n.changeLanguage(val.toString())}
                     placeholder="Select Language"
                   />
+                </div>
+              </div>
+
+              {/* Currency Settings */}
+              <div className="py-4 border-b border-glass-border">
+                <p className="text-sm font-medium text-text-primary mb-3">
+                  {t("settings.currency_settings")}
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1.5">
+                      {t("settings.currency_code")}
+                    </label>
+                    <input
+                      type="text"
+                      className="input-liquid w-full uppercase"
+                      placeholder={t("settings.currency_code_placeholder")}
+                      value={currency}
+                      onChange={(e) =>
+                        setCurrency(e.target.value.toUpperCase())
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1.5">
+                      {t("settings.currency_symbol")}
+                    </label>
+                    <input
+                      type="text"
+                      className="input-liquid w-full"
+                      placeholder={t("settings.currency_symbol_placeholder")}
+                      value={currency_symbol}
+                      onChange={(e) => setCurrencySymbol(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
 

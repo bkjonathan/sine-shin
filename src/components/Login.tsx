@@ -78,7 +78,7 @@ export default function Login() {
                 <line x1="15" y1="12" x2="3" y2="12" />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">
+            <h1 className="text-2xl font-bold text-text-primary mb-2">
               {t("auth.login.welcome")}
             </h1>
             <p className="text-sm text-[var(--color-text-secondary)]">

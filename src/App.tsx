@@ -11,6 +11,7 @@ import OrderDetail from "./components/OrderDetail";
 import Settings from "./components/Settings.tsx";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
+import { AppSettingsProvider } from "./context/AppSettingsContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import "./index.css";
 import { useTranslation } from "react-i18next";
@@ -153,13 +154,15 @@ function AppRoutes() {
 
 function App() {
   return (
-    <ThemeProvider>
-      <SoundProvider>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </SoundProvider>
-    </ThemeProvider>
+    <AppSettingsProvider>
+      <ThemeProvider>
+        <SoundProvider>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </SoundProvider>
+      </ThemeProvider>
+    </AppSettingsProvider>
   );
 }
 
