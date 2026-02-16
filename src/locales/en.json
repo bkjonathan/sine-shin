@@ -289,6 +289,14 @@
     },
     "language": "Language",
     "language_label": "Select Language",
+    "invoice_print": {
+      "title": "Invoice Printing",
+      "printer_name": "Printer Name (optional)",
+      "printer_name_placeholder": "Leave blank to use system default printer",
+      "printer_help": "Set your printer name to force direct invoice printing to that device.",
+      "silent_label": "Direct Print (No Dialog)",
+      "silent_desc": "Print invoices directly without opening the print dialog."
+    },
     "theme": "Theme",
     "theme_light": "Light",
     "theme_dark": "Dark",

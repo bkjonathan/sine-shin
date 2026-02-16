@@ -1,16 +1,18 @@
 import { forwardRef } from "react";
-import ReactDatePicker, { ReactDatePickerProps } from "react-datepicker";
+import ReactDatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 
-interface DatePickerProps extends Omit<ReactDatePickerProps, "onChange"> {
+interface DatePickerProps {
   onChange: (date: Date | null) => void;
   label?: string;
   error?: string;
+  className?: string;
+  [key: string]: any;
 }
 
 const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
-  ({ label, error, className, ...props }, ref) => {
+  ({ label, error, className, ...props }, _ref) => {
     return (
       <div className="w-full">
         {label && (

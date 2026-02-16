@@ -8,11 +8,15 @@ export interface AppSettings {
   accent_color: string;
   currency: string;
   currency_symbol: string;
+  invoice_printer_name: string;
+  silent_invoice_print: boolean;
 }
 
 interface AppSettingsContextType extends AppSettings {
   setCurrency: (currency: string) => void;
   setCurrencySymbol: (symbol: string) => void;
+  setInvoicePrinterName: (name: string) => void;
+  setSilentInvoicePrint: (enabled: boolean) => void;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   formatPrice: (amount: number) => string;
 }
@@ -28,6 +32,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   accent_color: "blue",
   currency: "USD",
   currency_symbol: "$",
+  invoice_printer_name: "",
+  silent_invoice_print: true,
 };
 
 export function AppSettingsProvider({
@@ -36,7 +42,6 @@ export function AppSettingsProvider({
   children: React.ReactNode;
 }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -51,8 +56,6 @@ export function AppSettingsProvider({
       }
     } catch (err) {
       console.error("Failed to fetch app settings:", err);
-    } finally {
-      setIsLoaded(true);
     }
   };
 
@@ -75,6 +78,10 @@ export function AppSettingsProvider({
   const setCurrency = (currency: string) => updateSettings({ currency });
   const setCurrencySymbol = (symbol: string) =>
     updateSettings({ currency_symbol: symbol });
+  const setInvoicePrinterName = (name: string) =>
+    updateSettings({ invoice_printer_name: name });
+  const setSilentInvoicePrint = (enabled: boolean) =>
+    updateSettings({ silent_invoice_print: enabled });
 
   const formatPrice = (amount: number) => {
     // If currency symbol is provided, use custom formatting
@@ -101,6 +108,8 @@ export function AppSettingsProvider({
     ...settings,
     setCurrency,
     setCurrencySymbol,
+    setInvoicePrinterName,
+    setSilentInvoicePrint,
     updateSettings,
     formatPrice,
   };

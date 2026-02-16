@@ -746,8 +746,16 @@ export default function Settings() {
   const { soundEnabled, toggleSound, playSound } = useSound();
 
   // App Settings
-  const { currency, setCurrency, currency_symbol, setCurrencySymbol } =
-    useAppSettings();
+  const {
+    currency,
+    setCurrency,
+    currency_symbol,
+    setCurrencySymbol,
+    invoice_printer_name,
+    setInvoicePrinterName,
+    silent_invoice_print,
+    setSilentInvoicePrint,
+  } = useAppSettings();
 
   // ── Settings Categories ──
   const categories = [
@@ -967,6 +975,29 @@ export default function Settings() {
                 </div>
               </div>
 
+              <div className="py-4 border-b border-glass-border">
+                <p className="text-sm font-medium text-text-primary mb-3">
+                  {t("settings.invoice_print.title")}
+                </p>
+                <div>
+                  <label className="block text-xs text-text-muted mb-1.5">
+                    {t("settings.invoice_print.printer_name")}
+                  </label>
+                  <input
+                    type="text"
+                    className="input-liquid w-full"
+                    placeholder={t(
+                      "settings.invoice_print.printer_name_placeholder",
+                    )}
+                    value={invoice_printer_name}
+                    onChange={(e) => setInvoicePrinterName(e.target.value)}
+                  />
+                  <p className="text-xs text-text-muted mt-1.5">
+                    {t("settings.invoice_print.printer_help")}
+                  </p>
+                </div>
+              </div>
+
               <ToggleSetting
                 label={t("settings.push_notifications")}
                 description={t("settings.push_notifications_desc")}
@@ -993,6 +1024,12 @@ export default function Settings() {
                 description={t("settings.auto_backup_desc")}
                 checked={autoBackup}
                 onChange={setAutoBackup}
+              />
+              <ToggleSetting
+                label={t("settings.invoice_print.silent_label")}
+                description={t("settings.invoice_print.silent_desc")}
+                checked={silent_invoice_print}
+                onChange={setSilentInvoicePrint}
               />
             </motion.div>
           )}

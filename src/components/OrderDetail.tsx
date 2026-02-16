@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, SetStateAction } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -22,7 +22,11 @@ export default function OrderDetail() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { playSound } = useSound();
-  const { formatPrice } = useAppSettings();
+  const {
+    formatPrice,
+    invoice_printer_name,
+    silent_invoice_print,
+  } = useAppSettings();
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const [orderDetail, setOrderDetail] = useState<OrderDetailType | null>(null);
@@ -31,6 +35,7 @@ export default function OrderDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   // Editing state
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -105,50 +110,43 @@ export default function OrderDetail() {
     }
   };
 
-  const handleDownloadInvoice = async () => {
-    console.log("Download initiated");
+  const captureInvoicePngBytes = async (): Promise<Uint8Array> => {
     if (!invoiceRef.current || !orderDetail) {
       console.error("Missing ref or order", {
         ref: !!invoiceRef.current,
         order: !!orderDetail,
       });
+      throw new Error(t("orders.invoice.error_element_not_found"));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const canvas = await html2canvas(invoiceRef.current, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+    });
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/png");
+    });
+    if (!blob) throw new Error(t("orders.invoice.error_blob_generation"));
+    const buffer = await blob.arrayBuffer();
+    return new Uint8Array(buffer);
+  };
+
+  const handleDownloadInvoice = async () => {
+    if (!orderDetail) {
       alert(t("orders.invoice.error_element_not_found"));
       return;
     }
-
     const { order } = orderDetail;
 
     try {
       setDownloading(true);
       playSound("click");
-
-      // Small delay to ensure render
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      console.log("Starting html2canvas capture...");
-
-      const canvas = await html2canvas(invoiceRef.current, {
-        scale: 2, // Higher quality
-        useCORS: true,
-        backgroundColor: "#ffffff", // Ensure white background
-        logging: true, // Enable html2canvas logs
-        onclone: (_) => {
-          console.log("Cloned document for capture");
-        },
-      });
-      console.log("Canvas generated");
-
-      const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, "image/png");
-      });
-
-      if (!blob) throw new Error(t("orders.invoice.error_blob_generation"));
-      console.log("Blob generated, size:", blob.size);
-
-      const buffer = await blob.arrayBuffer();
-      const uint8Array = new Uint8Array(buffer);
+      const uint8Array = await captureInvoicePngBytes();
 
       const fileName = `invoice_${order.order_id || order.id}.png`;
-      console.log("Opening save dialog for:", fileName);
 
       const filePath = await save({
         defaultPath: fileName,
@@ -159,15 +157,11 @@ export default function OrderDetail() {
           },
         ],
       });
-      console.log("Save dialog result:", filePath);
 
       if (filePath) {
         await writeFile(filePath, uint8Array);
-        console.log("File written successfully");
         playSound("success");
         alert(t("orders.invoice.success_saved"));
-      } else {
-        console.log("Save cancelled");
       }
     } catch (err) {
       console.error("Failed to download invoice:", err);
@@ -182,12 +176,34 @@ export default function OrderDetail() {
   };
 
   const handlePrintInvoice = async () => {
+    if (!window.__TAURI_INTERNALS__) {
+      window.print();
+      return;
+    }
+
     try {
+      setPrinting(true);
+      playSound("click");
+
+      if (silent_invoice_print) {
+        const bytes = await captureInvoicePngBytes();
+        await invoke("print_invoice_direct", {
+          bytes: Array.from(bytes),
+          printerName:
+            invoice_printer_name.trim().length > 0
+              ? invoice_printer_name.trim()
+              : null,
+        });
+        playSound("success");
+        return;
+      }
+
       await invoke("print_window");
     } catch (error) {
       console.error("Failed to print:", error);
-      // Fallback to window.print if backend command fails (though unlikely if configured correctly)
       window.print();
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -371,9 +387,9 @@ export default function OrderDetail() {
             <div className="w-[180px]">
               <DatePicker
                 selected={tempValue ? new Date(tempValue) : null}
-                onChange={(date: {
-                  toISOString: () => SetStateAction<string>;
-                }) => setTempValue(date ? date.toISOString() : "")}
+                onChange={(date: Date | null) =>
+                  setTempValue(date ? date.toISOString() : "")
+                }
                 dateFormat="dd/MM/yyyy"
                 placeholderText="Select date"
                 placement="top-start"
@@ -612,23 +628,28 @@ export default function OrderDetail() {
           </button>
           <button
             onClick={handlePrintInvoice}
+            disabled={printing}
             className="btn-liquid btn-liquid-secondary flex items-center gap-2"
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="6 9 6 2 18 2 18 9"></polyline>
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-              <rect x="6" y="14" width="12" height="8"></rect>
-            </svg>
-            {t("orders.invoice.print")}
+            {printing ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+              </svg>
+            )}
+            {printing ? t("orders.invoice.generating") : t("orders.invoice.print")}
           </button>
         </motion.div>
 
