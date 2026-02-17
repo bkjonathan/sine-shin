@@ -54,7 +54,7 @@ export const getCustomersPaginated = async (
 };
 
 export const createCustomer = async (
-  customer: Omit<Customer, "id" | "created_at">,
+  customer: Omit<Customer, "created_at" | "id"> & { id?: number },
 ): Promise<number> => {
   return await invoke("create_customer", {
     name: customer.name,
@@ -63,6 +63,8 @@ export const createCustomer = async (
     city: customer.city,
     socialMediaUrl: customer.social_media_url,
     platform: customer.platform,
+    id: customer.id,
+    customerId: customer.customer_id,
   });
 };
 

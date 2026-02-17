@@ -17,40 +17,76 @@ pub async fn create_customer(
     city: Option<String>,
     social_media_url: Option<String>,
     platform: Option<String>,
+    id: Option<i64>,
+    customer_id: Option<String>,
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let id = sqlx::query(
-        "INSERT INTO customers (name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?)",
-    )
-    .bind(name)
-    .bind(phone)
-    .bind(address)
-    .bind(city)
-    .bind(social_media_url)
-    .bind(platform)
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .last_insert_rowid();
-
-    let prefix: Option<String> =
-        sqlx::query_scalar("SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
-            .fetch_optional(&*pool)
-            .await
-            .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
-
-    let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
-    let customer_id = format!("{}{:05}", prefix_str, id);
-
-    let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
-        .bind(customer_id)
-        .bind(id)
+    let inserted_id = if let Some(provided_id) = id {
+        sqlx::query(
+            "INSERT INTO customers (id, name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(provided_id)
+        .bind(&name)
+        .bind(&phone)
+        .bind(&address)
+        .bind(&city)
+        .bind(&social_media_url)
+        .bind(&platform)
         .execute(&*pool)
-        .await;
+        .await
+        .map_err(|e| e.to_string())?
+        .last_insert_rowid()
+    } else {
+        sqlx::query(
+            "INSERT INTO customers (name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&name)
+        .bind(&phone)
+        .bind(&address)
+        .bind(&city)
+        .bind(&social_media_url)
+        .bind(&platform)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .last_insert_rowid()
+    };
 
-    Ok(id)
+    // If a customer_id was provided efficiently, we can use it.
+    // If not, we generate it.
+
+    if let Some(cid) = customer_id {
+        // Optimization: If we could insert customer_id in the first INSERT, that would be better,
+        // but since `id` auto-generation case doesn't have it, we might need a separate UPDATE
+        // or a smarter INSERT query.
+        // For simplicity/safety with existing schema, let's just UPDATE it if it was null/different or verify it.
+        // Actually, let's just update it to ensure it's set correctly.
+        let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
+            .bind(cid)
+            .bind(inserted_id)
+            .execute(&*pool)
+            .await;
+    } else {
+        // Generate new one
+        let prefix: Option<String> =
+            sqlx::query_scalar("SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
+                .fetch_optional(&*pool)
+                .await
+                .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
+
+        let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
+        let new_customer_id = format!("{}{:05}", prefix_str, inserted_id);
+
+        let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
+            .bind(new_customer_id)
+            .bind(inserted_id)
+            .execute(&*pool)
+            .await;
+    }
+
+    Ok(inserted_id)
 }
 
 #[tauri::command]

@@ -57,8 +57,9 @@ export const getOrderById = async (id: number): Promise<OrderDetail> => {
 };
 
 export const createOrder = async (
-  order: Omit<Order, "id" | "created_at" | "order_id"> & {
+  order: Omit<Order, "id" | "created_at"> & {
     items: OrderItemPayload[];
+    id?: number;
   },
 ): Promise<number> => {
   return await invoke("create_order", {
@@ -75,6 +76,8 @@ export const createOrder = async (
     userWithdrawDate: order.user_withdraw_date,
     serviceFee: order.service_fee,
     serviceFeeType: order.service_fee_type,
+    id: order.id,
+    orderId: order.order_id,
   });
 };
 

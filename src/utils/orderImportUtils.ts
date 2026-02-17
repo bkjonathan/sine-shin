@@ -15,6 +15,7 @@ interface UnprocessedOrder {
   arrived_date?: string;
   shipment_date?: string;
   items: OrderItemPayload[];
+  id?: number;
 }
 
 export type ParsedOrder = Required<Pick<UnprocessedOrder, "customer_id">> &
@@ -86,6 +87,13 @@ export const processOrderCSV = (
         shipment_date: shipmentDate || undefined,
         items: [],
       };
+
+      // Extract ID if present (for restoration/migration)
+      const idStr = getValue("id");
+      if (idStr && !isNaN(parseInt(idStr))) {
+        order.id = parseInt(idStr);
+      }
+
       orderGroups.set(groupKey, order);
     }
 

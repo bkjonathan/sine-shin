@@ -28,35 +28,60 @@ pub async fn create_order(
     service_fee: Option<f64>,
     service_fee_type: Option<String>,
     items: Vec<OrderItemPayload>,
+    id: Option<i64>,
+    order_id: Option<String>,
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    let id = sqlx::query(
-        "INSERT INTO orders (customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(customer_id)
-    .bind(order_from)
-    .bind(exchange_rate)
-    .bind(shipping_fee)
-    .bind(delivery_fee)
-    .bind(cargo_fee)
-    .bind(order_date)
-    .bind(arrived_date)
-    .bind(shipment_date)
-    .bind(user_withdraw_date)
-    .bind(service_fee)
-    .bind(service_fee_type)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?
-    .last_insert_rowid();
+    let inserted_id = if let Some(provided_id) = id {
+        sqlx::query(
+            "INSERT INTO orders (id, customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(provided_id)
+        .bind(customer_id)
+        .bind(order_from)
+        .bind(exchange_rate)
+        .bind(shipping_fee)
+        .bind(delivery_fee)
+        .bind(cargo_fee)
+        .bind(order_date)
+        .bind(arrived_date)
+        .bind(shipment_date)
+        .bind(user_withdraw_date)
+        .bind(service_fee)
+        .bind(service_fee_type)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?
+        .last_insert_rowid()
+    } else {
+        sqlx::query(
+            "INSERT INTO orders (customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(customer_id)
+        .bind(order_from)
+        .bind(exchange_rate)
+        .bind(shipping_fee)
+        .bind(delivery_fee)
+        .bind(cargo_fee)
+        .bind(order_date)
+        .bind(arrived_date)
+        .bind(shipment_date)
+        .bind(user_withdraw_date)
+        .bind(service_fee)
+        .bind(service_fee_type)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?
+        .last_insert_rowid()
+    };
 
     for item in items {
         sqlx::query("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)")
-            .bind(id)
+            .bind(inserted_id)
             .bind(item.product_url)
             .bind(item.product_qty)
             .bind(item.price)
@@ -66,26 +91,34 @@ pub async fn create_order(
             .map_err(|e| e.to_string())?;
     }
 
-    let prefix: Option<String> =
-        sqlx::query_scalar("SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
-            .fetch_optional(&mut *tx)
-            .await
-            .unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
+    if let Some(oid) = order_id {
+        let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
+            .bind(oid)
+            .bind(inserted_id)
+            .execute(&mut *tx)
+            .await;
+    } else {
+        let prefix: Option<String> =
+            sqlx::query_scalar("SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
+                .fetch_optional(&mut *tx)
+                .await
+                .unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
 
-    let prefix_str = prefix
-        .filter(|p| !p.is_empty())
-        .unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
-    let order_id = format!("{}{:05}", prefix_str, id);
+        let prefix_str = prefix
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
+        let new_order_id = format!("{}{:05}", prefix_str, inserted_id);
 
-    let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
-        .bind(order_id)
-        .bind(id)
-        .execute(&mut *tx)
-        .await;
+        let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
+            .bind(new_order_id)
+            .bind(inserted_id)
+            .execute(&mut *tx)
+            .await;
+    }
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
-    Ok(id)
+    Ok(inserted_id)
 }
 
 #[tauri::command]
@@ -435,7 +468,7 @@ pub async fn get_orders_for_export(app: AppHandle) -> Result<Vec<OrderExportRow>
         FROM orders o
         LEFT JOIN customers c ON o.customer_id = c.id
         LEFT JOIN order_items oi ON o.id = oi.order_id
-        ORDER BY o.created_at DESC
+        ORDER BY o.id ASC
     "#;
 
     let rows = sqlx::query_as::<_, OrderExportRow>(query)

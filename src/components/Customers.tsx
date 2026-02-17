@@ -171,7 +171,15 @@ export default function Customers() {
           continue;
         }
 
-        const customerData = {
+        const toTitleCase = (str: string) => {
+          return str.replace(
+            /\w\S*/g,
+            (txt) =>
+              txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase(),
+          );
+        };
+
+        const customerData: any = {
           name: name,
           phone: getValue("phone"),
           address: getValue("address"),
@@ -179,9 +187,23 @@ export default function Customers() {
           social_media_url:
             getValue("social url") ||
             getValue("social_media_url") ||
-            getValue("social_url"), // Added social_url check
-          platform: getValue("platform"),
+            getValue("social_url"),
+          platform: getValue("platform")
+            ? toTitleCase(getValue("platform"))
+            : "",
         };
+
+        // Extract ID if present (for restoration/migration)
+        const idStr = getValue("id");
+        if (idStr && !isNaN(parseInt(idStr))) {
+          customerData.id = parseInt(idStr);
+        }
+
+        // Extract Customer ID if present
+        const customerId = getValue("customer id") || getValue("customer_id");
+        if (customerId) {
+          customerData.customer_id = customerId;
+        }
 
         try {
           await createCustomer(customerData);
@@ -410,7 +432,12 @@ export default function Customers() {
                 ];
 
                 // 3. Format data rows
-                const csvRows = allCustomers.map((c) => {
+                // Sort customers by ID ascending (1, 2, 3...)
+                const sortedCustomers = [...allCustomers].sort(
+                  (a, b) => a.id - b.id,
+                );
+
+                const csvRows = sortedCustomers.map((c) => {
                   return [
                     c.id,
                     c.customer_id || "-",
