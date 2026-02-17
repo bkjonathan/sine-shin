@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
-  getOrders,
+  getOrdersPaginated,
+  ORDER_PAGE_SIZE_LIMITS,
   createOrder,
   updateOrder,
   deleteOrder,
@@ -17,7 +18,6 @@ import { useTranslation } from "react-i18next";
 import { Select } from "./ui/Select";
 import { parseCSV } from "../utils/csvUtils";
 import { processOrderCSV } from "../utils/orderImportUtils";
-import { useRef } from "react";
 import { useAppSettings } from "../context/AppSettingsContext";
 
 // ── Animation Variants ──
@@ -36,11 +36,53 @@ const modalVariants: Variants = {
   exit: { opacity: 0, scale: 0.95, y: 10 },
 };
 
+const getVisiblePages = (currentPage: number, totalPages: number): string[] => {
+  if (totalPages <= 0) {
+    return [];
+  }
+
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => String(i + 1));
+  }
+
+  const pages: string[] = ["1"];
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
+
+  if (start > 2) {
+    pages.push("...");
+  }
+
+  for (let page = start; page <= end; page++) {
+    pages.push(String(page));
+  }
+
+  if (end < totalPages - 1) {
+    pages.push("...");
+  }
+
+  pages.push(String(totalPages));
+  return pages;
+};
+
 export default function Orders() {
+  const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
   const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<OrderWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [isPageTransitioning, setIsPageTransitioning] = useState(false);
+  const [pageTransitionKey, setPageTransitionKey] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | "all">(
+    ORDER_PAGE_SIZE_LIMITS.default,
+  );
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [searchKey, setSearchKey] = useState<
+    "customerName" | "orderId" | "customerId" | "customerPhone"
+  >("customerName");
+  const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const { playSound } = useSound();
   const { t } = useTranslation();
@@ -56,7 +98,10 @@ export default function Orders() {
 
   // Import State
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const latestFetchIdRef = useRef(0);
   const [isImporting, setIsImporting] = useState(false);
+  const visiblePages = getVisiblePages(currentPage, totalPages);
+  const displayPages = visiblePages.length > 0 ? visiblePages : ["1"];
 
   // Form State
   // Form State
@@ -88,36 +133,64 @@ export default function Orders() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchOrders();
     fetchCustomers();
   }, []);
 
   useEffect(() => {
-    if (!searchTerm) {
-      setFilteredOrders(orders);
-    } else {
-      const lowerAuth = searchTerm.toLowerCase();
-      setFilteredOrders(
-        orders.filter(
-          (o) =>
-            o.order_id?.toLowerCase().includes(lowerAuth) ||
-            o.customer_name?.toLowerCase().includes(lowerAuth) ||
-            o.order_from?.toLowerCase().includes(lowerAuth),
-        ),
-      );
-    }
-  }, [searchTerm, orders]);
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput.trim());
+    }, 300);
 
-  const fetchOrders = async () => {
-    try {
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    fetchOrders(currentPage);
+  }, [currentPage, pageSize, searchKey, searchTerm]);
+
+  const fetchOrders = async (page: number) => {
+    const fetchId = ++latestFetchIdRef.current;
+    const shouldShowInitialLoader = !hasLoadedOnce;
+
+    if (shouldShowInitialLoader) {
       setLoading(true);
-      const data = await getOrders();
-      setOrders(data);
-      setFilteredOrders(data);
+    } else {
+      setIsPageTransitioning(true);
+    }
+
+    try {
+      const data = await getOrdersPaginated({
+        page,
+        pageSize,
+        searchKey,
+        searchTerm,
+      });
+
+      if (fetchId !== latestFetchIdRef.current) {
+        return;
+      }
+
+      if (page > 1 && data.total_pages > 0 && page > data.total_pages) {
+        setCurrentPage(data.total_pages);
+        return;
+      }
+      if (page > 1 && data.total_pages === 0) {
+        setCurrentPage(1);
+        return;
+      }
+
+      setOrders(data.orders);
+      setTotalOrders(data.total);
+      setTotalPages(data.total_pages);
+      setHasLoadedOnce(true);
+      setPageTransitionKey((prev) => prev + 1);
     } catch (error) {
       console.error("Failed to fetch orders:", error);
     } finally {
-      setLoading(false);
+      if (fetchId === latestFetchIdRef.current) {
+        setLoading(false);
+        setIsPageTransitioning(false);
+      }
     }
   };
 
@@ -235,7 +308,7 @@ export default function Orders() {
         await createOrder(payload);
       }
       playSound("success");
-      await fetchOrders();
+      await fetchOrders(currentPage);
       handleCloseModal();
     } catch (error) {
       console.error("Failed to save order:", error);
@@ -250,7 +323,7 @@ export default function Orders() {
     try {
       await deleteOrder(orderToDelete.id);
       playSound("success");
-      await fetchOrders();
+      await fetchOrders(currentPage);
       setIsDeleteModalOpen(false);
       setOrderToDelete(null);
     } catch (error) {
@@ -312,7 +385,7 @@ export default function Orders() {
       }
 
       playSound(successCount > 0 ? "success" : "error");
-      await fetchOrders();
+      await fetchOrders(currentPage);
 
       alert(
         t("orders.import.complete", {
@@ -332,9 +405,15 @@ export default function Orders() {
     }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
-      if (filteredOrders.length === 0) return;
+      const data = await getOrdersPaginated({
+        page: 1,
+        pageSize: "all",
+        searchKey,
+        searchTerm,
+      });
+      if (!data.orders || data.orders.length === 0) return;
 
       const headers = [
         "Order ID",
@@ -348,7 +427,7 @@ export default function Orders() {
         "Product URL (First Item)",
       ];
 
-      const csvRows = filteredOrders.map((o) => {
+      const csvRows = data.orders.map((o) => {
         const status = o.arrived_date
           ? "Arrived"
           : o.shipment_date
@@ -489,201 +568,366 @@ export default function Orders() {
 
       {/* ── Search Bar ── */}
       <motion.div variants={fadeVariants} className="mb-6">
-        <div className="relative max-w-md">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg
-              className="h-4 w-4 text-text-muted"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
+        <div className="flex flex-col md:flex-row gap-3 max-w-2xl">
+          <div className="w-full md:w-56">
+            <Select
+              options={[
+                {
+                  value: "customerName",
+                  label: t("orders.search_key_customer_name"),
+                },
+                { value: "orderId", label: t("orders.search_key_order_id") },
+                {
+                  value: "customerId",
+                  label: t("orders.search_key_customer_id"),
+                },
+                {
+                  value: "customerPhone",
+                  label: t("orders.search_key_customer_phone"),
+                },
+              ]}
+              value={searchKey}
+              onChange={(value) => {
+                setSearchKey(
+                  value as
+                    | "customerName"
+                    | "orderId"
+                    | "customerId"
+                    | "customerPhone",
+                );
+                setCurrentPage(1);
+              }}
+              placeholder={t("orders.search_by")}
+            />
           </div>
-          <input
-            type="text"
-            className="input-liquid pl-10 w-full"
-            placeholder={t("orders.search_placeholder")}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg
+                className="h-4 w-4 text-text-muted"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+            <input
+              type="text"
+              className="input-liquid pl-10 w-full"
+              placeholder={t("orders.search_placeholder")}
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
         </div>
       </motion.div>
 
       {/* ── Order List ── */}
-      <motion.div variants={fadeVariants} className="flex-1 overflow-auto">
-        {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
-          </div>
-        ) : filteredOrders.length === 0 ? (
-          <div className="text-center py-20 bg-glass-white rounded-xl border border-glass-border">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-glass-white-hover flex items-center justify-center text-text-muted">
-              <svg
-                width="32"
-                height="32"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <path d="M16 10a4 4 0 0 1-8 0"></path>
-              </svg>
+      <motion.div variants={fadeVariants} className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 overflow-y-auto pr-1">
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
             </div>
-            <h3 className="text-lg font-medium text-text-primary">
-              {t("orders.no_orders")}
-            </h3>
-            <p className="text-sm text-text-muted mt-1">
-              {searchTerm
-                ? t("orders.no_orders_search")
-                : t("orders.no_orders_create")}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6">
-            <AnimatePresence>
-              {filteredOrders.map((order) => (
+          ) : orders.length === 0 ? (
+            isPageTransitioning ? (
+              <div className="flex justify-center items-center py-20">
+                <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="text-center py-20 bg-glass-white rounded-xl border border-glass-border">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-glass-white-hover flex items-center justify-center text-text-muted">
+                  <svg
+                    width="32"
+                    height="32"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <path d="M16 10a4 4 0 0 1-8 0"></path>
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-text-primary">
+                  {t("orders.no_orders")}
+                </h3>
+                <p className="text-sm text-text-muted mt-1">
+                  {searchInput.trim()
+                    ? t("orders.no_orders_search")
+                    : t("orders.no_orders_create")}
+                </p>
+              </div>
+            )
+          ) : (
+            <div className="relative">
+              <AnimatePresence mode="wait" initial={false}>
                 <motion.div
-                  key={order.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
-                  onClick={() => navigate(`/orders/${order.id}`)}
+                  key={pageTransitionKey}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6"
                 >
-                  <div className="relative z-10">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
-                        {order.order_id || t("orders.id_pending")}
-                      </div>
-
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenModal(order);
-                          }}
-                          className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
-                        >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOrderToDelete(order);
-                            setIsDeleteModalOpen(true);
-                          }}
-                          className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
-                        >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-
-                    <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
-                      {order.customer_name}
-                    </h3>
-                    <p className="text-sm text-text-muted mb-4">
-                      {t("orders.from")}{" "}
-                      <span className="text-text-secondary">
-                        {order.order_from || "-"}
-                      </span>
-                    </p>
-                    {order.first_product_url && (
-                      <a
-                        href={order.first_product_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-accent-blue hover:underline mb-2 block truncate"
-                        onClick={(e) => e.stopPropagation()}
+                  <AnimatePresence mode="popLayout">
+                    {orders.map((order) => (
+                      <motion.div
+                        key={order.id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
+                        onClick={() => navigate(`/orders/${order.id}`)}
                       >
-                        {t("orders.product_link")}
-                      </a>
-                    )}
+                        <div className="relative z-10">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
+                              {order.order_id || t("orders.id_pending")}
+                            </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
-                      <div>
-                        <span className="text-text-muted text-xs block">
-                          {t("orders.date")}
-                        </span>
-                        {formatDate(order.order_date)}
-                      </div>
-                      <div>
-                        <span className="text-text-muted text-xs block">
-                          {t("orders.qty")}
-                        </span>
-                        {order.total_qty || 0}
-                      </div>
-                      <div>
-                        <span className="text-text-muted text-xs block">
-                          {t("orders.total")}
-                        </span>
-                        {formatPrice(order.total_price || 0)}
-                      </div>
-                      <div>
-                        <span className="text-text-muted text-xs block">
-                          {t("orders.weight")}
-                        </span>
-                        {order.total_weight || 0} kg
-                      </div>
-                    </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenModal(order);
+                                }}
+                                className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                              >
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOrderToDelete(order);
+                                  setIsDeleteModalOpen(true);
+                                }}
+                                className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
+                              >
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
 
-                    {/* Status Indicators */}
-                    <div className="flex gap-2 text-xs">
-                      {order.arrived_date && (
-                        <span className="bg-green-500/10 text-green-500 px-2 py-0.5 rounded border border-green-500/20">
-                          {t("orders.status_arrived")}
-                        </span>
-                      )}
-                      {order.shipment_date && (
-                        <span className="bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded border border-blue-500/20">
-                          {t("orders.status_shipped")}
-                        </span>
-                      )}
-                      {!order.arrived_date && !order.shipment_date && (
-                        <span className="bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20">
-                          {t("orders.status_pending")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                          <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
+                            {order.customer_name}
+                          </h3>
+                          <p className="text-sm text-text-muted mb-4">
+                            {t("orders.from")}{" "}
+                            <span className="text-text-secondary">
+                              {order.order_from || "-"}
+                            </span>
+                          </p>
+                          {order.first_product_url && (
+                            <a
+                              href={order.first_product_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-accent-blue hover:underline mb-2 block truncate"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {t("orders.product_link")}
+                            </a>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
+                            <div>
+                              <span className="text-text-muted text-xs block">
+                                {t("orders.date")}
+                              </span>
+                              {formatDate(order.order_date)}
+                            </div>
+                            <div>
+                              <span className="text-text-muted text-xs block">
+                                {t("orders.qty")}
+                              </span>
+                              {order.total_qty || 0}
+                            </div>
+                            <div>
+                              <span className="text-text-muted text-xs block">
+                                {t("orders.total")}
+                              </span>
+                              {formatPrice(order.total_price || 0)}
+                            </div>
+                            <div>
+                              <span className="text-text-muted text-xs block">
+                                {t("orders.weight")}
+                              </span>
+                              {order.total_weight || 0} kg
+                            </div>
+                          </div>
+
+                          {/* Status Indicators */}
+                          <div className="flex gap-2 text-xs">
+                            {order.arrived_date && (
+                              <span className="bg-green-500/10 text-green-500 px-2 py-0.5 rounded border border-green-500/20">
+                                {t("orders.status_arrived")}
+                              </span>
+                            )}
+                            {order.shipment_date && (
+                              <span className="bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded border border-blue-500/20">
+                                {t("orders.status_shipped")}
+                              </span>
+                            )}
+                            {!order.arrived_date && !order.shipment_date && (
+                              <span className="bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20">
+                                {t("orders.status_pending")}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                 </motion.div>
-              ))}
-            </AnimatePresence>
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {isPageTransitioning && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 pointer-events-none rounded-xl bg-glass-white/20 backdrop-blur-[1px] flex items-center justify-center"
+                  >
+                    <div className="w-7 h-7 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+
+        {!loading && (
+          <div className="mt-4 rounded-xl border border-glass-border-light bg-glass-white-hover shadow-[0_10px_24px_rgba(0,0,0,0.2)] backdrop-blur-md p-3 md:p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm font-medium text-text-secondary">
+                {t("orders.total_results", { count: totalOrders })}
+              </p>
+              <div className="flex items-center gap-2 flex-wrap md:justify-end">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-text-secondary">
+                    {t("common.per_page")}
+                  </span>
+                  <Select
+                    className="w-28"
+                    options={pageSizeOptions.map((size) => ({
+                      value: size,
+                      label: size === "all" ? t("common.all") : String(size),
+                    }))}
+                    value={pageSize}
+                    menuPlacement="top"
+                    onChange={(value) => {
+                      const nextPageSize =
+                        value === "all" ? "all" : Number(value);
+                      if (
+                        nextPageSize !== "all" &&
+                        Number.isNaN(nextPageSize)
+                      ) {
+                        return;
+                      }
+                      setPageSize(nextPageSize);
+                      setCurrentPage(1);
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(1, prev - 1))
+                  }
+                  disabled={
+                    isPageTransitioning || currentPage <= 1 || totalPages === 0
+                  }
+                  className="btn-liquid btn-liquid-ghost px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {t("common.previous")}
+                </button>
+                <div className="flex items-center gap-1 overflow-x-auto max-w-full py-1">
+                  {displayPages.map((item, index) =>
+                    item === "..." ? (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className="px-2 text-sm font-medium text-text-muted"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={item}
+                        onClick={() =>
+                          totalPages > 0 && setCurrentPage(parseInt(item, 10))
+                        }
+                        disabled={isPageTransitioning || totalPages === 0}
+                        className={`min-w-9 px-3 py-2 text-sm rounded-lg transition-colors ${
+                          parseInt(item, 10) === currentPage && totalPages > 0
+                            ? "bg-accent-blue text-white shadow-md"
+                            : "border border-glass-border-light bg-glass-white text-text-primary hover:bg-glass-white-hover"
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                      >
+                        {item}
+                      </button>
+                    ),
+                  )}
+                </div>
+                <span className="text-sm text-text-secondary px-1">
+                  {t("orders.page_status", {
+                    page: totalPages === 0 ? 0 : currentPage,
+                    total: totalPages,
+                  })}
+                </span>
+                <button
+                  onClick={() =>
+                    setCurrentPage((prev) =>
+                      totalPages === 0 ? 1 : Math.min(totalPages, prev + 1),
+                    )
+                  }
+                  disabled={
+                    isPageTransitioning ||
+                    totalPages === 0 ||
+                    currentPage >= totalPages
+                  }
+                  className="btn-liquid btn-liquid-ghost px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {t("common.next")}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </motion.div>

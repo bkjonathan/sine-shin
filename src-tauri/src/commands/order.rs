@@ -3,8 +3,14 @@ use tauri::{AppHandle, Manager};
 use crate::db::{
     DEFAULT_ORDER_ID_PREFIX, ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
 };
-use crate::models::{DashboardStats, OrderDetail, OrderItem, OrderItemPayload, OrderWithCustomer};
+use crate::models::{
+    DashboardStats, OrderDetail, OrderItem, OrderItemPayload, OrderWithCustomer, PaginatedOrders,
+};
 use crate::state::AppDb;
+
+const DEFAULT_ORDERS_PAGE_SIZE: i64 = 5;
+const MIN_ORDERS_PAGE_SIZE: i64 = 5;
+const MAX_ORDERS_PAGE_SIZE: i64 = 100;
 
 #[tauri::command]
 pub async fn create_order(
@@ -95,6 +101,122 @@ pub async fn get_orders(app: AppHandle) -> Result<Vec<OrderWithCustomer>, String
         .map_err(|e| e.to_string())?;
 
     Ok(orders)
+}
+
+#[tauri::command]
+pub async fn get_orders_paginated(
+    app: AppHandle,
+    page: Option<i64>,
+    page_size: Option<i64>,
+    search_key: Option<String>,
+    search_term: Option<String>,
+) -> Result<PaginatedOrders, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let requested_page_size = page_size.unwrap_or(DEFAULT_ORDERS_PAGE_SIZE);
+    let no_limit = requested_page_size <= 0;
+    let page_size = if no_limit {
+        DEFAULT_ORDERS_PAGE_SIZE
+    } else {
+        requested_page_size.clamp(MIN_ORDERS_PAGE_SIZE, MAX_ORDERS_PAGE_SIZE)
+    };
+    let page = if no_limit { 1 } else { page.unwrap_or(1).max(1) };
+    let offset = if no_limit { 0 } else { (page - 1) * page_size };
+
+    let raw_search = search_term.unwrap_or_default().trim().to_string();
+    let has_search = !raw_search.is_empty();
+    let search_pattern = format!("%{}%", raw_search);
+    let search_column = match search_key.as_deref().unwrap_or("customerName") {
+        "customerName" => "c.name",
+        "orderId" => "o.order_id",
+        "customerId" => "c.customer_id",
+        "customerPhone" => "c.phone",
+        _ => return Err("Invalid search key".to_string()),
+    };
+
+    let (total, orders) = if has_search {
+        let total: i64 = sqlx::query_scalar(&format!(
+            "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE COALESCE({}, '') LIKE ?",
+            search_column
+        ))
+        .bind(&search_pattern)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let orders = if no_limit {
+            let data_query = format!(
+                "{} WHERE COALESCE({}, '') LIKE ? {} ORDER BY o.created_at DESC",
+                ORDER_WITH_CUSTOMER_SELECT, search_column, ORDER_WITH_CUSTOMER_GROUP_BY
+            );
+            sqlx::query_as::<_, OrderWithCustomer>(&data_query)
+                .bind(&search_pattern)
+                .fetch_all(&*pool)
+                .await
+                .map_err(|e| e.to_string())?
+        } else {
+            let data_query = format!(
+                "{} WHERE COALESCE({}, '') LIKE ? {} ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
+                ORDER_WITH_CUSTOMER_SELECT, search_column, ORDER_WITH_CUSTOMER_GROUP_BY
+            );
+            sqlx::query_as::<_, OrderWithCustomer>(&data_query)
+                .bind(&search_pattern)
+                .bind(page_size)
+                .bind(offset)
+                .fetch_all(&*pool)
+                .await
+                .map_err(|e| e.to_string())?
+        };
+
+        (total, orders)
+    } else {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM orders")
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let orders = if no_limit {
+            let data_query = format!(
+                "{} {} ORDER BY o.created_at DESC",
+                ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+            );
+            sqlx::query_as::<_, OrderWithCustomer>(&data_query)
+                .fetch_all(&*pool)
+                .await
+                .map_err(|e| e.to_string())?
+        } else {
+            let data_query = format!(
+                "{} {} ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
+                ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+            );
+            sqlx::query_as::<_, OrderWithCustomer>(&data_query)
+                .bind(page_size)
+                .bind(offset)
+                .fetch_all(&*pool)
+                .await
+                .map_err(|e| e.to_string())?
+        };
+
+        (total, orders)
+    };
+
+    let response_page_size = if no_limit { total.max(0) } else { page_size };
+    let total_pages = if total == 0 {
+        0
+    } else if no_limit {
+        1
+    } else {
+        (total + page_size - 1) / page_size
+    };
+
+    Ok(PaginatedOrders {
+        orders,
+        total,
+        page,
+        page_size: response_page_size,
+        total_pages,
+    })
 }
 
 #[tauri::command]

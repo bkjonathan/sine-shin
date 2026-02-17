@@ -348,10 +348,10 @@ export default function Customers() {
         className="flex items-center justify-between mb-6"
       >
         <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
+          <h1 className="text-2xl font-bold text-text-primary tracking-tight">
             {t("customers.title")}
           </h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
+          <p className="text-sm text-text-muted mt-1">
             {t("customers.manage_customers")}
           </p>
         </div>
@@ -369,7 +369,7 @@ export default function Customers() {
             className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
           >
             {isImporting ? (
-              <div className="w-4 h-4 border-2 border-[var(--color-text-secondary)] border-t-[var(--color-text-primary)] rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-text-secondary border-t-text-primary rounded-full animate-spin" />
             ) : (
               <svg
                 width="16"
@@ -511,7 +511,7 @@ export default function Customers() {
           <div className="relative flex-1">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg
-                className="h-4 w-4 text-[var(--color-text-muted)]"
+                className="h-4 w-4 text-text-muted"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -546,16 +546,16 @@ export default function Customers() {
         <div className="flex-1 overflow-y-auto pr-1">
           {loading ? (
             <div className="flex justify-center items-center py-20">
-              <div className="w-8 h-8 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
             </div>
           ) : customers.length === 0 ? (
             isPageTransitioning ? (
               <div className="flex justify-center items-center py-20">
-                <div className="w-8 h-8 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
+                <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
               </div>
             ) : (
-              <div className="text-center py-20 bg-[var(--color-glass-white)] rounded-xl border border-[var(--color-glass-border)]">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-glass-white-hover)] flex items-center justify-center text-[var(--color-text-muted)]">
+              <div className="text-center py-20 bg-glass-white rounded-xl border border-glass-border">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-glass-white-hover flex items-center justify-center text-text-muted">
                   <svg
                     width="32"
                     height="32"
@@ -572,10 +572,10 @@ export default function Customers() {
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-[var(--color-text-primary)]">
+                <h3 className="text-lg font-medium text-text-primary">
                   {t("customers.no_customers")}
                 </h3>
-                <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                <p className="text-sm text-text-muted mt-1">
                   {searchInput.trim()
                     ? t("customers.no_customers_search")
                     : t("customers.no_customers_create")}
@@ -602,33 +602,33 @@ export default function Customers() {
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
                         onClick={() => navigate(`/customers/${customer.id}`)}
-                        className="glass-panel p-5 group hover:border-[var(--color-accent-blue)]/30 transition-all duration-300 hover:shadow-lg hover:shadow-[var(--color-accent-blue)]/5 relative overflow-hidden cursor-pointer"
+                        className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
                       >
                         {/* Decorative background gradient on hover */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-accent-blue)]/0 to-[var(--color-accent-purple)]/0 group-hover:from-[var(--color-accent-blue)]/5 group-hover:to-[var(--color-accent-purple)]/5 transition-all duration-500 pointer-events-none" />
+                        <div className="absolute inset-0 bg-linear-to-br from-accent-blue/0 to-accent-purple/0 group-hover:from-accent-blue/5 group-hover:to-accent-purple/5 transition-all duration-500 pointer-events-none" />
 
                         <div className="relative z-10">
                           <div className="flex justify-between items-start mb-4">
                             <div className="flex items-start gap-3.5">
                               {/* Avatar */}
-                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--color-glass-white)] to-[var(--color-glass-white-hover)] border border-[var(--color-glass-border)] flex items-center justify-center text-[var(--color-text-primary)] font-bold text-lg shadow-sm group-hover:scale-105 transition-transform duration-300">
+                              <div className="w-12 h-12 rounded-xl bg-linear-to-br from-glass-white to-glass-white-hover border border-glass-border flex items-center justify-center text-text-primary font-bold text-lg shadow-sm group-hover:scale-105 transition-transform duration-300">
                                 {customer.name.charAt(0).toUpperCase()}
                               </div>
 
                               {/* Name & Meta */}
                               <div>
-                                <h3 className="font-semibold text-[var(--color-text-primary)] text-lg leading-tight group-hover:text-[var(--color-accent-blue)] transition-colors">
+                                <h3 className="font-semibold text-text-primary text-lg leading-tight group-hover:text-accent-blue transition-colors">
                                   {customer.name}
                                 </h3>
 
                                 <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                   {customer.customer_id && (
-                                    <span className="text-[10px] font-mono text-[var(--color-text-secondary)] bg-[var(--color-glass-white-hover)] px-2 py-0.5 rounded border border-[var(--color-glass-border)] opacity-80 group-hover:opacity-100 transition-opacity">
+                                    <span className="text-[10px] font-mono text-text-secondary bg-glass-white-hover px-2 py-0.5 rounded border border-glass-border opacity-80 group-hover:opacity-100 transition-opacity">
                                       {customer.customer_id}
                                     </span>
                                   )}
                                   {customer.platform && (
-                                    <span className="text-[10px] font-medium text-[var(--color-text-muted)] bg-[var(--color-glass-white)] px-2 py-0.5 rounded-full border border-[var(--color-glass-border)]">
+                                    <span className="text-[10px] font-medium text-text-muted bg-glass-white px-2 py-0.5 rounded-full border border-glass-border">
                                       {customer.platform}
                                     </span>
                                   )}
@@ -643,7 +643,7 @@ export default function Customers() {
                                   e.stopPropagation();
                                   handleOpenModal(customer);
                                 }}
-                                className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-accent-blue)] hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors"
+                                className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
                                 title="Edit"
                               >
                                 <svg
@@ -666,7 +666,7 @@ export default function Customers() {
                                   setCustomerToDelete(customer);
                                   setIsDeleteModalOpen(true);
                                 }}
-                                className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-red-500/10 rounded-lg transition-colors"
+                                className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
                                 title="Delete"
                               >
                                 <svg
@@ -687,13 +687,13 @@ export default function Customers() {
                           </div>
 
                           {/* Divider */}
-                          <div className="h-px w-full bg-gradient-to-r from-transparent via-[var(--color-glass-border)] to-transparent mb-3 opacity-50" />
+                          <div className="h-px w-full bg-linear-to-r from-transparent via-glass-border to-transparent mb-3 opacity-50" />
 
                           {/* Contact Info */}
                           <div className="space-y-2.5">
                             {customer.phone ? (
                               <div className="flex items-center gap-2.5 text-sm group/phone">
-                                <div className="p-1.5 rounded-md bg-[var(--color-glass-white)] text-[var(--color-text-muted)] group-hover/phone:text-[var(--color-accent-blue)] transition-colors">
+                                <div className="p-1.5 rounded-md bg-glass-white text-text-muted group-hover/phone:text-accent-blue transition-colors">
                                   <svg
                                     className="w-3.5 h-3.5"
                                     viewBox="0 0 24 24"
@@ -706,13 +706,13 @@ export default function Customers() {
                                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                                   </svg>
                                 </div>
-                                <span className="text-[var(--color-text-secondary)] font-medium">
+                                <span className="text-text-secondary font-medium">
                                   {customer.phone}
                                 </span>
                               </div>
                             ) : (
                               <div className="flex items-center gap-2.5 text-sm opacity-40">
-                                <div className="p-1.5 rounded-md bg-[var(--color-glass-white)] text-[var(--color-text-muted)]">
+                                <div className="p-1.5 rounded-md bg-glass-white text-text-muted">
                                   <svg
                                     className="w-3.5 h-3.5"
                                     viewBox="0 0 24 24"
@@ -725,7 +725,7 @@ export default function Customers() {
                                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                                   </svg>
                                 </div>
-                                <span className="text-[var(--color-text-muted)] italic">
+                                <span className="text-text-muted italic">
                                   {t("customers.no_phone")}
                                 </span>
                               </div>
@@ -733,7 +733,7 @@ export default function Customers() {
 
                             {customer.address || customer.city ? (
                               <div className="flex items-start gap-2.5 text-sm group/addr">
-                                <div className="p-1.5 mt-0.5 rounded-md bg-[var(--color-glass-white)] text-[var(--color-text-muted)] group-hover/addr:text-[var(--color-accent-purple)] transition-colors shrink-0">
+                                <div className="p-1.5 mt-0.5 rounded-md bg-glass-white text-text-muted group-hover/addr:text-accent-purple transition-colors shrink-0">
                                   <svg
                                     className="w-3.5 h-3.5"
                                     viewBox="0 0 24 24"
@@ -747,7 +747,7 @@ export default function Customers() {
                                     <circle cx="12" cy="10" r="3" />
                                   </svg>
                                 </div>
-                                <span className="text-[var(--color-text-secondary)] line-clamp-2 leading-snug">
+                                <span className="text-text-secondary line-clamp-2 leading-snug">
                                   {[customer.address, customer.city]
                                     .filter(Boolean)
                                     .join(", ")}
@@ -755,7 +755,7 @@ export default function Customers() {
                               </div>
                             ) : (
                               <div className="flex items-center gap-2.5 text-sm opacity-40">
-                                <div className="p-1.5 rounded-md bg-[var(--color-glass-white)] text-[var(--color-text-muted)]">
+                                <div className="p-1.5 rounded-md bg-glass-white text-text-muted">
                                   <svg
                                     className="w-3.5 h-3.5"
                                     viewBox="0 0 24 24"
@@ -769,7 +769,7 @@ export default function Customers() {
                                     <circle cx="12" cy="10" r="3" />
                                   </svg>
                                 </div>
-                                <span className="text-[var(--color-text-muted)] italic">
+                                <span className="text-text-muted italic">
                                   {t("customers.no_address")}
                                 </span>
                               </div>
@@ -781,7 +781,7 @@ export default function Customers() {
                                   href={customer.social_media_url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-xs text-[var(--color-accent-blue)] hover:text-[var(--color-accent-cyan)] font-medium transition-colors bg-[var(--color-accent-blue)]/5 hover:bg-[var(--color-accent-blue)]/10 px-2.5 py-1.5 rounded-md w-full justify-center group/link"
+                                  className="inline-flex items-center gap-1.5 text-xs text-accent-blue hover:text-accent-cyan font-medium transition-colors bg-accent-blue/5 hover:bg-accent-blue/10 px-2.5 py-1.5 rounded-md w-full justify-center group/link"
                                 >
                                   <svg
                                     className="w-3.5 h-3.5 transition-transform group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5"
@@ -813,9 +813,9 @@ export default function Customers() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="absolute inset-0 pointer-events-none rounded-xl bg-[var(--color-glass-white)]/20 backdrop-blur-[1px] flex items-center justify-center"
+                    className="absolute inset-0 pointer-events-none rounded-xl bg-glass-white/20 backdrop-blur-[1px] flex items-center justify-center"
                   >
-                    <div className="w-7 h-7 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
+                    <div className="w-7 h-7 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -824,14 +824,14 @@ export default function Customers() {
         </div>
 
         {!loading && (
-          <div className="mt-4 rounded-xl border border-[var(--color-glass-border-light)] bg-[var(--color-glass-white-hover)] shadow-[0_10px_24px_rgba(0,0,0,0.2)] backdrop-blur-md p-3 md:p-4">
+          <div className="mt-4 rounded-xl border border-glass-border-light bg-glass-white-hover shadow-[0_10px_24px_rgba(0,0,0,0.2)] backdrop-blur-md p-3 md:p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <p className="text-sm font-medium text-[var(--color-text-secondary)]">
+              <p className="text-sm font-medium text-text-secondary">
                 {t("customers.total_results", { count: totalCustomers })}
               </p>
               <div className="flex items-center gap-2 flex-wrap md:justify-end">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-[var(--color-text-secondary)]">
+                  <span className="text-sm text-text-secondary">
                     {t("common.per_page")}
                   </span>
                   <Select
@@ -845,7 +845,10 @@ export default function Customers() {
                     onChange={(value) => {
                       const nextPageSize =
                         value === "all" ? "all" : Number(value);
-                      if (nextPageSize !== "all" && Number.isNaN(nextPageSize)) {
+                      if (
+                        nextPageSize !== "all" &&
+                        Number.isNaN(nextPageSize)
+                      ) {
                         return;
                       }
                       setPageSize(nextPageSize);
@@ -869,7 +872,7 @@ export default function Customers() {
                     item === "..." ? (
                       <span
                         key={`ellipsis-${index}`}
-                        className="px-2 text-sm font-medium text-[var(--color-text-muted)]"
+                        className="px-2 text-sm font-medium text-text-muted"
                       >
                         ...
                       </span>
@@ -880,10 +883,10 @@ export default function Customers() {
                           totalPages > 0 && setCurrentPage(parseInt(item, 10))
                         }
                         disabled={isPageTransitioning || totalPages === 0}
-                        className={`min-w-[2.25rem] px-3 py-2 text-sm rounded-lg transition-colors ${
+                        className={`min-w-9 px-3 py-2 text-sm rounded-lg transition-colors ${
                           parseInt(item, 10) === currentPage && totalPages > 0
-                            ? "bg-[var(--color-accent-blue)] text-white shadow-md"
-                            : "border border-[var(--color-glass-border-light)] bg-[var(--color-glass-white)] text-[var(--color-text-primary)] hover:bg-[var(--color-glass-white-hover)]"
+                            ? "bg-accent-blue text-white shadow-md"
+                            : "border border-glass-border-light bg-glass-white text-text-primary hover:bg-glass-white-hover"
                         } disabled:cursor-not-allowed disabled:opacity-50`}
                       >
                         {item}
@@ -891,7 +894,7 @@ export default function Customers() {
                     ),
                   )}
                 </div>
-                <span className="text-sm text-[var(--color-text-secondary)] px-1">
+                <span className="text-sm text-text-secondary px-1">
                   {t("customers.page_status", {
                     page: totalPages === 0 ? 0 : currentPage,
                     total: totalPages,
@@ -934,17 +937,17 @@ export default function Customers() {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="relative w-full max-w-lg glass-panel p-6 shadow-2xl border border-[var(--color-glass-border)]"
+              className="relative w-full max-w-lg glass-panel p-6 shadow-2xl border border-glass-border"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
+                <h2 className="text-xl font-bold text-text-primary">
                   {editingCustomer
                     ? t("customers.modal.title_edit")
                     : t("customers.modal.title_add")}
                 </h2>
                 <button
                   onClick={handleCloseModal}
-                  className="p-2 hover:bg-[var(--color-glass-white-hover)] rounded-full transition-colors"
+                  className="p-2 hover:bg-glass-white-hover rounded-full transition-colors"
                 >
                   <svg
                     width="20"
@@ -965,7 +968,7 @@ export default function Customers() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.name")}{" "}
                       <span className="text-red-500">*</span>
                     </label>
@@ -981,7 +984,7 @@ export default function Customers() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.phone")}
                     </label>
                     <input
@@ -995,7 +998,7 @@ export default function Customers() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.platform")}
                     </label>
                     <div className="relative z-20">
@@ -1029,7 +1032,7 @@ export default function Customers() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.city")}
                     </label>
                     <input
@@ -1043,7 +1046,7 @@ export default function Customers() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.social_url")}
                     </label>
                     <input
@@ -1060,7 +1063,7 @@ export default function Customers() {
                     />
                   </div>
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.address")}
                     </label>
                     <textarea
@@ -1117,7 +1120,7 @@ export default function Customers() {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-[var(--color-glass-border)]"
+              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-glass-border"
             >
               <div className="flex flex-col items-center text-center">
                 <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
@@ -1132,15 +1135,15 @@ export default function Customers() {
                     strokeLinejoin="round"
                   >
                     <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path>
                   </svg>
                 </div>
-                <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
+                <h3 className="text-lg font-bold text-text-primary mb-2">
                   {t("customers.delete_modal.title")}
                 </h3>
-                <p className="text-sm text-[var(--color-text-muted)] mb-6">
+                <p className="text-sm text-text-muted mb-6">
                   {t("customers.delete_modal.message_part1")}
-                  <span className="font-semibold text-[var(--color-text-primary)]">
+                  <span className="font-semibold text-text-primary">
                     {customerToDelete?.name}
                   </span>
                   {t("customers.delete_modal.message_part2")}

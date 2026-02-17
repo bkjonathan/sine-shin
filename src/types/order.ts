@@ -45,3 +45,11 @@ export interface OrderDetail {
   order: OrderWithCustomer;
   items: OrderItem[];
 }
+
+export interface PaginatedOrders {
+  orders: OrderWithCustomer[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}

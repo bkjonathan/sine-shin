@@ -575,7 +575,7 @@ export default function OrderDetail() {
         {/* Header */}
         <motion.div
           variants={itemVariants}
-          className="flex items-center justify-between gap-4"
+          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex items-center gap-4">
             <button
@@ -607,58 +607,62 @@ export default function OrderDetail() {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleDownloadInvoice}
-            disabled={downloading}
-            className="btn-liquid btn-liquid-primary flex items-center gap-2"
-          >
-            {downloading ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-            )}
-            {downloading
-              ? t("orders.invoice.generating")
-              : t("orders.invoice.download")}
-          </button>
-          <button
-            onClick={handlePrintInvoice}
-            disabled={printing}
-            className="btn-liquid btn-liquid-secondary flex items-center gap-2"
-          >
-            {printing ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                <rect x="6" y="14" width="12" height="8"></rect>
-              </svg>
-            )}
-            {printing ? t("orders.invoice.generating") : t("orders.invoice.print")}
-          </button>
+          <div className="flex items-center gap-3 sm:justify-end">
+            <button
+              onClick={handleDownloadInvoice}
+              disabled={downloading}
+              className="btn-liquid btn-liquid-primary flex items-center gap-2"
+            >
+              {downloading ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              )}
+              {downloading
+                ? t("orders.invoice.generating")
+                : t("orders.invoice.download")}
+            </button>
+            <button
+              onClick={handlePrintInvoice}
+              disabled={printing}
+              className="btn-liquid btn-liquid-secondary flex items-center gap-2"
+            >
+              {printing ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+              )}
+              {printing
+                ? t("orders.invoice.generating")
+                : t("orders.invoice.print")}
+            </button>
+          </div>
         </motion.div>
 
         {/* Hidden Invoice Layout for Capture */}

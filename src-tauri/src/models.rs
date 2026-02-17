@@ -43,6 +43,15 @@ pub struct PaginatedCustomers {
     pub total_pages: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedOrders {
+    pub orders: Vec<OrderWithCustomer>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
+    pub total_pages: i64,
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Order {
     pub id: i64,

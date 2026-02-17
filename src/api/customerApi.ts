@@ -4,7 +4,7 @@ import { Customer } from "../types/customer";
 export const CUSTOMER_PAGE_SIZE_LIMITS = {
   min: 5,
   max: 100,
-  default: 5,
+  default: 10,
 } as const;
 
 const normalizePageSize = (pageSize?: number | "all"): number => {
