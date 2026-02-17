@@ -145,6 +145,8 @@ pub async fn get_orders_paginated(
     page_size: Option<i64>,
     search_key: Option<String>,
     search_term: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
 ) -> Result<PaginatedOrders, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -170,6 +172,24 @@ pub async fn get_orders_paginated(
         _ => return Err("Invalid search key".to_string()),
     };
 
+    let sort_column = match sort_by.as_deref().unwrap_or("order_id") {
+        "customer_name" => "c.name",
+        "order_id" => "o.id", // Sort by internal ID usually correlates with order_id but is better for sorting (numbers vs strings if order_id has prefix) - actually order_id column might be string, but let's stick to o.id for 'created' order or o.order_id if the user explicitly wants that string sort. Let's use o.id for "Order ID" as it's cleaner for "newest/oldest", or o.order_id if they want string sort. Given the implementation plan said "Order ID", let's use o.id as proxy for creation order/ID order. Actually let's check what I did for Customer.
+        // For customer I used customer_id.
+        // Let's use o.id for reliable sorting
+        "created_at" => "o.created_at",
+        "date" => "o.order_date", 
+        _ => "o.id",
+    };
+
+    let sort_direction = match sort_order.as_deref().unwrap_or("desc") {
+        "asc" => "ASC",
+        "desc" => "DESC",
+        _ => "DESC",
+    };
+
+    let order_clause = format!("ORDER BY {} {}", sort_column, sort_direction);
+
     let (total, orders) = if has_search {
         let total: i64 = sqlx::query_scalar(&format!(
             "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE COALESCE({}, '') LIKE ?",
@@ -182,8 +202,8 @@ pub async fn get_orders_paginated(
 
         let orders = if no_limit {
             let data_query = format!(
-                "{} WHERE COALESCE({}, '') LIKE ? {} ORDER BY o.created_at DESC",
-                ORDER_WITH_CUSTOMER_SELECT, search_column, ORDER_WITH_CUSTOMER_GROUP_BY
+                "{} WHERE COALESCE({}, '') LIKE ? {} {}",
+                ORDER_WITH_CUSTOMER_SELECT, search_column, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
             );
             sqlx::query_as::<_, OrderWithCustomer>(&data_query)
                 .bind(&search_pattern)
@@ -192,8 +212,8 @@ pub async fn get_orders_paginated(
                 .map_err(|e| e.to_string())?
         } else {
             let data_query = format!(
-                "{} WHERE COALESCE({}, '') LIKE ? {} ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
-                ORDER_WITH_CUSTOMER_SELECT, search_column, ORDER_WITH_CUSTOMER_GROUP_BY
+                "{} WHERE COALESCE({}, '') LIKE ? {} {} LIMIT ? OFFSET ?",
+                ORDER_WITH_CUSTOMER_SELECT, search_column, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
             );
             sqlx::query_as::<_, OrderWithCustomer>(&data_query)
                 .bind(&search_pattern)
@@ -213,8 +233,8 @@ pub async fn get_orders_paginated(
 
         let orders = if no_limit {
             let data_query = format!(
-                "{} {} ORDER BY o.created_at DESC",
-                ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+                "{} {} {}",
+                ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
             );
             sqlx::query_as::<_, OrderWithCustomer>(&data_query)
                 .fetch_all(&*pool)
@@ -222,8 +242,8 @@ pub async fn get_orders_paginated(
                 .map_err(|e| e.to_string())?
         } else {
             let data_query = format!(
-                "{} {} ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
-                ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+                "{} {} {} LIMIT ? OFFSET ?",
+                ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
             );
             sqlx::query_as::<_, OrderWithCustomer>(&data_query)
                 .bind(page_size)

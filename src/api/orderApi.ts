@@ -39,6 +39,8 @@ export interface OrderSearchParams {
   pageSize?: number | "all";
   searchKey?: "customerName" | "orderId" | "customerId" | "customerPhone";
   searchTerm?: string;
+  sortBy?: "customer_name" | "order_id" | "created_at";
+  sortOrder?: "asc" | "desc";
 }
 
 export const getOrdersPaginated = async (
@@ -49,6 +51,8 @@ export const getOrdersPaginated = async (
     pageSize: normalizePageSize(params.pageSize),
     searchKey: params.searchKey,
     searchTerm: params.searchTerm,
+    sortBy: params.sortBy,
+    sortOrder: params.sortOrder,
   });
 };
 

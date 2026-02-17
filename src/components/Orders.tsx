@@ -145,9 +145,14 @@ export default function Orders() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
+  const [sortBy, setSortBy] = useState<
+    "customer_name" | "order_id" | "created_at"
+  >("order_id");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc"); // Default to desc for orders
+
   useEffect(() => {
     fetchOrders(currentPage);
-  }, [currentPage, pageSize, searchKey, searchTerm]);
+  }, [currentPage, pageSize, searchKey, searchTerm, sortBy, sortOrder]);
 
   const fetchOrders = async (page: number) => {
     const fetchId = ++latestFetchIdRef.current;
@@ -165,6 +170,8 @@ export default function Orders() {
         pageSize,
         searchKey,
         searchTerm,
+        sortBy,
+        sortOrder,
       });
 
       if (fetchId !== latestFetchIdRef.current) {
@@ -577,67 +584,131 @@ export default function Orders() {
           </button>
         </div>
       </motion.div>
-
       {/* ── Search Bar ── */}
       <motion.div variants={fadeVariants} className="mb-6">
-        <div className="flex flex-col md:flex-row gap-3 max-w-2xl">
-          <div className="w-full md:w-56">
-            <Select
-              options={[
-                {
-                  value: "customerName",
-                  label: t("orders.search_key_customer_name"),
-                },
-                { value: "orderId", label: t("orders.search_key_order_id") },
-                {
-                  value: "customerId",
-                  label: t("orders.search_key_customer_id"),
-                },
-                {
-                  value: "customerPhone",
-                  label: t("orders.search_key_customer_phone"),
-                },
-              ]}
-              value={searchKey}
-              onChange={(value) => {
-                setSearchKey(
-                  value as
-                    | "customerName"
-                    | "orderId"
-                    | "customerId"
-                    | "customerPhone",
-                );
-                setCurrentPage(1);
-              }}
-              placeholder={t("orders.search_by")}
-            />
+        <div className="flex flex-col lg:flex-row gap-3">
+          <div className="flex flex-col md:flex-row gap-3 flex-1">
+            <div className="w-full md:w-48">
+              <Select
+                options={[
+                  {
+                    value: "customerName",
+                    label: t("orders.search_key_customer_name"),
+                  },
+                  { value: "orderId", label: t("orders.search_key_order_id") },
+                  {
+                    value: "customerId",
+                    label: t("orders.search_key_customer_id"),
+                  },
+                  {
+                    value: "customerPhone",
+                    label: t("orders.search_key_customer_phone"),
+                  },
+                ]}
+                value={searchKey}
+                onChange={(value) => {
+                  setSearchKey(
+                    value as
+                      | "customerName"
+                      | "orderId"
+                      | "customerId"
+                      | "customerPhone",
+                  );
+                  setCurrentPage(1);
+                }}
+                placeholder={t("orders.search_by")}
+              />
+            </div>
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg
+                  className="h-4 w-4 text-text-muted"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+              </div>
+              <input
+                type="text"
+                className="input-liquid pl-10 w-full"
+                placeholder={t("orders.search_placeholder")}
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
           </div>
-          <div className="relative flex-1">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg
-                className="h-4 w-4 text-text-muted"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
+
+          {/* Sorting Controls */}
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="w-full md:w-48">
+              <Select
+                options={[
+                  { value: "order_id", label: "Sort by ID" }, // TODO: Add translation if needed or use static
+                  { value: "customer_name", label: "Sort by Name" },
+                  { value: "created_at", label: "Sort by Date" },
+                ]}
+                value={sortBy}
+                onChange={(value) => {
+                  setSortBy(
+                    value as "customer_name" | "order_id" | "created_at",
+                  );
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+            <button
+              onClick={() =>
+                setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+              }
+              className="p-2.5 rounded-lg bg-glass-white border border-glass-border hover:bg-glass-white-hover transition-colors text-text-secondary shrink-0"
+              title={sortOrder === "asc" ? "Ascending" : "Descending"}
+            >
+              {sortOrder === "asc" ? (
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
-            <input
-              type="text"
-              className="input-liquid pl-10 w-full"
-              placeholder={t("orders.search_placeholder")}
-              value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
+                >
+                  <path d="m3 9 4-5 4 5" />
+                  <path d="M7 4v16" />
+                  <path d="M12 12h4" />
+                  <path d="M12 16h7" />
+                  <path d="M12 20h10" />
+                </svg>
+              ) : (
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m3 16 4 5 4-5" />
+                  <path d="M7 21V5" />
+                  <path d="M12 5h10" />
+                  <path d="M12 9h7" />
+                  <path d="M12 13h4" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
       </motion.div>
@@ -1476,10 +1547,10 @@ export default function Orders() {
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                   </svg>
                 </div>
-                <h3 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
+                <h3 className="text-lg font-bold text-text-primary mb-2">
                   {t("orders.delete_modal.title")}
                 </h3>
-                <p className="text-sm text-[var(--color-text-muted)] mb-6">
+                <p className="text-sm text-text-muted mb-6">
                   {t("orders.delete_modal.message")}
                 </p>
                 <div className="flex gap-3 w-full">

@@ -79,6 +79,10 @@ export default function Customers() {
   );
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "customer_id" | "created_at">(
+    "customer_id",
+  );
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const { playSound } = useSound();
   const { t } = useTranslation();
 
@@ -120,7 +124,7 @@ export default function Customers() {
 
   useEffect(() => {
     fetchCustomers(currentPage);
-  }, [currentPage, pageSize, searchKey, searchTerm]);
+  }, [currentPage, pageSize, searchKey, searchTerm, sortBy, sortOrder]);
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -250,6 +254,8 @@ export default function Customers() {
         pageSize,
         searchKey,
         searchTerm,
+        sortBy,
+        sortOrder,
       });
 
       if (fetchId !== latestFetchIdRef.current) {
@@ -514,9 +520,11 @@ export default function Customers() {
         </div>
       </motion.div>
 
-      {/* ── Search Bar ── */}
-      <motion.div variants={fadeVariants} className="mb-6">
-        <div className="flex flex-col md:flex-row gap-3 max-w-2xl">
+      <motion.div
+        variants={fadeVariants}
+        className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-end md:items-center"
+      >
+        <div className="flex flex-col md:flex-row gap-3 max-w-2xl flex-1">
           <div className="w-full md:w-56">
             <Select
               options={[
@@ -562,6 +570,67 @@ export default function Customers() {
               }}
             />
           </div>
+        </div>
+
+        {/* Sorting Controls */}
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="w-48">
+            <Select
+              options={[
+                { value: "customer_id", label: "Sort by ID" },
+                { value: "name", label: "Sort by Name" },
+                { value: "created_at", label: "Sort by Date" },
+              ]}
+              value={sortBy}
+              onChange={(value) => {
+                setSortBy(value as "name" | "customer_id" | "created_at");
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+          <button
+            onClick={() =>
+              setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+            }
+            className="p-2.5 rounded-lg bg-glass-white border border-glass-border hover:bg-glass-white-hover transition-colors text-text-secondary"
+            title={sortOrder === "asc" ? "Ascending" : "Descending"}
+          >
+            {sortOrder === "asc" ? (
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m3 9 4-5 4 5" />
+                <path d="M7 4v16" />
+                <path d="M12 12h4" />
+                <path d="M12 16h7" />
+                <path d="M12 20h10" />
+              </svg>
+            ) : (
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m3 16 4 5 4-5" />
+                <path d="M7 21V5" />
+                <path d="M12 5h10" />
+                <path d="M12 9h7" />
+                <path d="M12 13h4" />
+              </svg>
+            )}
+          </button>
         </div>
       </motion.div>
 

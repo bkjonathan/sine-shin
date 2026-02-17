@@ -110,6 +110,8 @@ pub async fn get_customers_paginated(
     page_size: Option<i64>,
     search_key: Option<String>,
     search_term: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
 ) -> Result<PaginatedCustomers, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -134,6 +136,21 @@ pub async fn get_customers_paginated(
         "phone" => "phone",
         _ => return Err("Invalid search key".to_string()),
     };
+    
+    let sort_column = match sort_by.as_deref().unwrap_or("customer_id") {
+        "name" => "name",
+        "customer_id" => "customer_id",
+        "created_at" => "created_at",
+        _ => "customer_id", // Default fallback should be safe
+    };
+
+    let sort_direction = match sort_order.as_deref().unwrap_or("desc") {
+        "asc" => "ASC",
+        "desc" => "DESC",
+        _ => "DESC",
+    };
+
+    let order_clause = format!("ORDER BY {} {}", sort_column, sort_direction);
 
     let (total, customers) = if has_search {
         let count_query = format!(
@@ -148,8 +165,8 @@ pub async fn get_customers_paginated(
 
         let customers = if no_limit {
             let data_query = format!(
-                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? ORDER BY created_at DESC",
-                search_column
+                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {}",
+                search_column, order_clause
             );
             sqlx::query_as::<_, Customer>(&data_query)
                 .bind(&search_pattern)
@@ -158,8 +175,8 @@ pub async fn get_customers_paginated(
                 .map_err(|e| e.to_string())?
         } else {
             let data_query = format!(
-                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                search_column
+                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {} LIMIT ? OFFSET ?",
+                search_column, order_clause
             );
             sqlx::query_as::<_, Customer>(&data_query)
                 .bind(&search_pattern)
@@ -178,19 +195,19 @@ pub async fn get_customers_paginated(
             .map_err(|e| e.to_string())?;
 
         let customers = if no_limit {
-            sqlx::query_as::<_, Customer>("SELECT * FROM customers ORDER BY created_at DESC")
+            let data_query = format!("SELECT * FROM customers {}", order_clause);
+            sqlx::query_as::<_, Customer>(&data_query)
                 .fetch_all(&*pool)
                 .await
                 .map_err(|e| e.to_string())?
         } else {
-            sqlx::query_as::<_, Customer>(
-                "SELECT * FROM customers ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            )
-            .bind(page_size)
-            .bind(offset)
-            .fetch_all(&*pool)
-            .await
-            .map_err(|e| e.to_string())?
+            let data_query = format!("SELECT * FROM customers {} LIMIT ? OFFSET ?", order_clause);
+            sqlx::query_as::<_, Customer>(&data_query)
+                .bind(page_size)
+                .bind(offset)
+                .fetch_all(&*pool)
+                .await
+                .map_err(|e| e.to_string())?
         };
 
         (total, customers)

@@ -32,6 +32,8 @@ export interface CustomerSearchParams {
   pageSize?: number | "all";
   searchKey?: "name" | "customerId" | "phone";
   searchTerm?: string;
+  sortBy?: "name" | "customer_id" | "created_at";
+  sortOrder?: "asc" | "desc";
 }
 
 export interface PaginatedCustomers {
@@ -40,6 +42,7 @@ export interface PaginatedCustomers {
   page: number;
   page_size: number;
   total_pages: number;
+  // ... other fields if any
 }
 
 export const getCustomersPaginated = async (
@@ -50,6 +53,8 @@ export const getCustomersPaginated = async (
     pageSize: normalizePageSize(params.pageSize),
     searchKey: params.searchKey,
     searchTerm: params.searchTerm,
+    sortBy: params.sortBy,
+    sortOrder: params.sortOrder,
   });
 };
 
