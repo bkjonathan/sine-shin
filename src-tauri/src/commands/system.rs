@@ -143,3 +143,31 @@ pub async fn get_db_status(app: AppHandle) -> Result<DbStatus, String> {
         size_bytes,
     })
 }
+
+#[tauri::command]
+pub async fn truncate_business_data(app: AppHandle) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // Execute in a transaction to ensure all or nothing
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    sqlx::query("DELETE FROM order_items")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    sqlx::query("DELETE FROM orders")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    sqlx::query("DELETE FROM customers")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
+}

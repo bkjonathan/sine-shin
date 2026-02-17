@@ -460,6 +460,8 @@ function DataSettings() {
   const [resetting, setResetting] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [showTruncateConfirm, setShowTruncateConfirm] = useState(false);
+  const [truncating, setTruncating] = useState(false);
   const { playSound } = useSound();
   const { t } = useTranslation();
 
@@ -554,6 +556,28 @@ function DataSettings() {
       );
       playSound("error");
       setRestoring(false);
+    }
+  };
+
+  const handleTruncate = async () => {
+    if (code !== "EXPLEMENT") {
+      setError(t("settings.data_mgmt.error_code"));
+      playSound("error");
+      return;
+    }
+
+    try {
+      setTruncating(true);
+      await invoke("truncate_business_data");
+      playSound("success");
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to truncate data:", err);
+      setError(
+        t("settings.data_mgmt.error_truncate", "Failed to truncate data"),
+      );
+      playSound("error");
+      setTruncating(false);
     }
   };
 
@@ -679,6 +703,52 @@ function DataSettings() {
             </div>
           </div>
         </div>
+
+        <div className="p-4 rounded-xl border border-orange-500/20 bg-orange-500/5">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-orange-500/10 text-orange-500">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-orange-500 mb-1">
+                {t(
+                  "settings.data_mgmt.truncate_zone",
+                  "Truncate Business Data",
+                )}
+              </h3>
+              <p className="text-xs text-text-muted mb-4">
+                {t(
+                  "settings.data_mgmt.truncate_warning",
+                  "This will delete all orders and customers but keep your settings and account.",
+                )}
+              </p>
+              <button
+                onClick={() => {
+                  setShowTruncateConfirm(true);
+                  playSound("click");
+                }}
+                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors shadow-lg shadow-orange-500/20"
+              >
+                {t("settings.data_mgmt.truncate_btn", "Truncate Data")}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Confirmation Modal */}
@@ -766,6 +836,106 @@ function DataSettings() {
                     {resetting
                       ? t("settings.data_mgmt.resetting")
                       : t("settings.data_mgmt.confirm_reset")}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Truncate Confirmation Modal */}
+        {showTruncateConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTruncateConfirm(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-glass-border"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center mb-4">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 9v2m0 4h.01" />
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  </svg>
+                </div>
+
+                <h3 className="text-lg font-bold text-text-primary mb-2">
+                  {t(
+                    "settings.data_mgmt.truncate_modal_title",
+                    "Truncate Business Data",
+                  )}
+                </h3>
+                <p className="text-sm text-text-muted mb-6">
+                  {t(
+                    "settings.data_mgmt.truncate_modal_message",
+                    "This action cannot be undone. To confirm, type ",
+                  )}
+                  <span className="font-mono font-bold text-text-primary mx-1">
+                    EXPLEMENT
+                  </span>
+                  {t("settings.data_mgmt.modal_message_part2")}
+                </p>
+
+                <div className="w-full mb-4">
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => {
+                      setCode(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder={t("settings.data_mgmt.enter_code")}
+                    className="input-liquid text-center tracking-widest font-mono"
+                    autoFocus
+                  />
+                  {error && (
+                    <p className="text-xs text-red-500 mt-2">{error}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={() => {
+                      setShowTruncateConfirm(false);
+                      setCode("");
+                      setError(null);
+                    }}
+                    disabled={truncating}
+                    className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
+                  >
+                    {t("settings.data_mgmt.cancel")}
+                  </button>
+                  <button
+                    onClick={handleTruncate}
+                    disabled={truncating}
+                    className="flex-1 btn-liquid bg-orange-500 hover:bg-orange-600 text-white py-2.5 text-sm flex items-center justify-center gap-2"
+                  >
+                    {truncating && (
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    )}
+                    {truncating
+                      ? t("settings.data_mgmt.truncating", "Truncating...")
+                      : t(
+                          "settings.data_mgmt.confirm_truncate",
+                          "Truncate Data",
+                        )}
                   </button>
                 </div>
               </div>
