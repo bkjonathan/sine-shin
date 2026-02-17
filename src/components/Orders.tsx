@@ -45,6 +45,11 @@ const ORDER_STATUS_OPTIONS: Array<{ value: OrderStatus; labelKey: string }> = [
   { value: "cancelled", labelKey: "orders.status_cancelled" },
 ];
 
+const ORDER_STATUS_FILTER_OPTIONS: Array<{
+  value: OrderStatus | "all";
+  labelKey: string;
+}> = [{ value: "all", labelKey: "common.all" }, ...ORDER_STATUS_OPTIONS];
+
 const getOrderStatusDisplay = (status?: OrderStatus): {
   labelKey: string;
   className: string;
@@ -132,6 +137,7 @@ export default function Orders() {
   >("customerName");
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const { playSound } = useSound();
   const { t } = useTranslation();
   const { formatPrice } = useAppSettings();
@@ -200,7 +206,7 @@ export default function Orders() {
 
   useEffect(() => {
     fetchOrders(currentPage);
-  }, [currentPage, pageSize, searchKey, searchTerm, sortBy, sortOrder]);
+  }, [currentPage, pageSize, searchKey, searchTerm, statusFilter, sortBy, sortOrder]);
 
   const fetchOrders = async (page: number) => {
     const fetchId = ++latestFetchIdRef.current;
@@ -218,6 +224,7 @@ export default function Orders() {
         pageSize,
         searchKey,
         searchTerm,
+        statusFilter,
         sortBy,
         sortOrder,
       });
@@ -763,6 +770,36 @@ export default function Orders() {
             </button>
           </div>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {ORDER_STATUS_FILTER_OPTIONS.map((option) => {
+            const isActive = statusFilter === option.value;
+            const statusDisplay =
+              option.value === "all" ? null : getOrderStatusDisplay(option.value);
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  if (statusFilter === option.value) {
+                    return;
+                  }
+                  setStatusFilter(option.value);
+                  setCurrentPage(1);
+                }}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  isActive
+                    ? option.value === "all"
+                      ? "bg-accent-blue text-white border-accent-blue shadow-md shadow-accent-blue/20"
+                      : `${statusDisplay?.className} shadow-md`
+                    : "bg-glass-white text-text-secondary border-glass-border hover:bg-glass-white-hover hover:text-text-primary"
+                }`}
+              >
+                {t(option.labelKey)}
+              </button>
+            );
+          })}
+        </div>
       </motion.div>
 
       {/* ── Order List ── */}
@@ -802,7 +839,7 @@ export default function Orders() {
                   {t("orders.no_orders")}
                 </h3>
                 <p className="text-sm text-text-muted mt-1">
-                  {searchInput.trim()
+                  {searchInput.trim() || statusFilter !== "all"
                     ? t("orders.no_orders_search")
                     : t("orders.no_orders_create")}
                 </p>

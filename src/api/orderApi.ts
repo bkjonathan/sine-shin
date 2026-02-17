@@ -6,6 +6,7 @@ import {
   OrderItemPayload,
   PaginatedOrders,
   OrderExportRow,
+  OrderStatus,
 } from "../types/order";
 
 export const ORDER_PAGE_SIZE_LIMITS = {
@@ -39,6 +40,7 @@ export interface OrderSearchParams {
   pageSize?: number | "all";
   searchKey?: "customerName" | "orderId" | "customerId" | "customerPhone";
   searchTerm?: string;
+  statusFilter?: OrderStatus | "all";
   sortBy?: "customer_name" | "order_id" | "created_at";
   sortOrder?: "asc" | "desc";
 }
@@ -51,6 +53,10 @@ export const getOrdersPaginated = async (
     pageSize: normalizePageSize(params.pageSize),
     searchKey: params.searchKey,
     searchTerm: params.searchTerm,
+    statusFilter:
+      params.statusFilter && params.statusFilter !== "all"
+        ? params.statusFilter
+        : undefined,
     sortBy: params.sortBy,
     sortOrder: params.sortOrder,
   });

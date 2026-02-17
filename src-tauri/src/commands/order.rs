@@ -1,4 +1,5 @@
 use tauri::{AppHandle, Manager};
+use sqlx::{QueryBuilder, Sqlite};
 
 use crate::db::{
     DEFAULT_ORDER_ID_PREFIX, ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
@@ -23,6 +24,18 @@ fn normalize_order_status(status: Option<String>) -> Result<Option<String>, Stri
         Some("pending" | "confirmed" | "shipping" | "completed" | "cancelled") => Ok(normalized),
         Some(_) => Err("Invalid order status".to_string()),
     }
+}
+
+fn normalize_order_status_filter(status: Option<String>) -> Result<Option<String>, String> {
+    let normalized = status
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty());
+
+    if matches!(normalized.as_deref(), None | Some("all")) {
+        return Ok(None);
+    }
+
+    normalize_order_status(normalized)
 }
 
 #[tauri::command]
@@ -164,6 +177,7 @@ pub async fn get_orders_paginated(
     page_size: Option<i64>,
     search_key: Option<String>,
     search_term: Option<String>,
+    status_filter: Option<String>,
     sort_by: Option<String>,
     sort_order: Option<String>,
 ) -> Result<PaginatedOrders, String> {
@@ -187,6 +201,8 @@ pub async fn get_orders_paginated(
     let raw_search = search_term.unwrap_or_default().trim().to_string();
     let has_search = !raw_search.is_empty();
     let search_pattern = format!("%{}%", raw_search);
+    let normalized_status_filter = normalize_order_status_filter(status_filter)?;
+    let has_status_filter = normalized_status_filter.is_some();
     let search_column = match search_key.as_deref().unwrap_or("customerName") {
         "customerName" => "c.name",
         "orderId" => "o.order_id",
@@ -213,77 +229,69 @@ pub async fn get_orders_paginated(
 
     let order_clause = format!("ORDER BY {} {}", sort_column, sort_direction);
 
-    let (total, orders) = if has_search {
-        let total: i64 = sqlx::query_scalar(&format!(
-            "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id WHERE COALESCE({}, '') LIKE ?",
-            search_column
-        ))
-        .bind(&search_pattern)
+    let mut count_query = QueryBuilder::<Sqlite>::new(
+        "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id",
+    );
+
+    if has_search || has_status_filter {
+        count_query.push(" WHERE ");
+
+        if has_search {
+            count_query.push(format!("COALESCE({}, '') LIKE ", search_column));
+            count_query.push_bind(&search_pattern);
+        }
+
+        if let Some(status) = normalized_status_filter.as_deref() {
+            if has_search {
+                count_query.push(" AND ");
+            }
+            count_query.push("o.status = ");
+            count_query.push_bind(status);
+        }
+    }
+
+    let total: i64 = count_query
+        .build_query_scalar()
         .fetch_one(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
-        let orders = if no_limit {
-            let data_query = format!(
-                "{} WHERE COALESCE({}, '') LIKE ? {} {}",
-                ORDER_WITH_CUSTOMER_SELECT,
-                search_column,
-                ORDER_WITH_CUSTOMER_GROUP_BY,
-                order_clause
-            );
-            sqlx::query_as::<_, OrderWithCustomer>(&data_query)
-                .bind(&search_pattern)
-                .fetch_all(&*pool)
-                .await
-                .map_err(|e| e.to_string())?
-        } else {
-            let data_query = format!(
-                "{} WHERE COALESCE({}, '') LIKE ? {} {} LIMIT ? OFFSET ?",
-                ORDER_WITH_CUSTOMER_SELECT,
-                search_column,
-                ORDER_WITH_CUSTOMER_GROUP_BY,
-                order_clause
-            );
-            sqlx::query_as::<_, OrderWithCustomer>(&data_query)
-                .bind(&search_pattern)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await
-                .map_err(|e| e.to_string())?
-        };
+    let mut data_query = QueryBuilder::<Sqlite>::new(ORDER_WITH_CUSTOMER_SELECT);
 
-        (total, orders)
-    } else {
-        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM orders")
-            .fetch_one(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    if has_search || has_status_filter {
+        data_query.push(" WHERE ");
 
-        let orders = if no_limit {
-            let data_query = format!(
-                "{} {} {}",
-                ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
-            );
-            sqlx::query_as::<_, OrderWithCustomer>(&data_query)
-                .fetch_all(&*pool)
-                .await
-                .map_err(|e| e.to_string())?
-        } else {
-            let data_query = format!(
-                "{} {} {} LIMIT ? OFFSET ?",
-                ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
-            );
-            sqlx::query_as::<_, OrderWithCustomer>(&data_query)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await
-                .map_err(|e| e.to_string())?
-        };
+        if has_search {
+            data_query.push(format!("COALESCE({}, '') LIKE ", search_column));
+            data_query.push_bind(&search_pattern);
+        }
 
-        (total, orders)
-    };
+        if let Some(status) = normalized_status_filter.as_deref() {
+            if has_search {
+                data_query.push(" AND ");
+            }
+            data_query.push("o.status = ");
+            data_query.push_bind(status);
+        }
+    }
+
+    data_query.push(" ");
+    data_query.push(ORDER_WITH_CUSTOMER_GROUP_BY);
+    data_query.push(" ");
+    data_query.push(order_clause);
+
+    if !no_limit {
+        data_query.push(" LIMIT ");
+        data_query.push_bind(page_size);
+        data_query.push(" OFFSET ");
+        data_query.push_bind(offset);
+    }
+
+    let orders = data_query
+        .build_query_as::<OrderWithCustomer>()
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let response_page_size = if no_limit { total.max(0) } else { page_size };
     let total_pages = if total == 0 {

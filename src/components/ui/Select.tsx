@@ -78,7 +78,10 @@ export function Select({
   }, [isOpen, menuPlacement, options.length]);
 
   return (
-    <div className={`relative ${className}`} ref={containerRef}>
+    <div
+      className={`relative ${isOpen ? "z-[120]" : "z-0"} ${className}`}
+      ref={containerRef}
+    >
       {label && (
         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
           {label} {required && <span className="text-red-500">*</span>}

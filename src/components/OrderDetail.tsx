@@ -26,20 +26,42 @@ const ORDER_STATUS_OPTIONS: OrderStatus[] = [
   "cancelled",
 ];
 
-const getOrderStatusLabelKey = (status?: string | null): string => {
+const getOrderStatusDisplay = (
+  status?: string | null,
+): { labelKey: string; className: string } => {
   switch (status) {
     case "pending":
-      return "orders.status_pending";
+      return {
+        labelKey: "orders.status_pending",
+        className:
+          "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20",
+      };
     case "confirmed":
-      return "orders.status_confirmed";
+      return {
+        labelKey: "orders.status_confirmed",
+        className: "bg-sky-500/10 text-sky-500 border border-sky-500/20",
+      };
     case "shipping":
-      return "orders.status_shipping";
+      return {
+        labelKey: "orders.status_shipping",
+        className:
+          "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20",
+      };
     case "completed":
-      return "orders.status_completed";
+      return {
+        labelKey: "orders.status_completed",
+        className: "bg-green-500/10 text-green-500 border border-green-500/20",
+      };
     case "cancelled":
-      return "orders.status_cancelled";
+      return {
+        labelKey: "orders.status_cancelled",
+        className: "bg-red-500/10 text-red-500 border border-red-500/20",
+      };
     default:
-      return "orders.status_unknown";
+      return {
+        labelKey: "orders.status_unknown",
+        className: "bg-slate-500/10 text-slate-400 border border-slate-500/20",
+      };
   }
 };
 
@@ -512,19 +534,18 @@ export default function OrderDetail() {
     value: OrderStatus | undefined,
   ) => {
     const isEditing = editingField === field;
+    const statusDisplay = getOrderStatusDisplay(value);
 
     return (
-      <div>
-        <label className="block text-sm text-text-secondary mb-1">
-          {label}
-        </label>
+      <div className="space-y-2">
+        {label ? <label className="block text-sm text-text-secondary">{label}</label> : null}
         {isEditing ? (
-          <div className="flex items-center gap-2">
-            <div className="w-[180px]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="w-full">
               <Select
                 options={ORDER_STATUS_OPTIONS.map((status) => ({
                   value: status,
-                  label: t(getOrderStatusLabelKey(status)),
+                  label: t(getOrderStatusDisplay(status).labelKey),
                 }))}
                 value={tempValue || "pending"}
                 onChange={(next) => setTempValue(next.toString())}
@@ -569,18 +590,21 @@ export default function OrderDetail() {
             </button>
           </div>
         ) : (
-          <div
-            className="flex items-center gap-2 cursor-pointer group w-fit"
+          <button
+            type="button"
+            className="group inline-flex w-full items-center justify-between gap-2 rounded-xl border border-glass-border bg-glass-white px-3 py-2 hover:bg-glass-white-hover hover:border-accent-blue/30 transition-colors"
             onClick={() => {
               setTempValue(value || "pending");
               setEditingField(field);
             }}
             title="Click to edit"
           >
-            <p className="text-text-primary hover:text-accent-blue hover:underline decoration-dashed underline-offset-4 transition-colors">
-              {t(getOrderStatusLabelKey(value))}
-            </p>
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue">
+            <span
+              className={`${statusDisplay.className} inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold`}
+            >
+              {t(statusDisplay.labelKey)}
+            </span>
+            <span className="text-text-muted group-hover:text-accent-blue transition-colors">
               <svg
                 width="14"
                 height="14"
@@ -595,7 +619,7 @@ export default function OrderDetail() {
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
               </svg>
             </span>
-          </div>
+          </button>
         )}
       </div>
     );
@@ -730,13 +754,6 @@ export default function OrderDetail() {
                   date: formatDate(order.created_at),
                 })}
               </p>
-              <div className="mt-2">
-                {renderEditableStatus(
-                  t("orders.form.status"),
-                  "status",
-                  order.status,
-                )}
-              </div>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:justify-end">
@@ -1468,12 +1485,7 @@ export default function OrderDetail() {
               <h2 className="text-lg font-semibold text-text-primary mb-4">
                 {t("orders.detail.timeline")}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
-                {renderEditableStatus(
-                  t("orders.form.status"),
-                  "status",
-                  order.status,
-                )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {renderEditableDate(
                   t("orders.form.order_date"),
                   "order_date",
@@ -1500,6 +1512,12 @@ export default function OrderDetail() {
 
           {/* Sidebar - Financials */}
           <motion.div variants={itemVariants} className="space-y-6">
+            <div className="glass-panel p-6 relative z-20">
+              <h2 className="text-lg font-semibold text-text-primary mb-4">
+                {t("orders.form.status")}
+              </h2>
+              {renderEditableStatus("", "status", order.status)}
+            </div>
             <div className="glass-panel p-6">
               <h2 className="text-lg font-semibold text-text-primary mb-4">
                 {t("orders.detail.financial_summary")}
