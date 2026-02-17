@@ -53,3 +53,24 @@ export interface PaginatedOrders {
   page_size: number;
   total_pages: number;
 }
+
+export interface OrderExportRow {
+  order_id?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  order_from?: string;
+  order_date?: string;
+  arrived_date?: string;
+  shipment_date?: string;
+  service_fee?: number;
+  service_fee_type?: string;
+  exchange_rate?: number;
+  shipping_fee?: number;
+  delivery_fee?: number;
+  cargo_fee?: number;
+  product_url?: string;
+  product_qty?: number;
+  product_price?: number;
+  product_weight?: number;
+  created_at?: string;
+}

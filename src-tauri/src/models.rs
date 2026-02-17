@@ -141,3 +141,25 @@ pub struct DbStatus {
     pub tables: Vec<TableStatus>,
     pub size_bytes: Option<u64>,
 }
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct OrderExportRow {
+    pub order_id: Option<String>,
+    pub customer_name: Option<String>,
+    pub customer_phone: Option<String>,
+    pub order_from: Option<String>,
+    pub order_date: Option<String>,
+    pub arrived_date: Option<String>,
+    pub shipment_date: Option<String>,
+    pub service_fee: Option<f64>,
+    pub service_fee_type: Option<String>,
+    pub exchange_rate: Option<f64>,
+    pub shipping_fee: Option<f64>,
+    pub delivery_fee: Option<f64>,
+    pub cargo_fee: Option<f64>,
+    pub product_url: Option<String>,
+    pub product_qty: Option<i64>,
+    pub product_price: Option<f64>,
+    pub product_weight: Option<f64>,
+    pub created_at: Option<String>,
+}

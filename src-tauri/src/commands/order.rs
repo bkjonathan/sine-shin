@@ -4,7 +4,7 @@ use crate::db::{
     DEFAULT_ORDER_ID_PREFIX, ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
 };
 use crate::models::{
-    DashboardStats, OrderDetail, OrderItem, OrderItemPayload, OrderWithCustomer, PaginatedOrders,
+    DashboardStats, OrderDetail, OrderExportRow, OrderItem, OrderItemPayload, OrderWithCustomer, PaginatedOrders,
 };
 use crate::state::AppDb;
 
@@ -405,4 +405,43 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
         total_customers: total_customers.0,
         recent_orders,
     })
+}
+
+#[tauri::command]
+pub async fn get_orders_for_export(app: AppHandle) -> Result<Vec<OrderExportRow>, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let query = r#"
+        SELECT
+            o.order_id,
+            c.name as customer_name,
+            c.phone as customer_phone,
+            o.order_from,
+            o.order_date,
+            o.arrived_date,
+            o.shipment_date,
+            o.service_fee,
+            o.service_fee_type,
+            o.exchange_rate,
+            o.shipping_fee,
+            o.delivery_fee,
+            o.cargo_fee,
+            oi.product_url,
+            oi.product_qty,
+            oi.price as product_price,
+            oi.product_weight,
+            o.created_at
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.id
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        ORDER BY o.created_at DESC
+    "#;
+
+    let rows = sqlx::query_as::<_, OrderExportRow>(query)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(rows)
 }

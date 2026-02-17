@@ -8,6 +8,7 @@ import {
   updateOrder,
   deleteOrder,
   getOrderById,
+  getOrdersForExport,
 } from "../api/orderApi";
 import { formatDate } from "../utils/date";
 import { getCustomers } from "../api/customerApi";
@@ -407,43 +408,54 @@ export default function Orders() {
 
   const handleExport = async () => {
     try {
-      const data = await getOrdersPaginated({
-        page: 1,
-        pageSize: "all",
-        searchKey,
-        searchTerm,
-      });
-      if (!data.orders || data.orders.length === 0) return;
+      const data = await getOrdersForExport();
+      if (!data || data.length === 0) {
+        playSound("error");
+        alert(t("orders.no_orders"));
+        return;
+      }
 
       const headers = [
         "Order ID",
         "Customer Name",
+        "Customer Phone",
         "Order From",
         "Order Date",
-        "Total Qty",
-        "Total Price",
-        "Total Weight",
-        "Status",
-        "Product URL (First Item)",
+        "Arrived Date",
+        "Shipment Date",
+        "Service Fee",
+        "Service Fee Type",
+        "Exchange Rate",
+        "Shipping Fee",
+        "Delivery Fee",
+        "Cargo Fee",
+        "Product URL",
+        "Item Qty",
+        "Item Price",
+        "Item Weight",
+        "Created At",
       ];
 
-      const csvRows = data.orders.map((o) => {
-        const status = o.arrived_date
-          ? "Arrived"
-          : o.shipment_date
-            ? "Shipped"
-            : "Pending";
-
+      const csvRows = data.map((row) => {
         return [
-          o.order_id || "-",
-          `"${(o.customer_name || "").replace(/"/g, '""')}"`,
-          o.order_from || "-",
-          o.order_date || "-",
-          o.total_qty || 0,
-          o.total_price || 0,
-          o.total_weight || 0,
-          status,
-          o.first_product_url ? `"${o.first_product_url}"` : "-",
+          row.order_id || "",
+          `"${(row.customer_name || "").replace(/"/g, '""')}"`,
+          `"${(row.customer_phone || "").replace(/"/g, '""')}"`,
+          row.order_from || "",
+          row.order_date || "",
+          row.arrived_date || "",
+          row.shipment_date || "",
+          row.service_fee || "",
+          row.service_fee_type || "",
+          row.exchange_rate || "",
+          row.shipping_fee || "",
+          row.delivery_fee || "",
+          row.cargo_fee || "",
+          `"${(row.product_url || "").replace(/"/g, '""')}"`,
+          row.product_qty || "",
+          row.product_price || "",
+          row.product_weight || "",
+          row.created_at || "",
         ].join(",");
       });
 
@@ -454,7 +466,7 @@ export default function Orders() {
       link.setAttribute("href", url);
 
       const date = new Date().toISOString().split("T")[0];
-      link.setAttribute("download", `orders_export_${date}.csv`);
+      link.setAttribute("download", `orders_export_full_${date}.csv`);
 
       document.body.appendChild(link);
       link.click();
@@ -631,7 +643,10 @@ export default function Orders() {
       </motion.div>
 
       {/* ── Order List ── */}
-      <motion.div variants={fadeVariants} className="flex-1 min-h-0 flex flex-col">
+      <motion.div
+        variants={fadeVariants}
+        className="flex-1 min-h-0 flex flex-col"
+      >
         <div className="flex-1 overflow-y-auto pr-1">
           {loading ? (
             <div className="flex justify-center items-center py-20">

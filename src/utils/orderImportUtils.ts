@@ -10,6 +10,7 @@ interface UnprocessedOrder {
   delivery_fee?: number;
   cargo_fee?: number;
   service_fee?: number;
+  service_fee_type?: "fixed" | "percent";
   order_date?: string;
   arrived_date?: string;
   shipment_date?: string;
@@ -24,10 +25,6 @@ export const processOrderCSV = (
   customers: Customer[],
 ): { validOrders: ParsedOrder[]; errors: string[] } => {
   const errors: string[] = [];
-  // Use a map to group orders by a unique key.
-  // If "Order ID" is present, use it.
-  // If not, treat each row as a new order unless we want to implement consecutive row grouping logic.
-  // For simplicity: Rows without Order ID are treated as individual orders.
   const orderGroups: Map<string, UnprocessedOrder> = new Map();
   let autoIdCounter = 0;
 
@@ -42,7 +39,11 @@ export const processOrderCSV = (
 
     const customerName = getValue("Customer Name");
     if (!customerName) {
-      errors.push(`Row ${index + 1}: Missing Customer Name`);
+      // Skip empty rows often found at end of CSV
+      const isEmptyRow = Object.values(row).every((v) => !v || v.trim() === "");
+      if (!isEmptyRow) {
+        errors.push(`Row ${index + 1}: Missing Customer Name`);
+      }
       return;
     }
 
@@ -79,6 +80,7 @@ export const processOrderCSV = (
         delivery_fee: parseFloat(getValue("Delivery Fee")) || undefined,
         cargo_fee: parseFloat(getValue("Cargo Fee")) || undefined,
         service_fee: parseFloat(getValue("Service Fee")) || undefined,
+        service_fee_type: (getValue("Service Fee Type") as any) || "fixed",
         order_date: orderDate || undefined,
         arrived_date: arrivedDate || undefined,
         shipment_date: shipmentDate || undefined,
@@ -89,12 +91,12 @@ export const processOrderCSV = (
 
     // Add Item
     const productUrl = getValue("Product URL");
-    const qty = parseInt(getValue("Qty") || "1");
-    const price = parseFloat(getValue("Price") || "0");
-    const weight = parseFloat(getValue("Weight") || "0");
+    const qty = parseInt(getValue("Item Qty") || "1");
+    const price = parseFloat(getValue("Item Price") || "0");
+    const weight = parseFloat(getValue("Item Weight") || "0");
 
     // Only add item if it has some meaningful data
-    if (productUrl || price > 0 || qty > 0) {
+    if (order && (productUrl || price > 0 || qty > 0)) {
       order.items.push({
         product_url: productUrl,
         product_qty: qty,

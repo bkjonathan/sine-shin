@@ -5,6 +5,7 @@ import {
   OrderDetail,
   OrderItemPayload,
   PaginatedOrders,
+  OrderExportRow,
 } from "../types/order";
 
 export const ORDER_PAGE_SIZE_LIMITS = {
@@ -100,4 +101,8 @@ export const updateOrder = async (
 
 export const deleteOrder = async (id: number): Promise<void> => {
   return await invoke("delete_order", { id });
+};
+
+export const getOrdersForExport = async (): Promise<OrderExportRow[]> => {
+  return await invoke("get_orders_for_export");
 };

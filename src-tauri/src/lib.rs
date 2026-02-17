@@ -20,7 +20,7 @@ use crate::commands::customer::{
 };
 use crate::commands::order::{
     create_order, delete_order, get_customer_orders, get_dashboard_stats, get_order, get_orders,
-    get_orders_paginated, update_order,
+    get_orders_for_export, get_orders_paginated, update_order,
 };
 use crate::commands::settings::{get_app_settings, update_app_settings, AppSettings};
 use crate::commands::shop::{get_shop_settings, save_shop_setup, update_shop_settings};
@@ -215,6 +215,7 @@ pub fn run() {
             delete_customer,
             create_order,
             get_orders,
+            get_orders_for_export,
             get_orders_paginated,
             get_order,
             get_customer_orders,
