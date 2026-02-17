@@ -31,6 +31,22 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         }
     }
 
+    let status_column_exists: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('orders') WHERE name = 'status' LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    if status_column_exists.is_none() {
+        sqlx::query("ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'pending'")
+            .execute(pool)
+            .await?;
+    }
+
+    sqlx::query("UPDATE orders SET status = 'pending' WHERE status IS NULL OR TRIM(status) = ''")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }
 

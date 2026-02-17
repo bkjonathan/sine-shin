@@ -4,7 +4,8 @@ use crate::db::{
     DEFAULT_ORDER_ID_PREFIX, ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
 };
 use crate::models::{
-    DashboardStats, OrderDetail, OrderExportRow, OrderItem, OrderItemPayload, OrderWithCustomer, PaginatedOrders,
+    DashboardStats, OrderDetail, OrderExportRow, OrderItem, OrderItemPayload, OrderWithCustomer,
+    PaginatedOrders,
 };
 use crate::state::AppDb;
 
@@ -12,10 +13,23 @@ const DEFAULT_ORDERS_PAGE_SIZE: i64 = 5;
 const MIN_ORDERS_PAGE_SIZE: i64 = 5;
 const MAX_ORDERS_PAGE_SIZE: i64 = 100;
 
+fn normalize_order_status(status: Option<String>) -> Result<Option<String>, String> {
+    let normalized = status
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty());
+
+    match normalized.as_deref() {
+        None => Ok(None),
+        Some("pending" | "confirmed" | "shipping" | "completed" | "cancelled") => Ok(normalized),
+        Some(_) => Err("Invalid order status".to_string()),
+    }
+}
+
 #[tauri::command]
 pub async fn create_order(
     app: AppHandle,
     customer_id: i64,
+    status: Option<String>,
     order_from: Option<String>,
     exchange_rate: Option<f64>,
     shipping_fee: Option<f64>,
@@ -33,15 +47,18 @@ pub async fn create_order(
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
+    let normalized_status =
+        normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     let inserted_id = if let Some(provided_id) = id {
         sqlx::query(
-            "INSERT INTO orders (id, customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(provided_id)
         .bind(customer_id)
+        .bind(normalized_status.clone())
         .bind(order_from)
         .bind(exchange_rate)
         .bind(shipping_fee)
@@ -59,9 +76,10 @@ pub async fn create_order(
         .last_insert_rowid()
     } else {
         sqlx::query(
-            "INSERT INTO orders (customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(customer_id)
+        .bind(normalized_status)
         .bind(order_from)
         .bind(exchange_rate)
         .bind(shipping_fee)
@@ -98,11 +116,12 @@ pub async fn create_order(
             .execute(&mut *tx)
             .await;
     } else {
-        let prefix: Option<String> =
-            sqlx::query_scalar("SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
-                .fetch_optional(&mut *tx)
-                .await
-                .unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
+        let prefix: Option<String> = sqlx::query_scalar(
+            "SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1",
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
 
         let prefix_str = prefix
             .filter(|p| !p.is_empty())
@@ -158,7 +177,11 @@ pub async fn get_orders_paginated(
     } else {
         requested_page_size.clamp(MIN_ORDERS_PAGE_SIZE, MAX_ORDERS_PAGE_SIZE)
     };
-    let page = if no_limit { 1 } else { page.unwrap_or(1).max(1) };
+    let page = if no_limit {
+        1
+    } else {
+        page.unwrap_or(1).max(1)
+    };
     let offset = if no_limit { 0 } else { (page - 1) * page_size };
 
     let raw_search = search_term.unwrap_or_default().trim().to_string();
@@ -178,7 +201,7 @@ pub async fn get_orders_paginated(
         // For customer I used customer_id.
         // Let's use o.id for reliable sorting
         "created_at" => "o.created_at",
-        "date" => "o.order_date", 
+        "date" => "o.order_date",
         _ => "o.id",
     };
 
@@ -203,7 +226,10 @@ pub async fn get_orders_paginated(
         let orders = if no_limit {
             let data_query = format!(
                 "{} WHERE COALESCE({}, '') LIKE ? {} {}",
-                ORDER_WITH_CUSTOMER_SELECT, search_column, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
+                ORDER_WITH_CUSTOMER_SELECT,
+                search_column,
+                ORDER_WITH_CUSTOMER_GROUP_BY,
+                order_clause
             );
             sqlx::query_as::<_, OrderWithCustomer>(&data_query)
                 .bind(&search_pattern)
@@ -213,7 +239,10 @@ pub async fn get_orders_paginated(
         } else {
             let data_query = format!(
                 "{} WHERE COALESCE({}, '') LIKE ? {} {} LIMIT ? OFFSET ?",
-                ORDER_WITH_CUSTOMER_SELECT, search_column, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
+                ORDER_WITH_CUSTOMER_SELECT,
+                search_column,
+                ORDER_WITH_CUSTOMER_GROUP_BY,
+                order_clause
             );
             sqlx::query_as::<_, OrderWithCustomer>(&data_query)
                 .bind(&search_pattern)
@@ -325,6 +354,7 @@ pub async fn update_order(
     app: AppHandle,
     id: i64,
     customer_id: i64,
+    status: Option<String>,
     order_from: Option<String>,
     exchange_rate: Option<f64>,
     shipping_fee: Option<f64>,
@@ -340,13 +370,16 @@ pub async fn update_order(
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
+    let normalized_status =
+        normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     sqlx::query(
-        "UPDATE orders SET customer_id = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, service_fee_type = ? WHERE id = ?",
+        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, service_fee_type = ? WHERE id = ?",
     )
     .bind(customer_id)
+    .bind(normalized_status)
     .bind(order_from)
     .bind(exchange_rate)
     .bind(shipping_fee)
@@ -470,6 +503,7 @@ pub async fn get_orders_for_export(app: AppHandle) -> Result<Vec<OrderExportRow>
             o.order_id,
             c.name as customer_name,
             c.phone as customer_phone,
+            o.status,
             o.order_from,
             o.order_date,
             o.arrived_date,

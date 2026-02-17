@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { getOrderById, updateOrder } from "../api/orderApi";
 import { getShopSettings, ShopSettings } from "../api/settingApi";
 import { getCustomerById } from "../api/customerApi";
-import { OrderDetail as OrderDetailType } from "../types/order";
+import { OrderDetail as OrderDetailType, OrderStatus } from "../types/order";
 import { Customer } from "../types/customer";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useSound } from "../context/SoundContext";
@@ -16,6 +16,32 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { formatDate } from "../utils/date";
 import QRCode from "qrcode";
 import DatePicker from "./ui/DatePicker";
+import { Select } from "./ui/Select";
+
+const ORDER_STATUS_OPTIONS: OrderStatus[] = [
+  "pending",
+  "confirmed",
+  "shipping",
+  "completed",
+  "cancelled",
+];
+
+const getOrderStatusLabelKey = (status?: string | null): string => {
+  switch (status) {
+    case "pending":
+      return "orders.status_pending";
+    case "confirmed":
+      return "orders.status_confirmed";
+    case "shipping":
+      return "orders.status_shipping";
+    case "completed":
+      return "orders.status_completed";
+    case "cancelled":
+      return "orders.status_cancelled";
+    default:
+      return "orders.status_unknown";
+  }
+};
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -239,13 +265,14 @@ export default function OrderDetail() {
 
       const { order, items } = orderDetail;
 
-      // Determine if we are updating a date or a number based on field name
+      // Determine field type for update parsing
       const isDateField = [
         "order_date",
         "arrived_date",
         "shipment_date",
         "user_withdraw_date",
       ].includes(editingField);
+      const isStatusField = editingField === "status";
 
       let newValue: string | number | null = null;
 
@@ -256,6 +283,8 @@ export default function OrderDetail() {
             newValue = d.toISOString();
           }
         }
+      } else if (isStatusField) {
+        newValue = tempValue || "pending";
       } else {
         // Numeric field
         newValue = tempValue === "" ? 0 : parseFloat(tempValue);
@@ -266,6 +295,7 @@ export default function OrderDetail() {
       const updatedOrder: any = {
         id: order.id,
         customer_id: order.customer_id,
+        status: order.status || "pending",
         order_from: order.order_from,
         items: items.map((item) => ({
           product_url: item.product_url,
@@ -476,6 +506,101 @@ export default function OrderDetail() {
     );
   };
 
+  const renderEditableStatus = (
+    label: string,
+    field: "status",
+    value: OrderStatus | undefined,
+  ) => {
+    const isEditing = editingField === field;
+
+    return (
+      <div>
+        <label className="block text-sm text-text-secondary mb-1">
+          {label}
+        </label>
+        {isEditing ? (
+          <div className="flex items-center gap-2">
+            <div className="w-[180px]">
+              <Select
+                options={ORDER_STATUS_OPTIONS.map((status) => ({
+                  value: status,
+                  label: t(getOrderStatusLabelKey(status)),
+                }))}
+                value={tempValue || "pending"}
+                onChange={(next) => setTempValue(next.toString())}
+              />
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={isUpdating}
+              className="p-1 text-success hover:bg-success/10 rounded"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
+            <button
+              onClick={handleCancel}
+              disabled={isUpdating}
+              className="p-1 text-text-secondary hover:bg-text-secondary/10 rounded"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2 cursor-pointer group w-fit"
+            onClick={() => {
+              setTempValue(value || "pending");
+              setEditingField(field);
+            }}
+            title="Click to edit"
+          >
+            <p className="text-text-primary hover:text-accent-blue hover:underline decoration-dashed underline-offset-4 transition-colors">
+              {t(getOrderStatusLabelKey(value))}
+            </p>
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderEditableFee = (
     label: string,
     field: string,
@@ -605,6 +730,13 @@ export default function OrderDetail() {
                   date: formatDate(order.created_at),
                 })}
               </p>
+              <div className="mt-2">
+                {renderEditableStatus(
+                  t("orders.form.status"),
+                  "status",
+                  order.status,
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:justify-end">
@@ -1336,7 +1468,12 @@ export default function OrderDetail() {
               <h2 className="text-lg font-semibold text-text-primary mb-4">
                 {t("orders.detail.timeline")}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+                {renderEditableStatus(
+                  t("orders.form.status"),
+                  "status",
+                  order.status,
+                )}
                 {renderEditableDate(
                   t("orders.form.order_date"),
                   "order_date",

@@ -1,9 +1,10 @@
-import { OrderItemPayload } from "../types/order";
+import { OrderItemPayload, OrderStatus } from "../types/order";
 import { Customer } from "../types/customer";
 
 interface UnprocessedOrder {
   customer_id?: number;
   order_id?: string;
+  status?: OrderStatus;
   order_from?: string;
   exchange_rate?: number;
   shipping_fee?: number;
@@ -20,6 +21,25 @@ interface UnprocessedOrder {
 
 export type ParsedOrder = Required<Pick<UnprocessedOrder, "customer_id">> &
   Omit<UnprocessedOrder, "customer_id">;
+
+const parseOrderStatus = (rawStatus: string): OrderStatus | undefined => {
+  const normalized = rawStatus.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (
+    normalized === "pending" ||
+    normalized === "confirmed" ||
+    normalized === "shipping" ||
+    normalized === "completed" ||
+    normalized === "cancelled"
+  ) {
+    return normalized;
+  }
+
+  return undefined;
+};
 
 export const processOrderCSV = (
   rows: Record<string, string>[],
@@ -71,10 +91,19 @@ export const processOrderCSV = (
       const orderDate = getValue("Order Date");
       const arrivedDate = getValue("Arrived Date");
       const shipmentDate = getValue("Shipment Date");
+      const rawStatus = getValue("Status");
+      const status = parseOrderStatus(rawStatus);
+
+      if (rawStatus.trim() && !status) {
+        errors.push(
+          `Row ${index + 1}: Invalid Status '${rawStatus}'. Allowed values are pending, confirmed, shipping, completed, cancelled.`,
+        );
+      }
 
       order = {
         customer_id: customer.id,
         order_id: csvOrderId || undefined,
+        status,
         order_from: getValue("Order From") || "Facebook",
         exchange_rate: parseFloat(getValue("Exchange Rate")) || undefined,
         shipping_fee: parseFloat(getValue("Shipping Fee")) || undefined,

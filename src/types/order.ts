@@ -1,7 +1,15 @@
+export type OrderStatus =
+  | "pending"
+  | "confirmed"
+  | "shipping"
+  | "completed"
+  | "cancelled";
+
 export interface Order {
   id: number;
   order_id?: string;
   customer_id?: number;
+  status?: OrderStatus;
   order_from?: string;
   exchange_rate?: number;
   shipping_fee?: number;
@@ -58,6 +66,7 @@ export interface OrderExportRow {
   order_id?: string;
   customer_name?: string;
   customer_phone?: string;
+  status?: OrderStatus;
   order_from?: string;
   order_date?: string;
   arrived_date?: string;

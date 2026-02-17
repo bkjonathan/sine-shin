@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id TEXT,
   customer_id INTEGER,
+  status TEXT DEFAULT 'pending',
   order_from TEXT,
   exchange_rate REAL,
   shipping_fee REAL,

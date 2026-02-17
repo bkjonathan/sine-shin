@@ -12,7 +12,7 @@ import {
 } from "../api/orderApi";
 import { formatDate } from "../utils/date";
 import { getCustomers } from "../api/customerApi";
-import { OrderWithCustomer, OrderItemPayload } from "../types/order";
+import { OrderStatus, OrderWithCustomer, OrderItemPayload } from "../types/order";
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
@@ -35,6 +35,53 @@ const modalVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95, y: 10 },
   visible: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.95, y: 10 },
+};
+
+const ORDER_STATUS_OPTIONS: Array<{ value: OrderStatus; labelKey: string }> = [
+  { value: "pending", labelKey: "orders.status_pending" },
+  { value: "confirmed", labelKey: "orders.status_confirmed" },
+  { value: "shipping", labelKey: "orders.status_shipping" },
+  { value: "completed", labelKey: "orders.status_completed" },
+  { value: "cancelled", labelKey: "orders.status_cancelled" },
+];
+
+const getOrderStatusDisplay = (status?: OrderStatus): {
+  labelKey: string;
+  className: string;
+} => {
+  switch (status) {
+    case "pending":
+      return {
+        labelKey: "orders.status_pending",
+        className:
+          "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20",
+      };
+    case "confirmed":
+      return {
+        labelKey: "orders.status_confirmed",
+        className: "bg-sky-500/10 text-sky-500 border border-sky-500/20",
+      };
+    case "shipping":
+      return {
+        labelKey: "orders.status_shipping",
+        className: "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20",
+      };
+    case "completed":
+      return {
+        labelKey: "orders.status_completed",
+        className: "bg-green-500/10 text-green-500 border border-green-500/20",
+      };
+    case "cancelled":
+      return {
+        labelKey: "orders.status_cancelled",
+        className: "bg-red-500/10 text-red-500 border border-red-500/20",
+      };
+    default:
+      return {
+        labelKey: "orders.status_unknown",
+        className: "bg-slate-500/10 text-slate-400 border border-slate-500/20",
+      };
+  }
 };
 
 const getVisiblePages = (currentPage: number, totalPages: number): string[] => {
@@ -108,6 +155,7 @@ export default function Orders() {
   // Form State
   const initialFormState = {
     customer_id: "",
+    status: "pending",
     order_from: "Facebook",
     items: [] as OrderItemPayload[],
     exchange_rate: "",
@@ -219,6 +267,7 @@ export default function Orders() {
         const detail = await getOrderById(order.id);
         setFormData({
           customer_id: order.customer_id?.toString() || "",
+          status: order.status || "pending",
           order_from: order.order_from || "Facebook",
           // Map OrderItem to OrderItemPayload
           items: detail.items.map((item) => ({
@@ -276,6 +325,7 @@ export default function Orders() {
 
       const payload: any = {
         customer_id: parseInt(formData.customer_id),
+        status: formData.status || "pending",
         order_from: formData.order_from || undefined,
         items: formData.items.map((item) => ({
           product_url: item.product_url || undefined,
@@ -426,6 +476,7 @@ export default function Orders() {
         "Order ID",
         "Customer Name",
         "Customer Phone",
+        "Status",
         "Order From",
         "Order Date",
         "Arrived Date",
@@ -448,6 +499,7 @@ export default function Orders() {
           row.order_id || "",
           `"${(row.customer_name || "").replace(/"/g, '""')}"`,
           `"${(row.customer_phone || "").replace(/"/g, '""')}"`,
+          row.status || "",
           row.order_from || "",
           row.order_date || "",
           row.arrived_date || "",
@@ -768,138 +820,132 @@ export default function Orders() {
                   className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6"
                 >
                   <AnimatePresence mode="popLayout">
-                    {orders.map((order) => (
-                      <motion.div
-                        key={order.id}
-                        layout
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
-                        onClick={() => navigate(`/orders/${order.id}`)}
-                      >
-                        <div className="relative z-10">
-                          <div className="flex justify-between items-start mb-3">
-                            <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
-                              {order.order_id || t("orders.id_pending")}
-                            </div>
+                    {orders.map((order) => {
+                      const statusDisplay = getOrderStatusDisplay(order.status);
 
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenModal(order);
-                                }}
-                                className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
-                              >
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
+                      return (
+                        <motion.div
+                          key={order.id}
+                          layout
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
+                          onClick={() => navigate(`/orders/${order.id}`)}
+                        >
+                          <div className="relative z-10">
+                            <div className="flex justify-between items-start mb-3">
+                              <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
+                                {order.order_id || t("orders.id_pending")}
+                              </div>
+
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenModal(order);
+                                  }}
+                                  className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
                                 >
-                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOrderToDelete(order);
-                                  setIsDeleteModalOpen(true);
-                                }}
-                                className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
-                              >
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
+                                  <svg
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOrderToDelete(order);
+                                    setIsDeleteModalOpen(true);
+                                  }}
+                                  className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
                                 >
-                                  <polyline points="3 6 5 6 21 6" />
-                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                </svg>
-                              </button>
+                                  <svg
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+
+                            <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
+                              {order.customer_name}
+                            </h3>
+                            <p className="text-sm text-text-muted mb-4">
+                              {t("orders.from")}{" "}
+                              <span className="text-text-secondary">
+                                {order.order_from || "-"}
+                              </span>
+                            </p>
+                            {order.first_product_url && (
+                              <a
+                                href={order.first_product_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-accent-blue hover:underline mb-2 block truncate"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {t("orders.product_link")}
+                              </a>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
+                              <div>
+                                <span className="text-text-muted text-xs block">
+                                  {t("orders.date")}
+                                </span>
+                                {formatDate(order.order_date)}
+                              </div>
+                              <div>
+                                <span className="text-text-muted text-xs block">
+                                  {t("orders.qty")}
+                                </span>
+                                {order.total_qty || 0}
+                              </div>
+                              <div>
+                                <span className="text-text-muted text-xs block">
+                                  {t("orders.total")}
+                                </span>
+                                {formatPrice(order.total_price || 0)}
+                              </div>
+                              <div>
+                                <span className="text-text-muted text-xs block">
+                                  {t("orders.weight")}
+                                </span>
+                                {order.total_weight || 0} kg
+                              </div>
+                            </div>
+
+                            {/* Status Indicator */}
+                            <div className="flex gap-2 text-xs">
+                              <span
+                                className={`${statusDisplay.className} px-2 py-0.5 rounded`}
+                              >
+                                {t(statusDisplay.labelKey)}
+                              </span>
                             </div>
                           </div>
-
-                          <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
-                            {order.customer_name}
-                          </h3>
-                          <p className="text-sm text-text-muted mb-4">
-                            {t("orders.from")}{" "}
-                            <span className="text-text-secondary">
-                              {order.order_from || "-"}
-                            </span>
-                          </p>
-                          {order.first_product_url && (
-                            <a
-                              href={order.first_product_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-accent-blue hover:underline mb-2 block truncate"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {t("orders.product_link")}
-                            </a>
-                          )}
-
-                          <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
-                            <div>
-                              <span className="text-text-muted text-xs block">
-                                {t("orders.date")}
-                              </span>
-                              {formatDate(order.order_date)}
-                            </div>
-                            <div>
-                              <span className="text-text-muted text-xs block">
-                                {t("orders.qty")}
-                              </span>
-                              {order.total_qty || 0}
-                            </div>
-                            <div>
-                              <span className="text-text-muted text-xs block">
-                                {t("orders.total")}
-                              </span>
-                              {formatPrice(order.total_price || 0)}
-                            </div>
-                            <div>
-                              <span className="text-text-muted text-xs block">
-                                {t("orders.weight")}
-                              </span>
-                              {order.total_weight || 0} kg
-                            </div>
-                          </div>
-
-                          {/* Status Indicators */}
-                          <div className="flex gap-2 text-xs">
-                            {order.arrived_date && (
-                              <span className="bg-green-500/10 text-green-500 px-2 py-0.5 rounded border border-green-500/20">
-                                {t("orders.status_arrived")}
-                              </span>
-                            )}
-                            {order.shipment_date && (
-                              <span className="bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded border border-blue-500/20">
-                                {t("orders.status_shipped")}
-                              </span>
-                            )}
-                            {!order.arrived_date && !order.shipment_date && (
-                              <span className="bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20">
-                                {t("orders.status_pending")}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      );
+                    })}
                   </AnimatePresence>
                 </motion.div>
               </AnimatePresence>
@@ -1072,7 +1118,7 @@ export default function Orders() {
                   <h3 className="text-sm font-semibold text-text-primary border-b border-glass-border pb-1">
                     {t("orders.modal.basic_info")}
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Select
                       label={t("orders.form.customer")}
                       required
@@ -1105,6 +1151,20 @@ export default function Orders() {
                         setFormData({
                           ...formData,
                           order_from: val.toString(),
+                        })
+                      }
+                    />
+                    <Select
+                      label={t("orders.form.status")}
+                      options={ORDER_STATUS_OPTIONS.map((statusOption) => ({
+                        value: statusOption.value,
+                        label: t(statusOption.labelKey),
+                      }))}
+                      value={formData.status}
+                      onChange={(val) =>
+                        setFormData({
+                          ...formData,
+                          status: val.toString(),
                         })
                       }
                     />

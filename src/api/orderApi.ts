@@ -68,6 +68,7 @@ export const createOrder = async (
 ): Promise<number> => {
   return await invoke("create_order", {
     customerId: order.customer_id,
+    status: order.status,
     orderFrom: order.order_from,
     items: order.items,
     exchangeRate: order.exchange_rate,
@@ -91,6 +92,7 @@ export const updateOrder = async (
   return await invoke("update_order", {
     id: order.id,
     customerId: order.customer_id,
+    status: order.status,
     orderFrom: order.order_from,
     items: order.items,
     exchangeRate: order.exchange_rate,
