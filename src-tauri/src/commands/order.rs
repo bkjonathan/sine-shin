@@ -356,6 +356,27 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
             .await
             .map_err(|e| e.to_string())?;
 
+    // Calculate total profit (service fees)
+    // We need to fetch all orders to calculate percentage based fees correctly
+    // or we can try to do it in SQL if possible, but SQLite math might be tricky with mixed types
+    // Let's do a query that sums up based on case
+    let total_profit: (f64,) = sqlx::query_as(
+        r#"
+        SELECT COALESCE(SUM(
+            CASE 
+                WHEN service_fee_type = 'percent' THEN 
+                    (SELECT COALESCE(SUM(price * product_qty), 0) FROM order_items WHERE order_id = orders.id) * (service_fee / 100.0)
+                ELSE 
+                    COALESCE(service_fee, 0)
+            END
+        ), 0.0)
+        FROM orders
+        "#,
+    )
+    .fetch_one(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     let total_orders: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM orders")
         .fetch_one(&*pool)
         .await
@@ -377,6 +398,7 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
 
     Ok(DashboardStats {
         total_revenue: total_revenue.0,
+        total_profit: total_profit.0,
         total_orders: total_orders.0,
         total_customers: total_customers.0,
         recent_orders,

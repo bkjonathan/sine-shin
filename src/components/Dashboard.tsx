@@ -25,10 +25,13 @@ interface OrderWithCustomer {
   // ... other fields if needed for display
   created_at: string | null;
   first_product_url: string | null;
+  service_fee: number;
+  service_fee_type: string;
 }
 
 interface DashboardStats {
   total_revenue: number;
+  total_profit: number;
   total_orders: number;
   total_customers: number;
   recent_orders: OrderWithCustomer[];
@@ -169,15 +172,11 @@ export default function Dashboard() {
             gradient: "from-emerald-500 to-teal-500",
             icon: Users,
           },
-          // Placeholder for another stat or you can remove/replace it
           {
-            label: "dashboard.avg_order_value",
-            value:
-              stats && stats.total_orders > 0
-                ? formatPrice(stats.total_revenue / stats.total_orders)
-                : formatPrice(0),
+            label: "dashboard.total_profit",
+            value: stats ? formatPrice(stats.total_profit) : "-",
             change: "",
-            positive: true, // simplified
+            positive: true,
             gradient: "from-amber-500 to-orange-500",
             icon: TrendingUp,
           },
@@ -256,20 +255,49 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    {/* Status badge - using default for now as we don't have status field */}
-                    {/* <span
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors.default}`}
-                    >
-                      New
-                    </span> */}
-                    <span className="text-sm font-semibold text-text-primary">
-                      {formatPrice(order.total_price)}
-                    </span>
-                    <span className="text-xs text-text-muted w-24 text-right">
-                      {order.created_at
-                        ? new Date(order.created_at).toLocaleDateString()
-                        : ""}
-                    </span>
+                    {/* Service Fee Display */}
+                    <div className="flex flex-col items-end mr-2">
+                      <span className="text-xs text-text-muted">
+                        {t("dashboard.service_fee")}
+                      </span>
+                      <span className="text-sm font-medium text-text-primary">
+                        {(() => {
+                          const fee = order.service_fee || 0;
+                          if (order.service_fee_type === "percent") {
+                            // For percentage, we need to calculate based on total product price
+                            // But we don't have raw product price sum here easily available unless we pass it
+                            // In models.rs, total_price is sum(price * qty).
+                            // So fee amount = total_price * (fee / 100)
+                            // Wait, total_price in OrderWithCustomer is already calculated.
+                            // Let's assume total_price is the base for percentage calculation.
+                            return formatPrice(order.total_price * (fee / 100));
+                          }
+                          return formatPrice(fee);
+                        })()}
+                      </span>
+                    </div>
+
+                    {/* Price Display */}
+                    <div className="flex flex-col items-end mr-2">
+                      <span className="text-xs text-text-muted">
+                        {t("dashboard.price")}
+                      </span>
+                      <span className="text-sm font-semibold text-text-primary">
+                        {formatPrice(order.total_price)}
+                      </span>
+                    </div>
+
+                    {/* Date Display */}
+                    <div className="flex flex-col items-end w-24">
+                      <span className="text-xs text-text-muted">
+                        {t("dashboard.order_date")}
+                      </span>
+                      <span className="text-xs text-text-muted text-right">
+                        {order.created_at
+                          ? new Date(order.created_at).toLocaleDateString()
+                          : ""}
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}
