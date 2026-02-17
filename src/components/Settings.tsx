@@ -459,6 +459,7 @@ function DataSettings() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const { playSound } = useSound();
   const { t } = useTranslation();
 
@@ -513,6 +514,46 @@ function DataSettings() {
       playSound("error");
     } finally {
       setBackingUp(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      const confirmed = await window.confirm(
+        t(
+          "settings.data_mgmt.restore_confirm",
+          "Are you sure? This will overwrite your current data with the backup.",
+        ),
+      );
+      if (!confirmed) return;
+
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: "SQLite Database",
+            extensions: ["db", "sqlite"],
+          },
+        ],
+      });
+
+      if (!selected) return;
+
+      setRestoring(true);
+      setError(null);
+      setSuccessMsg(null);
+
+      await invoke("restore_database", { restorePath: selected });
+
+      playSound("success");
+      window.location.reload();
+    } catch (err) {
+      console.error("Restore failed:", err);
+      setError(
+        t("settings.data_mgmt.restore_error", "Failed to restore database"),
+      );
+      playSound("error");
+      setRestoring(false);
     }
   };
 
@@ -573,6 +614,21 @@ function DataSettings() {
                     </>
                   ) : (
                     t("settings.data_mgmt.backup_btn")
+                  )}
+                </button>
+
+                <button
+                  onClick={handleRestore}
+                  disabled={restoring || backingUp}
+                  className="px-4 py-2 btn-liquid btn-liquid-ghost text-xs font-semibold flex items-center gap-2"
+                >
+                  {restoring ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-text-secondary/30 border-t-text-secondary rounded-full animate-spin" />
+                      {t("settings.data_mgmt.restoring", "Restoring...")}
+                    </>
+                  ) : (
+                    t("settings.data_mgmt.restore_btn", "Restore")
                   )}
                 </button>
 
@@ -989,7 +1045,9 @@ export default function Settings() {
                     <input
                       type="text"
                       className="input-liquid w-full uppercase"
-                      placeholder={t("settings.exchange_currency_code_placeholder")}
+                      placeholder={t(
+                        "settings.exchange_currency_code_placeholder",
+                      )}
                       value={exchange_currency}
                       onChange={(e) =>
                         setExchangeCurrency(e.target.value.toUpperCase())
@@ -1007,7 +1065,9 @@ export default function Settings() {
                         "settings.exchange_currency_symbol_placeholder",
                       )}
                       value={exchange_currency_symbol}
-                      onChange={(e) => setExchangeCurrencySymbol(e.target.value)}
+                      onChange={(e) =>
+                        setExchangeCurrencySymbol(e.target.value)
+                      }
                     />
                   </div>
                 </div>

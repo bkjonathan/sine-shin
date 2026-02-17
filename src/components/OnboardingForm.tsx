@@ -142,6 +142,35 @@ export default function OnboardingForm() {
     setCurrentStep((prev) => Math.max(prev - 1, 0));
   };
 
+  const handleRestore = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: "SQLite Database",
+            extensions: ["db", "sqlite"],
+          },
+        ],
+      });
+
+      if (!selected) return;
+
+      setIsSubmitting(true);
+      await invoke("restore_database", { restorePath: selected });
+
+      // If restore successful, we should probably check if user exists or just let them login
+      // Ideally, we redirect to login or dashboard.
+      // For now, let's assume restored DB has users and redirect to dashboard
+      // but maybe we shoud reload to ensure state is fresh.
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to restore database:", err);
+      setError(typeof err === "string" ? err : "Failed to restore database");
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
     setError("");
     setIsSubmitting(true);
@@ -345,10 +374,17 @@ export default function OnboardingForm() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                  >
-                    <path d="M6 4L10 8L6 12" />
-                  </svg>
+                  ></svg>
                 </button>
+
+                <div className="mt-6">
+                  <button
+                    className="btn-liquid btn-liquid-ghost text-sm text-text-muted hover:text-text-primary px-6 py-2"
+                    onClick={handleRestore}
+                  >
+                    {t("auth.onboarding.restore_backup", "Restore from Backup")}
+                  </button>
+                </div>
               </motion.div>
             )}
 

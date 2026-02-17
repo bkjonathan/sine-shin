@@ -24,7 +24,7 @@ use crate::commands::order::{
 };
 use crate::commands::settings::{get_app_settings, update_app_settings, AppSettings};
 use crate::commands::shop::{get_shop_settings, save_shop_setup, update_shop_settings};
-use crate::commands::system::{backup_database, get_db_status, reset_app_data};
+use crate::commands::system::{backup_database, get_db_status, reset_app_data, restore_database};
 use crate::db::init_db;
 use crate::state::AppDb;
 
@@ -203,6 +203,7 @@ pub fn run() {
             update_shop_settings,
             reset_app_data,
             backup_database,
+            restore_database,
             register_user,
             login_user,
             get_db_status,

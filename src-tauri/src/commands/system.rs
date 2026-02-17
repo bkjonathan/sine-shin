@@ -68,6 +68,38 @@ pub async fn backup_database(app: AppHandle, dest_path: String) -> Result<u64, S
 }
 
 #[tauri::command]
+pub async fn restore_database(app: AppHandle, restore_path: String) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let mut pool_guard = db.0.lock().await;
+
+    // 1. Close the existing pool
+    pool_guard.close().await;
+
+    // 2. Overwrite the database file
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db_path = app_data_dir.join("shop.db");
+    
+    let restore_source = PathBuf::from(&restore_path);
+    if !restore_source.exists() {
+        return Err("Restore file not found".to_string());
+    }
+
+    fs::copy(&restore_source, &db_path).map_err(|e| format!("Failed to restore database: {}", e))?;
+
+    // 3. Re-initialize the pool
+    let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
+    let new_pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .map_err(|e| format!("Failed to reconnect to database: {}", e))?;
+
+    *pool_guard = new_pool;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_db_status(app: AppHandle) -> Result<DbStatus, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
