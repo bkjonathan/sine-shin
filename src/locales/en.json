@@ -112,6 +112,14 @@
     "total_price": "Total Price",
     "total_weight": "Total Weight",
     "actions": "Actions",
+
+    "statuses": {
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "shipping": "Shipping",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
     "status_pending": "Pending",
     "status_processing": "Processing",
     "status_completed": "Completed",

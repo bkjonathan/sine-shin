@@ -96,7 +96,28 @@ export const updateOrder = async (
     userWithdrawDate: order.user_withdraw_date,
     serviceFee: order.service_fee,
     serviceFeeType: order.service_fee_type,
+    status: order.status,
   });
+};
+
+export const updateOrderStatus = async (
+  id: number,
+  status: string,
+): Promise<void> => {
+  // Since we don't have a specific command for status only, we might need to fetch and update
+  // OR we can implement a specific command.
+  // For now, let's assume we use update_order but we need the full object.
+  // actually, the backend update_order replaces everything.
+  // It is safer to add a specific command or ensure we pass all data.
+  // Given the current backend implementation of update_order, it replaces everything.
+  // So strictly speaking, to update status only, we should fetch then update, or add a specific command.
+  // However, for the UI, we usually have the order object.
+  // Let's rely on updateOrder for now and pass the whole object from the UI.
+  // If we really need a status-only update, we should add a backend command.
+  // But wait, I added `update_order_status` to the plan but implementation plan said "Add `update_order_status` command ... (optional)".
+  // And I didn't implement `update_order_status` in backend.
+  // So I will just use `updateOrder` in the UI.
+  return Promise.reject("Not implemented, use updateOrder");
 };
 
 export const deleteOrder = async (id: number): Promise<void> => {

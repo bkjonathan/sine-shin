@@ -69,6 +69,7 @@ pub struct Order {
     pub created_at: Option<String>,
     pub service_fee: Option<f64>,
     pub service_fee_type: Option<String>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -112,6 +113,7 @@ pub struct OrderWithCustomer {
     pub total_qty: Option<i64>,
     pub total_weight: Option<f64>,
     pub first_product_url: Option<String>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

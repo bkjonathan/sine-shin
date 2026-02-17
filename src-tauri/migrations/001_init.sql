@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS orders (
   user_withdraw_date DATETIME,
   service_fee REAL,
   service_fee_type TEXT,
+  status TEXT DEFAULT 'pending',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES customers (id)
 );

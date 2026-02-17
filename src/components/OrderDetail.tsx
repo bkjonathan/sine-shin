@@ -16,6 +16,8 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { formatDate } from "../utils/date";
 import QRCode from "qrcode";
 import DatePicker from "./ui/DatePicker";
+import { Select } from "./ui/Select";
+import { OrderStatus } from "../types/order";
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -231,6 +233,48 @@ export default function OrderDetail() {
     setEditingField(field);
   };
 
+  const handleStatusChange = async (newStatus: string | number) => {
+    if (!orderDetail) return;
+    const status = newStatus as OrderStatus;
+
+    try {
+      setIsUpdating(true);
+      const { order, items } = orderDetail;
+
+      const updatedOrder = {
+        id: order.id,
+        customer_id: order.customer_id,
+        order_from: order.order_from,
+        items: items.map((item) => ({
+          product_url: item.product_url,
+          product_qty: item.product_qty,
+          price: item.price,
+          product_weight: item.product_weight,
+        })),
+        exchange_rate: order.exchange_rate,
+        shipping_fee: order.shipping_fee,
+        delivery_fee: order.delivery_fee,
+        cargo_fee: order.cargo_fee,
+        order_date: order.order_date,
+        arrived_date: order.arrived_date,
+        shipment_date: order.shipment_date,
+        user_withdraw_date: order.user_withdraw_date,
+        service_fee: order.service_fee,
+        service_fee_type: order.service_fee_type,
+        status: status,
+      };
+
+      await updateOrder(updatedOrder);
+      await loadData(order.id);
+      playSound("success");
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      playSound("error");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!orderDetail || !editingField) return;
 
@@ -283,6 +327,7 @@ export default function OrderDetail() {
         user_withdraw_date: order.user_withdraw_date,
         service_fee: order.service_fee,
         service_fee_type: order.service_fee_type,
+        status: order.status,
       };
 
       // Update the specific field
@@ -575,12 +620,12 @@ export default function OrderDetail() {
         {/* Header */}
         <motion.div
           variants={itemVariants}
-          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
         >
-          <div className="flex items-center gap-4">
+          <div className="flex items-start gap-4">
             <button
               onClick={handleBack}
-              className="p-2 rounded-xl hover:bg-glass-white-hover transition-colors text-text-secondary hover:text-text-primary"
+              className="p-2 rounded-xl hover:bg-glass-white-hover transition-colors text-text-secondary hover:text-text-primary mt-1"
             >
               <svg
                 width="24"
@@ -600,11 +645,34 @@ export default function OrderDetail() {
               <h1 className="text-2xl font-bold text-text-primary">
                 {t("orders.detail.title")} #{order.order_id || order.id}
               </h1>
-              <p className="text-text-secondary">
+              <p className="text-text-secondary mb-3">
                 {t("orders.detail.created_at", {
                   date: formatDate(order.created_at),
                 })}
               </p>
+              <div className="w-48">
+                <Select
+                  options={[
+                    { value: "pending", label: t("orders.statuses.pending") },
+                    {
+                      value: "confirmed",
+                      label: t("orders.statuses.confirmed"),
+                    },
+                    { value: "shipping", label: t("orders.statuses.shipping") },
+                    {
+                      value: "completed",
+                      label: t("orders.statuses.completed"),
+                    },
+                    {
+                      value: "cancelled",
+                      label: t("orders.statuses.cancelled"),
+                    },
+                  ]}
+                  value={order.status || "pending"}
+                  onChange={handleStatusChange}
+                  placeholder={t("orders.status")}
+                />
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:justify-end">

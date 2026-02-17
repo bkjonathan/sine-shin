@@ -14,7 +14,15 @@ export interface Order {
   created_at?: string;
   service_fee?: number;
   service_fee_type?: "fixed" | "percent";
+  status?: OrderStatus;
 }
+
+export type OrderStatus =
+  | "pending"
+  | "confirmed"
+  | "shipping"
+  | "completed"
+  | "cancelled";
 
 export interface OrderItem {
   id: number;

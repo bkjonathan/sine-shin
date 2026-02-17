@@ -27,6 +27,7 @@ pub async fn create_order(
     user_withdraw_date: Option<String>,
     service_fee: Option<f64>,
     service_fee_type: Option<String>,
+    status: Option<String>,
     items: Vec<OrderItemPayload>,
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
@@ -35,7 +36,7 @@ pub async fn create_order(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     let id = sqlx::query(
-        "INSERT INTO orders (customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO orders (customer_id, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(customer_id)
     .bind(order_from)
@@ -49,6 +50,7 @@ pub async fn create_order(
     .bind(user_withdraw_date)
     .bind(service_fee)
     .bind(service_fee_type)
+    .bind(status.unwrap_or("pending".to_string()))
     .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?
@@ -283,6 +285,7 @@ pub async fn update_order(
     user_withdraw_date: Option<String>,
     service_fee: Option<f64>,
     service_fee_type: Option<String>,
+    status: Option<String>,
     items: Vec<OrderItemPayload>,
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
@@ -291,7 +294,7 @@ pub async fn update_order(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     sqlx::query(
-        "UPDATE orders SET customer_id = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, service_fee_type = ? WHERE id = ?",
+        "UPDATE orders SET customer_id = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, service_fee_type = ?, status = ? WHERE id = ?",
     )
     .bind(customer_id)
     .bind(order_from)
@@ -305,6 +308,7 @@ pub async fn update_order(
     .bind(user_withdraw_date)
     .bind(service_fee)
     .bind(service_fee_type)
+    .bind(status.unwrap_or("pending".to_string()))
     .bind(id)
     .execute(&mut *tx)
     .await

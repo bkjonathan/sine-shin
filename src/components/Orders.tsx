@@ -712,6 +712,23 @@ export default function Orders() {
                             <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
                               {order.order_id || t("orders.id_pending")}
                             </div>
+                            <div
+                              className={`px-2 py-1 rounded text-xs font-medium border ${
+                                order.status === "completed"
+                                  ? "bg-green-500/10 text-green-500 border-green-500/20"
+                                  : order.status === "shipping"
+                                    ? "bg-purple-500/10 text-purple-500 border-purple-500/20"
+                                    : order.status === "confirmed"
+                                      ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
+                                      : order.status === "cancelled"
+                                        ? "bg-red-500/10 text-red-500 border-red-500/20"
+                                        : "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
+                              }`}
+                            >
+                              {t(
+                                `orders.statuses.${order.status || "pending"}`,
+                              )}
+                            </div>
 
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
                               <button

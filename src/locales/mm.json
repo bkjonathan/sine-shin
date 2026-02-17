@@ -112,6 +112,14 @@
     "total_price": "စုစုပေါင်း စျေးနှုန်း",
     "total_weight": "စုစုပေါင်း အလေးချိန်",
     "actions": "လုပ်ဆောင်ချက်များ",
+
+    "statuses": {
+      "pending": "ဆိုင်းငံ့",
+      "confirmed": "အတည်ပြုပြီး",
+      "shipping": "ပို့ဆောင်နေသည်",
+      "completed": "ပြီးစီး",
+      "cancelled": "ပယ်ဖျက်ပြီး"
+    },
     "status_pending": "ဆိုင်းငံ့",
     "status_processing": "ဆောင်ရွက်ဆဲ",
     "status_completed": "ပြီးစီး",
