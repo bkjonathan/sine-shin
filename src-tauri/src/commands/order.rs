@@ -72,7 +72,9 @@ pub async fn create_order(
             .await
             .unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
 
-    let prefix_str = prefix.unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
+    let prefix_str = prefix
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
     let order_id = format!("{}{:05}", prefix_str, id);
 
     let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")

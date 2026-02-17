@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager};
 pub type AppResult<T> = Result<T, String>;
 
 pub const DEFAULT_CUSTOMER_ID_PREFIX: &str = "SSC-";
-pub const DEFAULT_ORDER_ID_PREFIX: &str = "SSO0-";
+pub const DEFAULT_ORDER_ID_PREFIX: &str = "SSO-";
 pub const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
     SELECT
         o.*,
