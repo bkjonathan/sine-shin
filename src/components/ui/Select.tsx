@@ -14,6 +14,7 @@ interface SelectProps {
   className?: string;
   label?: string;
   required?: boolean;
+  menuPlacement?: "auto" | "top" | "bottom";
 }
 
 export function Select({
@@ -24,8 +25,12 @@ export function Select({
   className = "",
   label,
   required = false,
+  menuPlacement = "auto",
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [resolvedPlacement, setResolvedPlacement] = useState<"top" | "bottom">(
+    "bottom",
+  );
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
@@ -48,6 +53,29 @@ export function Select({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (menuPlacement === "top" || menuPlacement === "bottom") {
+      setResolvedPlacement(menuPlacement);
+      return;
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const estimatedHeight = Math.min(options.length * 42 + 8, 240);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    if (spaceBelow < estimatedHeight && spaceAbove > spaceBelow) {
+      setResolvedPlacement("top");
+      return;
+    }
+
+    setResolvedPlacement("bottom");
+  }, [isOpen, menuPlacement, options.length]);
 
   return (
     <div className={`relative ${className}`} ref={containerRef}>
@@ -100,7 +128,9 @@ export function Select({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -5, scale: 0.98 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute z-50 w-full mt-1 overflow-hidden glass-panel border border-[var(--color-glass-border-light)] shadow-xl max-h-60 overflow-y-auto"
+            className={`absolute z-50 w-full overflow-hidden glass-panel border border-[var(--color-glass-border-light)] shadow-xl max-h-60 overflow-y-auto ${
+              resolvedPlacement === "top" ? "bottom-full mb-1" : "top-full mt-1"
+            }`}
             style={{
               backgroundColor: "var(--color-liquid-bg)", // ensure it's opaque enough
               backdropFilter: "blur(20px) saturate(1.8)",

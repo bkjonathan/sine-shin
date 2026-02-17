@@ -15,7 +15,8 @@ use tokio::sync::Mutex;
 
 use crate::commands::auth::{check_is_onboarded, login_user, register_user};
 use crate::commands::customer::{
-    create_customer, delete_customer, get_customer, get_customers, update_customer,
+    create_customer, delete_customer, get_customer, get_customers, get_customers_paginated,
+    update_customer,
 };
 use crate::commands::order::{
     create_order, delete_order, get_customer_orders, get_dashboard_stats, get_order, get_orders,
@@ -207,6 +208,7 @@ pub fn run() {
             get_db_status,
             create_customer,
             get_customers,
+            get_customers_paginated,
             get_customer,
             update_customer,
             delete_customer,

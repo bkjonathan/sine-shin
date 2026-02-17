@@ -1,8 +1,56 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Customer } from "../types/customer";
 
+export const CUSTOMER_PAGE_SIZE_LIMITS = {
+  min: 5,
+  max: 100,
+  default: 5,
+} as const;
+
+const normalizePageSize = (pageSize?: number | "all"): number => {
+  if (pageSize === "all") {
+    return -1;
+  }
+
+  const requested = pageSize ?? CUSTOMER_PAGE_SIZE_LIMITS.default;
+  return Math.min(
+    CUSTOMER_PAGE_SIZE_LIMITS.max,
+    Math.max(CUSTOMER_PAGE_SIZE_LIMITS.min, requested),
+  );
+};
+
+const clampPage = (page?: number): number => {
+  return Math.max(1, page ?? 1);
+};
+
 export const getCustomers = async (): Promise<Customer[]> => {
   return await invoke("get_customers");
+};
+
+export interface CustomerSearchParams {
+  page?: number;
+  pageSize?: number | "all";
+  searchKey?: "name" | "customerId" | "phone";
+  searchTerm?: string;
+}
+
+export interface PaginatedCustomers {
+  customers: Customer[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export const getCustomersPaginated = async (
+  params: CustomerSearchParams,
+): Promise<PaginatedCustomers> => {
+  return await invoke("get_customers_paginated", {
+    page: clampPage(params.page),
+    pageSize: normalizePageSize(params.pageSize),
+    searchKey: params.searchKey,
+    searchTerm: params.searchTerm,
+  });
 };
 
 export const createCustomer = async (

@@ -206,7 +206,11 @@
     "export_csv": "CSV ထုတ်ယူရန်",
     "import_csv": "CSV ထည့်သွင်းရန်",
     "add_customer": "ဖောက်သည်သစ်ထည့်ရန်",
+    "search_by": "ရှာဖွေမည့်အမျိုးအစား",
     "search_placeholder": "ဖောက်သည်ရှာရန်...",
+    "search_key_name": "အမည်",
+    "search_key_customer_id": "ဖောက်သည် ID",
+    "search_key_phone": "ဖုန်း",
     "name": "အမည်",
     "phone": "ဖုန်း",
     "orders": "အော်ဒါများ",
@@ -218,6 +222,8 @@
     "no_customers_create": "စတင်ရန် ဖောက်သည်သစ် ထည့်ပါ",
     "no_phone": "ဖုန်းနံပါတ်မရှိ",
     "no_address": "လိပ်စာမရှိ",
+    "total_results": "စုစုပေါင်း {{count}} ယောက်",
+    "page_status": "စာမျက်နှာ {{page}} / {{total}}",
     "visit_social": "ပရိုဖိုင် ကြည့်ရန်",
     "id_prefix": "ID: ",
     "id_label": "ID",
@@ -379,7 +385,11 @@
     "others": "အခြား",
     "image": "ပုံရိပ်",
     "tel": "ဖုန်း",
+    "all": "အားလုံး",
     "no": "နံပါတ်",
-    "na": "မရှိ"
+    "na": "မရှိ",
+    "per_page": "တစ်မျက်နှာလျှင်",
+    "previous": "ယခင်",
+    "next": "နောက်"
   }
 }
