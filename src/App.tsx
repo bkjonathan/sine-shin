@@ -10,6 +10,7 @@ import Customers from "./components/Customers";
 import CustomerDetail from "./components/CustomerDetail";
 import OrderDetail from "./components/OrderDetail";
 import Settings from "./components/Settings.tsx";
+import Reports from "./components/Reports";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
 import { AppSettingsProvider } from "./context/AppSettingsContext";
@@ -128,6 +129,7 @@ function AppRoutes() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/account-book" element={<AccountBook />} />
+        <Route path="/reports" element={<Reports />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
         <Route path="/orders/:id" element={<OrderDetail />} />
