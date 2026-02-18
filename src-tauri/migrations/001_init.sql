@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS orders (
   shipment_date DATETIME,
   user_withdraw_date DATETIME,
   service_fee REAL,
+  product_discount REAL DEFAULT 0,
   service_fee_type TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES customers (id)

@@ -7,6 +7,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "orders": "Orders",
+    "account_book": "Account Book",
     "customers": "Customers",
     "settings": "Settings",
     "admin": "Admin",
@@ -158,6 +159,7 @@
       "user_withdraw_date": "User Withdraw Date",
       "service_fee_label": "Service Fee",
       "service_fee": "Service Fee",
+      "product_discount": "Product Discount",
       "fixed": "Fixed",
       "percent": "Percent"
     },
@@ -175,6 +177,7 @@
       "product_details": "Product Details",
       "timeline": "Timeline",
       "financial_summary": "Financial Summary",
+      "profit": "Profit",
       "fee": "Fee",
       "product_order_from": "Product Order from {{platform}}",
       "item_index": "Item {{index}}",
@@ -214,6 +217,20 @@
       "error_download_failed": "Download failed",
       "print": "Print Invoice"
     }
+  },
+  "account_book": {
+    "title": "Account Book",
+    "subtitle": "Track discounts and profit by order",
+    "search_placeholder": "Search by order ID, customer, source...",
+    "total_orders": "Orders",
+    "total_sales": "Sales",
+    "total_discount": "Discount",
+    "total_profit": "Profit",
+    "profit": "Profit",
+    "action": "Action",
+    "view_order": "View Order",
+    "no_data": "No account records found",
+    "no_data_hint": "Create orders and set product discounts to see profit records."
   },
   "customers": {
     "title": "Customers",

@@ -21,6 +21,7 @@ export interface Order {
   user_withdraw_date?: string;
   created_at?: string;
   service_fee?: number;
+  product_discount?: number;
   service_fee_type?: "fixed" | "percent";
 }
 
@@ -72,6 +73,7 @@ export interface OrderExportRow {
   arrived_date?: string;
   shipment_date?: string;
   service_fee?: number;
+  product_discount?: number;
   service_fee_type?: string;
   exchange_rate?: number;
   shipping_fee?: number;

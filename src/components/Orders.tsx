@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   getOrdersPaginated,
@@ -118,15 +118,33 @@ const getVisiblePages = (currentPage: number, totalPages: number): string[] => {
   return pages;
 };
 
+const parsePageParam = (value: string | null): number => {
+  const parsedPage = Number.parseInt(value ?? "1", 10);
+
+  if (Number.isNaN(parsedPage) || parsedPage < 1) {
+    return 1;
+  }
+
+  return parsedPage;
+};
+
+const getOrdersListPath = (page: number): string => {
+  return page > 1 ? `/orders?page=${page}` : "/orders";
+};
+
 export default function Orders() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [isPageTransitioning, setIsPageTransitioning] = useState(false);
   const [pageTransitionKey, setPageTransitionKey] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() =>
+    parsePageParam(searchParams.get("page")),
+  );
   const [pageSize, setPageSize] = useState<number | "all">(
     ORDER_PAGE_SIZE_LIMITS.default,
   );
@@ -141,7 +159,6 @@ export default function Orders() {
   const { playSound } = useSound();
   const { t } = useTranslation();
   const { formatPrice } = useAppSettings();
-  const navigate = useNavigate();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -173,6 +190,7 @@ export default function Orders() {
     shipment_date: "",
     user_withdraw_date: "",
     service_fee: "",
+    product_discount: "",
     service_fee_type: "fixed",
   };
   const [formData, setFormData] = useState(initialFormState);
@@ -198,6 +216,20 @@ export default function Orders() {
 
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  useEffect(() => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+
+    if (currentPage > 1) {
+      nextSearchParams.set("page", String(currentPage));
+    } else {
+      nextSearchParams.delete("page");
+    }
+
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }, [currentPage, searchParams, setSearchParams]);
 
   const [sortBy, setSortBy] = useState<
     "customer_name" | "order_id" | "created_at"
@@ -292,6 +324,7 @@ export default function Orders() {
           shipment_date: order.shipment_date || "",
           user_withdraw_date: order.user_withdraw_date || "",
           service_fee: order.service_fee?.toString() || "",
+          product_discount: order.product_discount?.toString() || "",
           service_fee_type: order.service_fee_type || "fixed",
         });
         setIsModalOpen(true);
@@ -311,6 +344,7 @@ export default function Orders() {
         shipment_date: "",
         user_withdraw_date: "",
         service_fee: "",
+        product_discount: "",
         service_fee_type: "fixed",
       });
       setIsModalOpen(true);
@@ -360,6 +394,9 @@ export default function Orders() {
         user_withdraw_date: formData.user_withdraw_date || undefined,
         service_fee: formData.service_fee
           ? parseFloat(formData.service_fee)
+          : undefined,
+        product_discount: formData.product_discount
+          ? parseFloat(formData.product_discount)
           : undefined,
         service_fee_type: formData.service_fee_type || "fixed",
       };
@@ -489,6 +526,7 @@ export default function Orders() {
         "Arrived Date",
         "Shipment Date",
         "Service Fee",
+        "Product Discount",
         "Service Fee Type",
         "Exchange Rate",
         "Shipping Fee",
@@ -512,6 +550,7 @@ export default function Orders() {
           row.arrived_date || "",
           row.shipment_date || "",
           row.service_fee || "",
+          row.product_discount || "",
           row.service_fee_type || "",
           row.exchange_rate || "",
           row.shipping_fee || "",
@@ -868,7 +907,11 @@ export default function Orders() {
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.95 }}
                           className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
-                          onClick={() => navigate(`/orders/${order.id}`)}
+                          onClick={() =>
+                            navigate(`/orders/${order.id}`, {
+                              state: { returnTo: getOrdersListPath(currentPage) },
+                            })
+                          }
                         >
                           <div className="relative z-10">
                             <div className="flex justify-between items-start mb-3">
@@ -1446,6 +1489,24 @@ export default function Orders() {
                           <option value="percent">%</option>
                         </select>
                       </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-secondary mb-1">
+                        {t("orders.form.product_discount")}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="input-liquid w-full"
+                        value={formData.product_discount}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            product_discount: e.target.value,
+                          })
+                        }
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

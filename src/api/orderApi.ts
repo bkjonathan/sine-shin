@@ -86,6 +86,7 @@ export const createOrder = async (
     shipmentDate: order.shipment_date,
     userWithdrawDate: order.user_withdraw_date,
     serviceFee: order.service_fee,
+    productDiscount: order.product_discount,
     serviceFeeType: order.service_fee_type,
     id: order.id,
     orderId: order.order_id,
@@ -110,6 +111,7 @@ export const updateOrder = async (
     shipmentDate: order.shipment_date,
     userWithdrawDate: order.user_withdraw_date,
     serviceFee: order.service_fee,
+    productDiscount: order.product_discount,
     serviceFeeType: order.service_fee_type,
   });
 };

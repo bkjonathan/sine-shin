@@ -47,6 +47,22 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         .execute(pool)
         .await?;
 
+    let product_discount_column_exists: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM pragma_table_info('orders') WHERE name = 'product_discount' LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    if product_discount_column_exists.is_none() {
+        sqlx::query("ALTER TABLE orders ADD COLUMN product_discount REAL DEFAULT 0")
+            .execute(pool)
+            .await?;
+    }
+
+    sqlx::query("UPDATE orders SET product_discount = 0 WHERE product_discount IS NULL")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }
 

@@ -40,6 +40,21 @@ const Icons = {
       <line x1="3" y1="18" x2="3.01" y2="18" />
     </svg>
   ),
+  Book: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </svg>
+  ),
   Users: () => (
     <svg
       width="20"
@@ -100,6 +115,7 @@ const Icons = {
 const navItems = [
   { to: "/dashboard", label: "nav.dashboard", icon: Icons.Home },
   { to: "/orders", label: "nav.orders", icon: Icons.List },
+  { to: "/account-book", label: "nav.account_book", icon: Icons.Book },
   { to: "/customers", label: "nav.customers", icon: Icons.Users },
   { to: "/settings", label: "nav.settings", icon: Icons.Settings },
 ];

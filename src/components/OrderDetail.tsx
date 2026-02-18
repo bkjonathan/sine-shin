@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { getOrderById, updateOrder } from "../api/orderApi";
@@ -68,6 +68,7 @@ const getOrderStatusDisplay = (
 export default function OrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const { playSound } = useSound();
   const {
@@ -334,6 +335,7 @@ export default function OrderDetail() {
         shipment_date: order.shipment_date,
         user_withdraw_date: order.user_withdraw_date,
         service_fee: order.service_fee,
+        product_discount: order.product_discount,
         service_fee_type: order.service_fee_type,
       };
 
@@ -363,7 +365,8 @@ export default function OrderDetail() {
 
   const handleBack = () => {
     playSound("click");
-    navigate("/orders");
+    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
+    navigate(returnTo || "/orders");
   };
 
   const containerVariants = {
@@ -413,6 +416,8 @@ export default function OrderDetail() {
     order.service_fee_type === "percent"
       ? ((order.total_price || 0) * (order.service_fee || 0)) / 100
       : order.service_fee || 0;
+  const productDiscount = order.product_discount || 0;
+  const orderProfit = serviceFeeAmount + productDiscount;
 
   const orderTotal =
     (order.total_price || 0) +
@@ -1552,12 +1557,25 @@ export default function OrderDetail() {
                   "cargo_fee",
                   order.cargo_fee,
                 )}
+                {renderEditableFee(
+                  t("orders.form.product_discount"),
+                  "product_discount",
+                  order.product_discount,
+                )}
                 <div className="mt-4 pt-4 flex justify-between items-center">
                   <span className="font-semibold text-text-primary">
                     {t("orders.total")}
                   </span>
                   <span className="font-bold text-xl text-success">
                     {formatPrice(orderTotal)}
+                  </span>
+                </div>
+                <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-center">
+                  <span className="font-semibold text-text-primary">
+                    {t("orders.detail.profit")}
+                  </span>
+                  <span className="font-bold text-xl text-emerald-500">
+                    {formatPrice(orderProfit)}
                   </span>
                 </div>
                 <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-center">

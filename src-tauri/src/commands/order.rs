@@ -53,6 +53,7 @@ pub async fn create_order(
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
     service_fee: Option<f64>,
+    product_discount: Option<f64>,
     service_fee_type: Option<String>,
     items: Vec<OrderItemPayload>,
     id: Option<i64>,
@@ -67,7 +68,7 @@ pub async fn create_order(
 
     let inserted_id = if let Some(provided_id) = id {
         sqlx::query(
-            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(provided_id)
         .bind(customer_id)
@@ -82,6 +83,7 @@ pub async fn create_order(
         .bind(shipment_date)
         .bind(user_withdraw_date)
         .bind(service_fee)
+        .bind(product_discount)
         .bind(service_fee_type)
         .execute(&mut *tx)
         .await
@@ -89,7 +91,7 @@ pub async fn create_order(
         .last_insert_rowid()
     } else {
         sqlx::query(
-            "INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(customer_id)
         .bind(normalized_status)
@@ -103,6 +105,7 @@ pub async fn create_order(
         .bind(shipment_date)
         .bind(user_withdraw_date)
         .bind(service_fee)
+        .bind(product_discount)
         .bind(service_fee_type)
         .execute(&mut *tx)
         .await
@@ -373,6 +376,7 @@ pub async fn update_order(
     shipment_date: Option<String>,
     user_withdraw_date: Option<String>,
     service_fee: Option<f64>,
+    product_discount: Option<f64>,
     service_fee_type: Option<String>,
     items: Vec<OrderItemPayload>,
 ) -> Result<(), String> {
@@ -384,7 +388,7 @@ pub async fn update_order(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     sqlx::query(
-        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, service_fee_type = ? WHERE id = ?",
+        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ? WHERE id = ?",
     )
     .bind(customer_id)
     .bind(normalized_status)
@@ -398,6 +402,7 @@ pub async fn update_order(
     .bind(shipment_date)
     .bind(user_withdraw_date)
     .bind(service_fee)
+    .bind(product_discount)
     .bind(service_fee_type)
     .bind(id)
     .execute(&mut *tx)
@@ -452,10 +457,7 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
             .await
             .map_err(|e| e.to_string())?;
 
-    // Calculate total profit (service fees)
-    // We need to fetch all orders to calculate percentage based fees correctly
-    // or we can try to do it in SQL if possible, but SQLite math might be tricky with mixed types
-    // Let's do a query that sums up based on case
+    // Calculate total profit from service fees + product discounts.
     let total_profit: (f64,) = sqlx::query_as(
         r#"
         SELECT COALESCE(SUM(
@@ -465,6 +467,7 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
                 ELSE 
                     COALESCE(service_fee, 0)
             END
+            + COALESCE(product_discount, 0)
         ), 0.0)
         FROM orders
         "#,
@@ -517,6 +520,7 @@ pub async fn get_orders_for_export(app: AppHandle) -> Result<Vec<OrderExportRow>
             o.arrived_date,
             o.shipment_date,
             o.service_fee,
+            o.product_discount,
             o.service_fee_type,
             o.exchange_rate,
             o.shipping_fee,

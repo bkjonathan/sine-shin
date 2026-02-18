@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   getCustomers,
@@ -60,15 +60,32 @@ const getVisiblePages = (currentPage: number, totalPages: number): string[] => {
   return pages;
 };
 
+const parsePageParam = (value: string | null): number => {
+  const parsedPage = Number.parseInt(value ?? "1", 10);
+
+  if (Number.isNaN(parsedPage) || parsedPage < 1) {
+    return 1;
+  }
+
+  return parsedPage;
+};
+
+const getCustomersListPath = (page: number): string => {
+  return page > 1 ? `/customers?page=${page}` : "/customers";
+};
+
 export default function Customers() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [isPageTransitioning, setIsPageTransitioning] = useState(false);
   const [pageTransitionKey, setPageTransitionKey] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() =>
+    parsePageParam(searchParams.get("page")),
+  );
   const [pageSize, setPageSize] = useState<number | "all">(
     CUSTOMER_PAGE_SIZE_LIMITS.default,
   );
@@ -121,6 +138,20 @@ export default function Customers() {
 
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  useEffect(() => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+
+    if (currentPage > 1) {
+      nextSearchParams.set("page", String(currentPage));
+    } else {
+      nextSearchParams.delete("page");
+    }
+
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }, [currentPage, searchParams, setSearchParams]);
 
   useEffect(() => {
     fetchCustomers(currentPage);
@@ -697,7 +728,13 @@ export default function Customers() {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        onClick={() => navigate(`/customers/${customer.id}`)}
+                        onClick={() =>
+                          navigate(`/customers/${customer.id}`, {
+                            state: {
+                              returnTo: getCustomersListPath(currentPage),
+                            },
+                          })
+                        }
                         className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
                       >
                         {/* Decorative background gradient on hover */}

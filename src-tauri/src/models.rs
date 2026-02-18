@@ -69,6 +69,7 @@ pub struct Order {
     pub user_withdraw_date: Option<String>,
     pub created_at: Option<String>,
     pub service_fee: Option<f64>,
+    pub product_discount: Option<f64>,
     pub service_fee_type: Option<String>,
 }
 
@@ -109,6 +110,7 @@ pub struct OrderWithCustomer {
     pub user_withdraw_date: Option<String>,
     pub created_at: Option<String>,
     pub service_fee: Option<f64>,
+    pub product_discount: Option<f64>,
     pub service_fee_type: Option<String>,
     pub total_price: Option<f64>,
     pub total_qty: Option<i64>,
@@ -155,6 +157,7 @@ pub struct OrderExportRow {
     pub arrived_date: Option<String>,
     pub shipment_date: Option<String>,
     pub service_fee: Option<f64>,
+    pub product_discount: Option<f64>,
     pub service_fee_type: Option<String>,
     pub exchange_rate: Option<f64>,
     pub shipping_fee: Option<f64>,

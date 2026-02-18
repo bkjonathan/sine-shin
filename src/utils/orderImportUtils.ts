@@ -11,6 +11,7 @@ interface UnprocessedOrder {
   delivery_fee?: number;
   cargo_fee?: number;
   service_fee?: number;
+  product_discount?: number;
   service_fee_type?: "fixed" | "percent";
   order_date?: string;
   arrived_date?: string;
@@ -110,6 +111,7 @@ export const processOrderCSV = (
         delivery_fee: parseFloat(getValue("Delivery Fee")) || undefined,
         cargo_fee: parseFloat(getValue("Cargo Fee")) || undefined,
         service_fee: parseFloat(getValue("Service Fee")) || undefined,
+        product_discount: parseFloat(getValue("Product Discount")) || undefined,
         service_fee_type: (getValue("Service Fee Type") as any) || "fixed",
         order_date: orderDate || undefined,
         arrived_date: arrivedDate || undefined,

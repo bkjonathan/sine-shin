@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { getCustomerById, getCustomerOrders } from "../api/customerApi";
@@ -21,6 +21,7 @@ const fadeVariants = {
 export default function CustomerDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const { playSound } = useSound();
   const { formatPrice } = useAppSettings();
@@ -55,7 +56,8 @@ export default function CustomerDetail() {
 
   const handleBack = () => {
     playSound("click");
-    navigate("/customers");
+    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
+    navigate(returnTo || "/customers");
   };
 
   if (loading) {
