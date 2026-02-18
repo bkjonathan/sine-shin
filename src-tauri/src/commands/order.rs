@@ -506,6 +506,12 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
         .await
         .map_err(|e| e.to_string())?;
 
+    let total_cargo_fee: (f64,) =
+        sqlx::query_as("SELECT COALESCE(SUM(cargo_fee), 0.0) FROM orders")
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
     let query = format!(
         "{} {} ORDER BY o.created_at DESC LIMIT 5",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
@@ -518,6 +524,7 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
     Ok(DashboardStats {
         total_revenue: total_revenue.0,
         total_profit: total_profit.0,
+        total_cargo_fee: total_cargo_fee.0,
         total_orders: total_orders.0,
         total_customers: total_customers.0,
         recent_orders,

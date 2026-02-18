@@ -9,6 +9,7 @@ import {
   MapPin,
   ShoppingBag,
   TrendingUp,
+  Truck,
   Users,
   Wallet,
 } from "lucide-react";
@@ -40,6 +41,7 @@ interface EnrichedOrder extends OrderWithCustomer {
   serviceFeeAmount: number;
   discountAmount: number;
   profit: number;
+  cargoFee: number;
   timelineDate: Date | null;
   city: string;
   platform: string;
@@ -53,6 +55,7 @@ interface TrendPoint {
   timestamp: number;
   revenue: number;
   profit: number;
+  cargoFee: number;
   orders: number;
 }
 
@@ -235,6 +238,7 @@ function TrendChart({
   formatPrice,
   revenueLabel,
   profitLabel,
+  cargoLabel,
   ordersLabel,
   emptyLabel,
 }: {
@@ -242,6 +246,7 @@ function TrendChart({
   formatPrice: (amount: number) => string;
   revenueLabel: string;
   profitLabel: string;
+  cargoLabel: string;
   ordersLabel: string;
   emptyLabel: string;
 }) {
@@ -260,7 +265,7 @@ function TrendChart({
           <LineChart
             data={data}
             margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
-            aria-label={`${revenueLabel} and ${profitLabel} trend`}
+            aria-label={`${revenueLabel}, ${profitLabel}, and ${cargoLabel} trend`}
           >
             <CartesianGrid
               strokeDasharray="3 3"
@@ -291,6 +296,8 @@ function TrendChart({
                   ? revenueLabel
                   : name === "profit"
                     ? profitLabel
+                    : name === "cargoFee"
+                      ? cargoLabel
                     : ordersLabel,
               ]}
               labelStyle={{ color: "rgba(255,255,255,0.85)" }}
@@ -313,6 +320,15 @@ function TrendChart({
               dot={{ r: 3, strokeWidth: 0 }}
               activeDot={{ r: 5 }}
             />
+            <Line
+              type="monotone"
+              dataKey="cargoFee"
+              name="cargoFee"
+              stroke="#f59e0b"
+              strokeWidth={2.6}
+              dot={{ r: 3, strokeWidth: 0 }}
+              activeDot={{ r: 5 }}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -325,6 +341,10 @@ function TrendChart({
         <span className="inline-flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-[#34d399]" />
           {profitLabel}
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#f59e0b]" />
+          {cargoLabel}
         </span>
       </div>
     </div>
@@ -596,6 +616,7 @@ export default function Reports() {
         serviceFeeAmount,
         discountAmount,
         profit,
+        cargoFee: order.cargo_fee || 0,
         timelineDate: parseOrderDate(order),
         city,
         platform,
@@ -635,6 +656,7 @@ export default function Reports() {
       (acc, order) => {
         acc.totalRevenue += order.revenue;
         acc.totalProfit += order.profit;
+        acc.totalCargoFee += order.cargoFee;
         acc.totalOrders += 1;
         if (order.normalizedStatus === "completed") acc.completedOrders += 1;
         if (order.normalizedStatus === "cancelled") acc.cancelledOrders += 1;
@@ -643,6 +665,7 @@ export default function Reports() {
       {
         totalRevenue: 0,
         totalProfit: 0,
+        totalCargoFee: 0,
         totalOrders: 0,
         completedOrders: 0,
         cancelledOrders: 0,
@@ -687,6 +710,7 @@ export default function Reports() {
       if (existing) {
         existing.revenue += order.revenue;
         existing.profit += order.profit;
+        existing.cargoFee += order.cargoFee;
         existing.orders += 1;
         continue;
       }
@@ -707,6 +731,7 @@ export default function Reports() {
         timestamp,
         revenue: order.revenue,
         profit: order.profit,
+        cargoFee: order.cargoFee,
         orders: 1,
       });
     }
@@ -921,6 +946,13 @@ export default function Reports() {
               gradientClass="from-emerald-500 to-teal-500"
             />
             <MetricCard
+              label={t("reports.total_cargo_fee")}
+              value={formatPrice(totals.totalCargoFee)}
+              helperText={t("reports.total_cargo_fee_hint")}
+              icon={Truck}
+              gradientClass="from-sky-500 to-indigo-500"
+            />
+            <MetricCard
               label={t("reports.total_orders")}
               value={totals.totalOrders.toLocaleString()}
               helperText={`${completionRate.toFixed(1)}% ${t("reports.completed_rate")}`}
@@ -974,6 +1006,7 @@ export default function Reports() {
               formatPrice={formatPrice}
               revenueLabel={t("reports.total_revenue")}
               profitLabel={t("reports.total_profit")}
+              cargoLabel={t("reports.total_cargo_fee")}
               ordersLabel={t("reports.total_orders")}
               emptyLabel={t("reports.chart_no_data")}
             />

@@ -136,6 +136,7 @@ pub struct OrderDetail {
 pub struct DashboardStats {
     pub total_revenue: f64,
     pub total_profit: f64,
+    pub total_cargo_fee: f64,
     pub total_orders: i64,
     pub total_customers: i64,
     pub recent_orders: Vec<OrderWithCustomer>,

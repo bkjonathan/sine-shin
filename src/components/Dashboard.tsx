@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import { useAppSettings } from "../context/AppSettingsContext";
-import { DollarSign, ShoppingBag, Users, TrendingUp } from "lucide-react";
+import { DollarSign, ShoppingBag, Users, TrendingUp, Truck } from "lucide-react";
 
 interface ShopData {
   shop_name: string;
@@ -32,6 +32,7 @@ interface OrderWithCustomer {
 interface DashboardStats {
   total_revenue: number;
   total_profit: number;
+  total_cargo_fee: number;
   total_orders: number;
   total_customers: number;
   recent_orders: OrderWithCustomer[];
@@ -146,7 +147,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* ── Stats Grid ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
         {[
           {
             label: "dashboard.total_revenue",
@@ -179,6 +180,14 @@ export default function Dashboard() {
             positive: true,
             gradient: "from-amber-500 to-orange-500",
             icon: TrendingUp,
+          },
+          {
+            label: "dashboard.total_cargo_fee",
+            value: stats ? formatPrice(stats.total_cargo_fee) : "-",
+            change: "",
+            positive: true,
+            gradient: "from-sky-500 to-indigo-500",
+            icon: Truck,
           },
         ].map((stat) => (
           <motion.div key={stat.label} variants={itemVariants}>
