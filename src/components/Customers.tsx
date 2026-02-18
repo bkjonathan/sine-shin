@@ -14,6 +14,21 @@ import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
 import { Select } from "./ui/Select";
 import { parseCSV } from "../utils/csvUtils";
+import {
+  IconDownload,
+  IconEdit,
+  IconLink,
+  IconMapPin,
+  IconPhone,
+  IconPlus,
+  IconSearch,
+  IconSortAsc,
+  IconSortDesc,
+  IconTrash,
+  IconUpload,
+  IconUsers,
+  IconX,
+} from "./icons";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -430,20 +445,7 @@ export default function Customers() {
             {isImporting ? (
               <div className="w-4 h-4 border-2 border-text-secondary border-t-text-primary rounded-full animate-spin" />
             ) : (
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
+              <IconUpload size={16} strokeWidth={2} />
             )}
             {t("customers.import_csv")}
           </button>
@@ -514,38 +516,14 @@ export default function Customers() {
             }}
             className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
+            <IconDownload size={16} strokeWidth={2} />
             {t("customers.export_csv")}
           </button>
           <button
             onClick={() => handleOpenModal()}
             className="btn-liquid btn-liquid-primary px-4 py-2 text-sm flex items-center gap-2"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <IconPlus size={16} strokeWidth={2} />
             {t("customers.add_customer")}
           </button>
         </div>
@@ -576,19 +554,7 @@ export default function Customers() {
           </div>
           <div className="relative flex-1">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg
-                className="h-4 w-4 text-text-muted"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
+              <IconSearch className="h-4 w-4 text-text-muted" strokeWidth={2} />
             </div>
             <input
               type="text"
@@ -627,39 +593,9 @@ export default function Customers() {
             title={sortOrder === "asc" ? "Ascending" : "Descending"}
           >
             {sortOrder === "asc" ? (
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="m3 9 4-5 4 5" />
-                <path d="M7 4v16" />
-                <path d="M12 12h4" />
-                <path d="M12 16h7" />
-                <path d="M12 20h10" />
-              </svg>
+              <IconSortAsc size={20} strokeWidth={2} />
             ) : (
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="m3 16 4 5 4-5" />
-                <path d="M7 21V5" />
-                <path d="M12 5h10" />
-                <path d="M12 9h7" />
-                <path d="M12 13h4" />
-              </svg>
+              <IconSortDesc size={20} strokeWidth={2} />
             )}
           </button>
         </div>
@@ -683,21 +619,7 @@ export default function Customers() {
             ) : (
               <div className="text-center py-20 bg-glass-white rounded-xl border border-glass-border">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-glass-white-hover flex items-center justify-center text-text-muted">
-                  <svg
-                    width="32"
-                    height="32"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
+                  <IconUsers size={32} strokeWidth={1.5} />
                 </div>
                 <h3 className="text-lg font-medium text-text-primary">
                   {t("customers.no_customers")}
@@ -779,19 +701,7 @@ export default function Customers() {
                                 className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
                                 title="Edit"
                               >
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                >
-                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                </svg>
+                                <IconEdit size={16} strokeWidth={2} />
                               </button>
                               <button
                                 onClick={(e) => {
@@ -802,19 +712,7 @@ export default function Customers() {
                                 className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
                                 title="Delete"
                               >
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                >
-                                  <polyline points="3 6 5 6 21 6" />
-                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                </svg>
+                                <IconTrash size={16} strokeWidth={2} />
                               </button>
                             </div>
                           </div>
@@ -827,17 +725,7 @@ export default function Customers() {
                             {customer.phone ? (
                               <div className="flex items-center gap-2.5 text-sm group/phone">
                                 <div className="p-1.5 rounded-md bg-glass-white text-text-muted group-hover/phone:text-accent-blue transition-colors">
-                                  <svg
-                                    className="w-3.5 h-3.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                                  </svg>
+                                  <IconPhone className="w-3.5 h-3.5" strokeWidth={2} />
                                 </div>
                                 <span className="text-text-secondary font-medium">
                                   {customer.phone}
@@ -846,17 +734,7 @@ export default function Customers() {
                             ) : (
                               <div className="flex items-center gap-2.5 text-sm opacity-40">
                                 <div className="p-1.5 rounded-md bg-glass-white text-text-muted">
-                                  <svg
-                                    className="w-3.5 h-3.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                                  </svg>
+                                  <IconPhone className="w-3.5 h-3.5" strokeWidth={2} />
                                 </div>
                                 <span className="text-text-muted italic">
                                   {t("customers.no_phone")}
@@ -867,18 +745,7 @@ export default function Customers() {
                             {customer.address || customer.city ? (
                               <div className="flex items-start gap-2.5 text-sm group/addr">
                                 <div className="p-1.5 mt-0.5 rounded-md bg-glass-white text-text-muted group-hover/addr:text-accent-purple transition-colors shrink-0">
-                                  <svg
-                                    className="w-3.5 h-3.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                    <circle cx="12" cy="10" r="3" />
-                                  </svg>
+                                  <IconMapPin className="w-3.5 h-3.5" strokeWidth={2} />
                                 </div>
                                 <span className="text-text-secondary line-clamp-2 leading-snug">
                                   {[customer.address, customer.city]
@@ -889,18 +756,7 @@ export default function Customers() {
                             ) : (
                               <div className="flex items-center gap-2.5 text-sm opacity-40">
                                 <div className="p-1.5 rounded-md bg-glass-white text-text-muted">
-                                  <svg
-                                    className="w-3.5 h-3.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                    <circle cx="12" cy="10" r="3" />
-                                  </svg>
+                                  <IconMapPin className="w-3.5 h-3.5" strokeWidth={2} />
                                 </div>
                                 <span className="text-text-muted italic">
                                   {t("customers.no_address")}
@@ -916,18 +772,10 @@ export default function Customers() {
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1.5 text-xs text-accent-blue hover:text-accent-cyan font-medium transition-colors bg-accent-blue/5 hover:bg-accent-blue/10 px-2.5 py-1.5 rounded-md w-full justify-center group/link"
                                 >
-                                  <svg
+                                  <IconLink
                                     className="w-3.5 h-3.5 transition-transform group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                                  </svg>
+                                    strokeWidth={2}
+                                  />
                                   {t("customers.visit_social")}
                                 </a>
                               </div>
@@ -1082,19 +930,7 @@ export default function Customers() {
                   onClick={handleCloseModal}
                   className="p-2 hover:bg-glass-white-hover rounded-full transition-colors"
                 >
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
+                  <IconX size={20} strokeWidth={2} />
                 </button>
               </div>
 
@@ -1257,19 +1093,7 @@ export default function Customers() {
             >
               <div className="flex flex-col items-center text-center">
                 <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2"></path>
-                  </svg>
+                  <IconTrash size={24} strokeWidth={2} />
                 </div>
                 <h3 className="text-lg font-bold text-text-primary mb-2">
                   {t("customers.delete_modal.title")}

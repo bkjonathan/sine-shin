@@ -3,155 +3,27 @@ import { NavLink, Outlet } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
-
-// ── SVG Icons ──
-const Icons = {
-  Home: () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  ),
-  List: () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <line x1="8" y1="6" x2="21" y2="6" />
-      <line x1="8" y1="12" x2="21" y2="12" />
-      <line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" />
-      <line x1="3" y1="12" x2="3.01" y2="12" />
-      <line x1="3" y1="18" x2="3.01" y2="18" />
-    </svg>
-  ),
-  Wallet: () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M20 7H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
-      <path d="M16 12h.01" />
-      <path d="M4 7V5a2 2 0 0 1 2-2h12" />
-    </svg>
-  ),
-  Book: () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-    </svg>
-  ),
-  Users: () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  ),
-  Chart: () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <line x1="12" y1="20" x2="12" y2="10" />
-      <line x1="18" y1="20" x2="18" y2="4" />
-      <line x1="6" y1="20" x2="6" y2="16" />
-    </svg>
-  ),
-  Settings: () => (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  ),
-  Minimize: () => (
-    <svg width="12" height="12" viewBox="0 0 12 12">
-      <rect x="1" y="5.5" width="10" height="1" fill="currentColor" />
-    </svg>
-  ),
-  Maximize: () => (
-    <svg width="12" height="12" viewBox="0 0 12 12">
-      <rect
-        x="1.5"
-        y="1.5"
-        width="9"
-        height="9"
-        stroke="currentColor"
-        strokeWidth="1"
-        fill="none"
-      />
-    </svg>
-  ),
-  Close: () => (
-    <svg width="12" height="12" viewBox="0 0 12 12">
-      <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
-  ),
-};
+import {
+  IconBookOpen,
+  IconChartColumn,
+  IconHome,
+  IconList,
+  IconMinus,
+  IconSettings,
+  IconSquare,
+  IconUsers,
+  IconWallet,
+  IconX,
+} from "./icons";
 
 const navItems = [
-  { to: "/dashboard", label: "nav.dashboard", icon: Icons.Home },
-  { to: "/customers", label: "nav.customers", icon: Icons.Users },
-  { to: "/orders", label: "nav.orders", icon: Icons.List },
-  { to: "/expenses", label: "nav.expenses", icon: Icons.Wallet },
-  { to: "/account-book", label: "nav.account_book", icon: Icons.Book },
-  { to: "/reports", label: "nav.reports", icon: Icons.Chart },
-  { to: "/settings", label: "nav.settings", icon: Icons.Settings },
+  { to: "/dashboard", label: "nav.dashboard", icon: IconHome },
+  { to: "/customers", label: "nav.customers", icon: IconUsers },
+  { to: "/orders", label: "nav.orders", icon: IconList },
+  { to: "/expenses", label: "nav.expenses", icon: IconWallet },
+  { to: "/account-book", label: "nav.account_book", icon: IconBookOpen },
+  { to: "/reports", label: "nav.reports", icon: IconChartColumn },
+  { to: "/settings", label: "nav.settings", icon: IconSettings },
 ];
 
 export default function AppLayout() {
@@ -221,7 +93,7 @@ export default function AppLayout() {
                 `nav-item ${isActive ? "nav-item-active" : ""}`
               }
             >
-              <Icon />
+              <Icon size={20} strokeWidth={1.8} />
               <span>{t(label)}</span>
             </NavLink>
           ))}
@@ -274,19 +146,19 @@ export default function AppLayout() {
                 onClick={() => appWindow.minimize()}
                 className="h-full px-4 hover:bg-white/10 transition-colors flex items-center justify-center text-text-muted hover:text-text-primary"
               >
-                <Icons.Minimize />
+                <IconMinus size={12} strokeWidth={1.6} />
               </button>
               <button
                 onClick={() => appWindow.toggleMaximize()}
                 className="h-full px-4 hover:bg-white/10 transition-colors flex items-center justify-center text-text-muted hover:text-text-primary"
               >
-                <Icons.Maximize />
+                <IconSquare size={12} strokeWidth={1.3} />
               </button>
               <button
                 onClick={() => appWindow.close()}
                 className="h-full px-4 hover:bg-red-500/80 transition-colors flex items-center justify-center text-text-muted hover:text-white"
               >
-                <Icons.Close />
+                <IconX size={12} strokeWidth={1.6} />
               </button>
             </div>
           )}

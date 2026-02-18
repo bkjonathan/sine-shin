@@ -8,6 +8,7 @@ import { OrderWithCustomer } from "../types/order";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
+import { IconArrowLeft, IconExternalLink } from "./icons";
 
 const fadeVariants = {
   hidden: { opacity: 0, y: 12 },
@@ -101,18 +102,7 @@ export default function CustomerDetail() {
           onClick={handleBack}
           className="p-2 hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
+          <IconArrowLeft size={20} strokeWidth={2} />
         </button>
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
@@ -174,20 +164,7 @@ export default function CustomerDetail() {
                     className="inline-flex items-center gap-2 text-sm text-[var(--color-accent-blue)] hover:underline"
                   >
                     {t("customers.visit_social")}
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
+                    <IconExternalLink size={14} strokeWidth={2} />
                   </a>
                 </div>
               )}

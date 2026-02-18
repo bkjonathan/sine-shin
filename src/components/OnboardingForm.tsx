@@ -5,6 +5,13 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../context/ThemeContext";
+import {
+  IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
+  IconHome,
+  IconImage,
+} from "./icons";
 
 // ── Slide animation variants ──
 const slideVariants = {
@@ -338,19 +345,7 @@ export default function OnboardingForm() {
               >
                 {/* App icon */}
                 <div className="mx-auto w-20 h-20 rounded-[1.25rem] bg-linear-to-br from-accent-blue to-accent-purple flex items-center justify-center mb-6 shadow-[0_8px_30px_rgba(91,127,255,0.3)]">
-                  <svg
-                    width="36"
-                    height="36"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="white"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
+                  <IconHome size={36} strokeWidth={1.8} stroke="white" />
                 </div>
 
                 <h1 className="text-3xl font-bold text-text-primary mb-3 tracking-tight">
@@ -365,16 +360,7 @@ export default function OnboardingForm() {
                   onClick={handleNext}
                 >
                   {t("auth.onboarding.get_started")}
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  ></svg>
+                  <IconChevronRight size={16} strokeWidth={2} />
                 </button>
 
                 <div className="mt-6">
@@ -433,18 +419,7 @@ export default function OnboardingForm() {
                     </span>
                     {theme === "light" && (
                       <div className="absolute top-2 right-2 w-5 h-5 bg-accent-blue rounded-full flex items-center justify-center">
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="white"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
+                        <IconCheck size={12} strokeWidth={3} stroke="white" />
                       </div>
                     )}
                   </button>
@@ -472,18 +447,7 @@ export default function OnboardingForm() {
                     </span>
                     {theme === "dark" && (
                       <div className="absolute top-2 right-2 w-5 h-5 bg-accent-blue rounded-full flex items-center justify-center">
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="white"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
+                        <IconCheck size={12} strokeWidth={3} stroke="white" />
                       </div>
                     )}
                   </button>
@@ -522,18 +486,7 @@ export default function OnboardingForm() {
                           }}
                         >
                           {accentColor === color && (
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="white"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
+                            <IconCheck size={16} strokeWidth={3} stroke="white" />
                           )}
                         </button>
                       ),
@@ -650,28 +603,11 @@ export default function OnboardingForm() {
                       />
                     ) : (
                       <>
-                        <svg
-                          width="32"
-                          height="32"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                        <IconImage
+                          size={32}
+                          strokeWidth={1.5}
                           className="text-text-muted group-hover:text-accent-blue transition-colors"
-                        >
-                          <rect
-                            x="3"
-                            y="3"
-                            width="18"
-                            height="18"
-                            rx="2"
-                            ry="2"
-                          />
-                          <circle cx="8.5" cy="8.5" r="1.5" />
-                          <polyline points="21 15 16 10 5 21" />
-                        </svg>
+                        />
                         <span className="text-xs text-text-muted group-hover:text-accent-blue transition-colors">
                           {t("auth.onboarding.choose_image")}
                         </span>
@@ -760,18 +696,7 @@ export default function OnboardingForm() {
                 className="btn-liquid btn-liquid-ghost"
                 onClick={handleBack}
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M10 12L6 8L10 4" />
-                </svg>
+                <IconChevronLeft size={16} strokeWidth={2} />
                 {t("auth.onboarding.back")}
               </button>
 
@@ -781,18 +706,7 @@ export default function OnboardingForm() {
                   onClick={handleNext}
                 >
                   {t("auth.onboarding.next")}
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M6 4L10 8L6 12" />
-                  </svg>
+                  <IconChevronRight size={16} strokeWidth={2} />
                 </button>
               ) : (
                 <button
@@ -808,18 +722,7 @@ export default function OnboardingForm() {
                   ) : (
                     <>
                       {t("auth.onboarding.complete_setup")}
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M3 8L6.5 11.5L13 4.5" />
-                      </svg>
+                      <IconCheck size={16} strokeWidth={2} />
                     </>
                   )}
                 </button>

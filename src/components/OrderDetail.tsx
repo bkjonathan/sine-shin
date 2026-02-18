@@ -17,6 +17,17 @@ import { formatDate } from "../utils/date";
 import QRCode from "qrcode";
 import DatePicker from "./ui/DatePicker";
 import { Select } from "./ui/Select";
+import {
+  IconArrowLeft,
+  IconCheck,
+  IconCircle,
+  IconDownload,
+  IconEdit,
+  IconMapPin,
+  IconPhone,
+  IconPrinter,
+  IconX,
+} from "./icons";
 
 const ORDER_STATUS_OPTIONS: OrderStatus[] = [
   "pending",
@@ -474,37 +485,14 @@ export default function OrderDetail() {
               disabled={isUpdating}
               className="p-1 text-success hover:bg-success/10 rounded"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
+              <IconCheck size={16} strokeWidth={2} />
             </button>
             <button
               onClick={handleCancel}
               disabled={isUpdating}
               className="p-1 text-text-secondary hover:bg-text-secondary/10 rounded"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+              <IconX size={16} strokeWidth={2} />
             </button>
           </div>
         ) : (
@@ -517,19 +505,7 @@ export default function OrderDetail() {
               {formatDate(value) || "-"}
             </p>
             <span className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
+              <IconEdit size={14} strokeWidth={2} />
             </span>
           </div>
         )}
@@ -567,37 +543,14 @@ export default function OrderDetail() {
               disabled={isUpdating}
               className="p-1 text-success hover:bg-success/10 rounded"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
+              <IconCheck size={16} strokeWidth={2} />
             </button>
             <button
               onClick={handleCancel}
               disabled={isUpdating}
               className="p-1 text-text-secondary hover:bg-text-secondary/10 rounded"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+              <IconX size={16} strokeWidth={2} />
             </button>
           </div>
         ) : (
@@ -616,19 +569,7 @@ export default function OrderDetail() {
               {t(statusDisplay.labelKey)}
             </span>
             <span className="text-text-muted group-hover:text-accent-blue transition-colors">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
+              <IconEdit size={14} strokeWidth={2} />
             </span>
           </button>
         )}
@@ -712,31 +653,9 @@ export default function OrderDetail() {
               }
             >
               {isPaid ? (
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
+                <IconCheck size={12} strokeWidth={2.5} />
               ) : (
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10"></circle>
-                </svg>
+                <IconCircle size={12} strokeWidth={2.5} />
               )}
               {isPaid ? t("orders.detail.paid") : t("orders.detail.unpaid")}
             </button>
@@ -756,37 +675,14 @@ export default function OrderDetail() {
               disabled={isUpdating}
               className="p-1 text-success hover:bg-success/10 rounded"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
+              <IconCheck size={16} strokeWidth={2} />
             </button>
             <button
               onClick={handleCancel}
               disabled={isUpdating}
               className="p-1 text-text-secondary hover:bg-text-secondary/10 rounded"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+              <IconX size={16} strokeWidth={2} />
             </button>
           </div>
         ) : (
@@ -796,19 +692,7 @@ export default function OrderDetail() {
             title="Click to edit"
           >
             <span className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
+              <IconEdit size={14} strokeWidth={2} />
             </span>
             <span className="text-text-primary hover:text-accent-blue hover:underline decoration-dashed underline-offset-4 transition-colors">
               {(value || 0).toLocaleString()} {suffix && suffix}
@@ -837,19 +721,7 @@ export default function OrderDetail() {
               onClick={handleBack}
               className="p-2 rounded-xl hover:bg-glass-white-hover transition-colors text-text-secondary hover:text-text-primary"
             >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M19 12H5" />
-                <path d="M12 19l-7-7 7-7" />
-              </svg>
+              <IconArrowLeft size={24} strokeWidth={2} />
             </button>
             <div>
               <h1 className="text-2xl font-bold text-text-primary">
@@ -871,20 +743,7 @@ export default function OrderDetail() {
               {downloading ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
+                <IconDownload size={18} strokeWidth={2} />
               )}
               {downloading
                 ? t("orders.invoice.generating")
@@ -898,20 +757,7 @@ export default function OrderDetail() {
               {printing ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                  <rect x="6" y="14" width="12" height="8"></rect>
-                </svg>
+                <IconPrinter size={18} strokeWidth={2} />
               )}
               {printing
                 ? t("orders.invoice.generating")
@@ -1412,19 +1258,7 @@ export default function OrderDetail() {
                         {t("customers.form.phone")}
                       </label>
                       <p className="text-text-primary font-medium flex items-center gap-2">
-                        <svg
-                          className="w-4 h-4 text-accent-blue"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                          />
-                        </svg>
+                        <IconPhone className="w-4 h-4 text-accent-blue" strokeWidth={2} />
                         {customerPhone}
                       </p>
                     </div>
@@ -1433,25 +1267,7 @@ export default function OrderDetail() {
                         {t("customers.form.city")}
                       </label>
                       <p className="text-text-primary font-medium flex items-center gap-2">
-                        <svg
-                          className="w-4 h-4 text-accent-blue"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                        </svg>
+                        <IconMapPin className="w-4 h-4 text-accent-blue" strokeWidth={2} />
                         {customerCity}
                       </p>
                     </div>

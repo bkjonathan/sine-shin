@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { IconCheck, IconChevronDown } from "../icons";
 
 interface Option {
   value: string | number;
@@ -106,21 +107,13 @@ export function Select({
         >
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <IconChevronDown
+          size={16}
+          strokeWidth={2}
           className={`text-[var(--color-text-muted)] transition-transform duration-200 ml-2 flex-shrink-0 ${
             isOpen ? "rotate-180" : ""
           }`}
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
+        />
       </div>
 
       {/* Options Dropdown */}
@@ -155,18 +148,7 @@ export function Select({
                 >
                   {option.label}
                   {option.value === value && (
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <IconCheck size={14} strokeWidth={2.5} />
                   )}
                 </div>
               ))

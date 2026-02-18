@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
+import { IconLogIn } from "./icons";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -63,20 +64,7 @@ export default function Login() {
         <div className="glass-panel p-8">
           <div className="text-center mb-8">
             <div className="mx-auto w-16 h-16 rounded-[1rem] bg-gradient-to-br from-[var(--color-accent-blue)] to-[var(--color-accent-purple)] flex items-center justify-center mb-4 shadow-[0_8px_30px_rgba(91,127,255,0.3)]">
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="white"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                <polyline points="10 17 15 12 10 7" />
-                <line x1="15" y1="12" x2="3" y2="12" />
-              </svg>
+              <IconLogIn size={28} strokeWidth={2} stroke="white" />
             </div>
             <h1 className="text-2xl font-bold text-text-primary mb-2">
               {t("auth.login.welcome")}

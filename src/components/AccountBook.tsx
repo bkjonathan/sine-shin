@@ -6,6 +6,7 @@ import { getOrders } from "../api/orderApi";
 import { OrderWithCustomer } from "../types/order";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
+import { IconSearch } from "./icons";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -129,19 +130,7 @@ export default function AccountBook() {
         </div>
         <div className="relative w-full md:w-72">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg
-              className="h-4 w-4 text-text-muted"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
+            <IconSearch className="h-4 w-4 text-text-muted" strokeWidth={2} />
           </div>
           <input
             type="text"
