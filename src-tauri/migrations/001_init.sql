@@ -66,3 +66,19 @@ CREATE TABLE IF NOT EXISTS order_items (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
 );
+
+-- Create expenses table
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  expense_id TEXT,
+  title TEXT NOT NULL,
+  amount REAL NOT NULL CHECK(amount >= 0),
+  category TEXT,
+  payment_method TEXT,
+  notes TEXT,
+  expense_date DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_expenses_expense_date ON expenses(expense_date);
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);

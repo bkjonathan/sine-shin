@@ -27,7 +27,17 @@ pub async fn reset_app_data(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
+    sqlx::query("DROP TABLE IF EXISTS order_items")
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     sqlx::query("DROP TABLE IF EXISTS customers")
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    sqlx::query("DROP TABLE IF EXISTS expenses")
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -78,13 +88,14 @@ pub async fn restore_database(app: AppHandle, restore_path: String) -> Result<()
     // 2. Overwrite the database file
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("shop.db");
-    
+
     let restore_source = PathBuf::from(&restore_path);
     if !restore_source.exists() {
         return Err("Restore file not found".to_string());
     }
 
-    fs::copy(&restore_source, &db_path).map_err(|e| format!("Failed to restore database: {}", e))?;
+    fs::copy(&restore_source, &db_path)
+        .map_err(|e| format!("Failed to restore database: {}", e))?;
 
     // 3. Re-initialize the pool
     let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());

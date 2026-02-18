@@ -8,6 +8,7 @@ pub type AppResult<T> = Result<T, String>;
 
 pub const DEFAULT_CUSTOMER_ID_PREFIX: &str = "SSC-";
 pub const DEFAULT_ORDER_ID_PREFIX: &str = "SSO-";
+pub const DEFAULT_EXPENSE_ID_PREFIX: &str = "EXP-";
 pub const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
     SELECT
         o.*,
@@ -89,26 +90,18 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         }
     }
 
-    sqlx::query(
-        "UPDATE orders SET shipping_fee_paid = 0 WHERE shipping_fee_paid IS NULL"
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "UPDATE orders SET delivery_fee_paid = 0 WHERE delivery_fee_paid IS NULL"
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "UPDATE orders SET cargo_fee_paid = 0 WHERE cargo_fee_paid IS NULL"
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "UPDATE orders SET service_fee_paid = 0 WHERE service_fee_paid IS NULL"
-    )
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE orders SET shipping_fee_paid = 0 WHERE shipping_fee_paid IS NULL")
+        .execute(pool)
+        .await?;
+    sqlx::query("UPDATE orders SET delivery_fee_paid = 0 WHERE delivery_fee_paid IS NULL")
+        .execute(pool)
+        .await?;
+    sqlx::query("UPDATE orders SET cargo_fee_paid = 0 WHERE cargo_fee_paid IS NULL")
+        .execute(pool)
+        .await?;
+    sqlx::query("UPDATE orders SET service_fee_paid = 0 WHERE service_fee_paid IS NULL")
+        .execute(pool)
+        .await?;
 
     Ok(())
 }

@@ -5,6 +5,7 @@ import AppLayout from "./components/AppLayout";
 import OnboardingForm from "./components/OnboardingForm";
 import Dashboard from "./components/Dashboard";
 import Orders from "./components/Orders";
+import Expenses from "./components/Expenses";
 import AccountBook from "./components/AccountBook";
 import Customers from "./components/Customers";
 import CustomerDetail from "./components/CustomerDetail";
@@ -128,6 +129,7 @@ function AppRoutes() {
       >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/orders" element={<Orders />} />
+        <Route path="/expenses" element={<Expenses />} />
         <Route path="/account-book" element={<AccountBook />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/customers" element={<Customers />} />

@@ -18,6 +18,10 @@ use crate::commands::customer::{
     create_customer, delete_customer, get_customer, get_customers, get_customers_paginated,
     update_customer,
 };
+use crate::commands::expense::{
+    create_expense, delete_expense, get_expense, get_expenses, get_expenses_paginated,
+    update_expense,
+};
 use crate::commands::order::{
     create_order, delete_order, get_customer_orders, get_dashboard_stats, get_order, get_orders,
     get_orders_for_export, get_orders_paginated, update_order,
@@ -213,6 +217,12 @@ pub fn run() {
             get_customer,
             update_customer,
             delete_customer,
+            create_expense,
+            get_expenses,
+            get_expenses_paginated,
+            get_expense,
+            update_expense,
+            delete_expense,
             create_order,
             get_orders,
             get_orders_for_export,

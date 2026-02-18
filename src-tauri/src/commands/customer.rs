@@ -70,11 +70,12 @@ pub async fn create_customer(
             .await;
     } else {
         // Generate new one
-        let prefix: Option<String> =
-            sqlx::query_scalar("SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")
-                .fetch_optional(&*pool)
-                .await
-                .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
+        let prefix: Option<String> = sqlx::query_scalar(
+            "SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1",
+        )
+        .fetch_optional(&*pool)
+        .await
+        .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
 
         let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
         let new_customer_id = format!("{}{:05}", prefix_str, inserted_id);
@@ -123,7 +124,11 @@ pub async fn get_customers_paginated(
     } else {
         requested_page_size.clamp(MIN_CUSTOMERS_PAGE_SIZE, MAX_CUSTOMERS_PAGE_SIZE)
     };
-    let page = if no_limit { 1 } else { page.unwrap_or(1).max(1) };
+    let page = if no_limit {
+        1
+    } else {
+        page.unwrap_or(1).max(1)
+    };
     let offset = if no_limit { 0 } else { (page - 1) * page_size };
 
     let raw_search = search_term.unwrap_or_default().trim().to_string();
@@ -136,7 +141,7 @@ pub async fn get_customers_paginated(
         "phone" => "phone",
         _ => return Err("Invalid search key".to_string()),
     };
-    
+
     let sort_column = match sort_by.as_deref().unwrap_or("customer_id") {
         "name" => "name",
         "customer_id" => "customer_id",
@@ -213,11 +218,7 @@ pub async fn get_customers_paginated(
         (total, customers)
     };
 
-    let response_page_size = if no_limit {
-        total.max(0)
-    } else {
-        page_size
-    };
+    let response_page_size = if no_limit { total.max(0) } else { page_size };
 
     let total_pages = if total == 0 {
         0

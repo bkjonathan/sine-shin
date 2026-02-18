@@ -53,6 +53,28 @@ pub struct PaginatedOrders {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Expense {
+    pub id: i64,
+    pub expense_id: Option<String>,
+    pub title: String,
+    pub amount: f64,
+    pub category: Option<String>,
+    pub payment_method: Option<String>,
+    pub notes: Option<String>,
+    pub expense_date: Option<String>,
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedExpenses {
+    pub expenses: Vec<Expense>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
+    pub total_pages: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Order {
     pub id: i64,
     pub order_id: Option<String>,

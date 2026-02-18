@@ -1,5 +1,5 @@
-use tauri::{AppHandle, Manager};
 use sqlx::{QueryBuilder, Sqlite};
+use tauri::{AppHandle, Manager};
 
 use crate::db::{
     DEFAULT_ORDER_ID_PREFIX, ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
