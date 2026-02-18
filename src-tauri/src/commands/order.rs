@@ -58,6 +58,10 @@ pub async fn create_order(
     items: Vec<OrderItemPayload>,
     id: Option<i64>,
     order_id: Option<String>,
+    shipping_fee_paid: Option<bool>,
+    delivery_fee_paid: Option<bool>,
+    cargo_fee_paid: Option<bool>,
+    service_fee_paid: Option<bool>,
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -68,30 +72,34 @@ pub async fn create_order(
 
     let inserted_id = if let Some(provided_id) = id {
         sqlx::query(
-            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(provided_id)
         .bind(customer_id)
         .bind(normalized_status.clone())
-        .bind(order_from)
+        .bind(order_from.clone())
         .bind(exchange_rate)
         .bind(shipping_fee)
         .bind(delivery_fee)
         .bind(cargo_fee)
-        .bind(order_date)
-        .bind(arrived_date)
-        .bind(shipment_date)
-        .bind(user_withdraw_date)
+        .bind(order_date.clone())
+        .bind(arrived_date.clone())
+        .bind(shipment_date.clone())
+        .bind(user_withdraw_date.clone())
         .bind(service_fee)
         .bind(product_discount)
-        .bind(service_fee_type)
+        .bind(service_fee_type.clone())
+        .bind(shipping_fee_paid.unwrap_or(false))
+        .bind(delivery_fee_paid.unwrap_or(false))
+        .bind(cargo_fee_paid.unwrap_or(false))
+        .bind(service_fee_paid.unwrap_or(false))
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?
         .last_insert_rowid()
     } else {
         sqlx::query(
-            "INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(customer_id)
         .bind(normalized_status)
@@ -107,6 +115,10 @@ pub async fn create_order(
         .bind(service_fee)
         .bind(product_discount)
         .bind(service_fee_type)
+        .bind(shipping_fee_paid.unwrap_or(false))
+        .bind(delivery_fee_paid.unwrap_or(false))
+        .bind(cargo_fee_paid.unwrap_or(false))
+        .bind(service_fee_paid.unwrap_or(false))
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?
@@ -379,6 +391,10 @@ pub async fn update_order(
     product_discount: Option<f64>,
     service_fee_type: Option<String>,
     items: Vec<OrderItemPayload>,
+    shipping_fee_paid: Option<bool>,
+    delivery_fee_paid: Option<bool>,
+    cargo_fee_paid: Option<bool>,
+    service_fee_paid: Option<bool>,
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -388,7 +404,7 @@ pub async fn update_order(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     sqlx::query(
-        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ? WHERE id = ?",
+        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ? WHERE id = ?",
     )
     .bind(customer_id)
     .bind(normalized_status)
@@ -404,6 +420,10 @@ pub async fn update_order(
     .bind(service_fee)
     .bind(product_discount)
     .bind(service_fee_type)
+    .bind(shipping_fee_paid.unwrap_or(false))
+    .bind(delivery_fee_paid.unwrap_or(false))
+    .bind(cargo_fee_paid.unwrap_or(false))
+    .bind(service_fee_paid.unwrap_or(false))
     .bind(id)
     .execute(&mut *tx)
     .await

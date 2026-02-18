@@ -337,6 +337,10 @@ export default function OrderDetail() {
         service_fee: order.service_fee,
         product_discount: order.product_discount,
         service_fee_type: order.service_fee_type,
+        shipping_fee_paid: order.shipping_fee_paid,
+        delivery_fee_paid: order.delivery_fee_paid,
+        cargo_fee_paid: order.cargo_fee_paid,
+        service_fee_paid: order.service_fee_paid,
       };
 
       // Update the specific field
@@ -543,7 +547,9 @@ export default function OrderDetail() {
 
     return (
       <div className="space-y-2">
-        {label ? <label className="block text-sm text-text-secondary">{label}</label> : null}
+        {label ? (
+          <label className="block text-sm text-text-secondary">{label}</label>
+        ) : null}
         {isEditing ? (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="w-full">
@@ -630,17 +636,112 @@ export default function OrderDetail() {
     );
   };
 
+  const handleToggleFeePaid = async (
+    feePaidField: string,
+    currentValue: boolean,
+  ) => {
+    if (!orderDetail) return;
+    try {
+      setIsUpdating(true);
+      const { order, items } = orderDetail;
+      const updatedOrder: any = {
+        id: order.id,
+        customer_id: order.customer_id,
+        status: order.status || "pending",
+        order_from: order.order_from,
+        items: items.map((item) => ({
+          product_url: item.product_url,
+          product_qty: item.product_qty,
+          price: item.price,
+          product_weight: item.product_weight,
+        })),
+        exchange_rate: order.exchange_rate,
+        shipping_fee: order.shipping_fee,
+        delivery_fee: order.delivery_fee,
+        cargo_fee: order.cargo_fee,
+        order_date: order.order_date,
+        arrived_date: order.arrived_date,
+        shipment_date: order.shipment_date,
+        user_withdraw_date: order.user_withdraw_date,
+        service_fee: order.service_fee,
+        product_discount: order.product_discount,
+        service_fee_type: order.service_fee_type,
+        shipping_fee_paid: order.shipping_fee_paid,
+        delivery_fee_paid: order.delivery_fee_paid,
+        cargo_fee_paid: order.cargo_fee_paid,
+        service_fee_paid: order.service_fee_paid,
+      };
+      updatedOrder[feePaidField] = !currentValue;
+      await updateOrder(updatedOrder);
+      await loadData(order.id);
+      playSound("success");
+    } catch (err) {
+      console.error("Failed to toggle fee paid:", err);
+      playSound("error");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const renderEditableFee = (
     label: string,
     field: string,
     value: number | undefined | null,
     suffix?: string,
+    feePaidField?: string,
+    isPaid?: boolean,
   ) => {
     const isEditing = editingField === field;
 
     return (
       <div className="flex justify-between items-center py-2 border-b border-glass-border">
-        <span className="text-text-secondary">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-text-secondary">{label}</span>
+          {feePaidField !== undefined && (
+            <button
+              type="button"
+              disabled={isUpdating}
+              onClick={() => handleToggleFeePaid(feePaidField, !!isPaid)}
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer ${
+                isPaid
+                  ? "bg-success/15 text-success hover:bg-success/25"
+                  : "bg-rose-500/15 text-rose-500 hover:bg-rose-500/25"
+              }`}
+              title={
+                isPaid ? t("orders.detail.paid") : t("orders.detail.unpaid")
+              }
+            >
+              {isPaid ? (
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              ) : (
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+              )}
+              {isPaid ? t("orders.detail.paid") : t("orders.detail.unpaid")}
+            </button>
+          )}
+        </div>
         {isEditing ? (
           <div className="flex items-center gap-2">
             <input
@@ -1541,21 +1642,32 @@ export default function OrderDetail() {
                   "service_fee",
                   order.service_fee,
                   order.service_fee_type === "percent" ? "%" : undefined,
+                  "service_fee_paid",
+                  !!order.service_fee_paid,
                 )}
                 {renderEditableFee(
                   t("orders.form.shipping_fee"),
                   "shipping_fee",
                   order.shipping_fee,
+                  undefined,
+                  "shipping_fee_paid",
+                  !!order.shipping_fee_paid,
                 )}
                 {renderEditableFee(
                   t("orders.form.delivery_fee"),
                   "delivery_fee",
                   order.delivery_fee,
+                  undefined,
+                  "delivery_fee_paid",
+                  !!order.delivery_fee_paid,
                 )}
                 {renderEditableFee(
                   t("orders.form.cargo_fee"),
                   "cargo_fee",
                   order.cargo_fee,
+                  undefined,
+                  "cargo_fee_paid",
+                  !!order.cargo_fee_paid,
                 )}
                 {renderEditableFee(
                   t("orders.form.product_discount"),

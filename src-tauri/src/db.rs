@@ -63,6 +63,53 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         .execute(pool)
         .await?;
 
+    // Add fee_paid tracking columns
+    let fee_paid_columns = [
+        "shipping_fee_paid",
+        "delivery_fee_paid",
+        "cargo_fee_paid",
+        "service_fee_paid",
+    ];
+
+    for col in fee_paid_columns {
+        let exists: Option<i64> = sqlx::query_scalar(&format!(
+            "SELECT 1 FROM pragma_table_info('orders') WHERE name = '{}' LIMIT 1",
+            col
+        ))
+        .fetch_optional(pool)
+        .await?;
+
+        if exists.is_none() {
+            sqlx::query(&format!(
+                "ALTER TABLE orders ADD COLUMN {} INTEGER DEFAULT 0",
+                col
+            ))
+            .execute(pool)
+            .await?;
+        }
+    }
+
+    sqlx::query(
+        "UPDATE orders SET shipping_fee_paid = 0 WHERE shipping_fee_paid IS NULL"
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE orders SET delivery_fee_paid = 0 WHERE delivery_fee_paid IS NULL"
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE orders SET cargo_fee_paid = 0 WHERE cargo_fee_paid IS NULL"
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE orders SET service_fee_paid = 0 WHERE service_fee_paid IS NULL"
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 

@@ -23,6 +23,10 @@ export interface Order {
   service_fee?: number;
   product_discount?: number;
   service_fee_type?: "fixed" | "percent";
+  shipping_fee_paid?: boolean;
+  delivery_fee_paid?: boolean;
+  cargo_fee_paid?: boolean;
+  service_fee_paid?: boolean;
 }
 
 export interface OrderItem {

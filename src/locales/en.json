@@ -180,6 +180,8 @@
       "financial_summary": "Financial Summary",
       "profit": "Profit",
       "fee": "Fee",
+      "paid": "Paid",
+      "unpaid": "Unpaid",
       "product_order_from": "Product Order from {{platform}}",
       "item_index": "Item {{index}}",
       "error_loading": "Failed to load details"

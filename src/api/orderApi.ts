@@ -90,6 +90,10 @@ export const createOrder = async (
     serviceFeeType: order.service_fee_type,
     id: order.id,
     orderId: order.order_id,
+    shippingFeePaid: order.shipping_fee_paid,
+    deliveryFeePaid: order.delivery_fee_paid,
+    cargoFeePaid: order.cargo_fee_paid,
+    serviceFeePaid: order.service_fee_paid,
   });
 };
 
@@ -113,6 +117,10 @@ export const updateOrder = async (
     serviceFee: order.service_fee,
     productDiscount: order.product_discount,
     serviceFeeType: order.service_fee_type,
+    shippingFeePaid: order.shipping_fee_paid,
+    deliveryFeePaid: order.delivery_fee_paid,
+    cargoFeePaid: order.cargo_fee_paid,
+    serviceFeePaid: order.service_fee_paid,
   });
 };
 

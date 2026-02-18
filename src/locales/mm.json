@@ -180,6 +180,8 @@
       "financial_summary": "ငွေကြေး သုံးသပ်ချက်",
       "profit": "အမြတ်",
       "fee": "အခွန်အခ",
+      "paid": "ပေးပြီး",
+      "unpaid": "မပေးရသေး",
       "product_order_from": "{{platform}} မှ မှာယူသော ပစ္စည်း",
       "item_index": "ပစ္စည်း {{index}}",
       "error_loading": "အသေးစိတ်အချက်အလက်များကို ဖွင့်၍မရပါ"
