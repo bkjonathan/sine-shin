@@ -12,7 +12,7 @@ import {
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
-import { Select } from "./ui/Select";
+import { Button, Input, Select } from "./ui";
 import { parseCSV } from "../utils/csvUtils";
 import {
   IconDownload,
@@ -437,10 +437,11 @@ export default function Customers() {
             onChange={handleFileUpload}
             className="hidden"
           />
-          <button
+          <Button
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
-            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
           >
             {isImporting ? (
               <div className="w-4 h-4 border-2 border-text-secondary border-t-text-primary rounded-full animate-spin" />
@@ -448,8 +449,8 @@ export default function Customers() {
               <IconUpload size={16} strokeWidth={2} />
             )}
             {t("customers.import_csv")}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={async () => {
               try {
                 const allCustomers = await getCustomers();
@@ -514,18 +515,20 @@ export default function Customers() {
                 playSound("error");
               }
             }}
-            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
           >
             <IconDownload size={16} strokeWidth={2} />
             {t("customers.export_csv")}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => handleOpenModal()}
-            className="btn-liquid btn-liquid-primary px-4 py-2 text-sm flex items-center gap-2"
+            variant="primary"
+            className="px-4 py-2 text-sm flex items-center gap-2"
           >
             <IconPlus size={16} strokeWidth={2} />
             {t("customers.add_customer")}
-          </button>
+          </Button>
         </div>
       </motion.div>
 
@@ -556,7 +559,7 @@ export default function Customers() {
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <IconSearch className="h-4 w-4 text-text-muted" strokeWidth={2} />
             </div>
-            <input
+            <Input
               type="text"
               className="input-liquid pl-10 w-full"
               placeholder={t("customers.search_placeholder")}
@@ -837,17 +840,18 @@ export default function Customers() {
                     }}
                   />
                 </div>
-                <button
+                <Button
                   onClick={() =>
                     setCurrentPage((prev) => Math.max(1, prev - 1))
                   }
                   disabled={
                     isPageTransitioning || currentPage <= 1 || totalPages === 0
                   }
-                  className="btn-liquid btn-liquid-ghost px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  variant="ghost"
+                  className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {t("common.previous")}
-                </button>
+                </Button>
                 <div className="flex items-center gap-1 overflow-x-auto max-w-full py-1">
                   {displayPages.map((item, index) =>
                     item === "..." ? (
@@ -881,7 +885,7 @@ export default function Customers() {
                     total: totalPages,
                   })}
                 </span>
-                <button
+                <Button
                   onClick={() =>
                     setCurrentPage((prev) =>
                       totalPages === 0 ? 1 : Math.min(totalPages, prev + 1),
@@ -892,10 +896,11 @@ export default function Customers() {
                     totalPages === 0 ||
                     currentPage >= totalPages
                   }
-                  className="btn-liquid btn-liquid-ghost px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  variant="ghost"
+                  className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {t("common.next")}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -941,7 +946,7 @@ export default function Customers() {
                       {t("customers.form.name")}{" "}
                       <span className="text-red-500">*</span>
                     </label>
-                    <input
+                    <Input
                       type="text"
                       required
                       className="input-liquid w-full"
@@ -956,7 +961,7 @@ export default function Customers() {
                     <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.phone")}
                     </label>
-                    <input
+                    <Input
                       type="tel"
                       className="input-liquid w-full"
                       placeholder="0912345678"
@@ -1004,7 +1009,7 @@ export default function Customers() {
                     <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.city")}
                     </label>
-                    <input
+                    <Input
                       type="text"
                       className="input-liquid w-full"
                       placeholder="Yangon"
@@ -1018,7 +1023,7 @@ export default function Customers() {
                     <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("customers.form.social_url")}
                     </label>
-                    <input
+                    <Input
                       type="text"
                       className="input-liquid w-full"
                       placeholder="https://facebook.com/..."
@@ -1047,25 +1052,23 @@ export default function Customers() {
                 </div>
 
                 <div className="flex justify-end gap-3 mt-6">
-                  <button
+                  <Button
                     type="button"
                     onClick={handleCloseModal}
-                    className="btn-liquid btn-liquid-ghost"
+                    variant="ghost"
                   >
                     {t("customers.modal.cancel")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="btn-liquid btn-liquid-primary flex items-center gap-2"
+                    variant="primary"
+                    className="flex items-center gap-2"
+                    loading={isSubmitting}
                   >
-                    {isSubmitting && (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    )}
                     {editingCustomer
                       ? t("customers.modal.update")
                       : t("customers.modal.create")}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </motion.div>
@@ -1106,18 +1109,20 @@ export default function Customers() {
                   {t("customers.delete_modal.message_part2")}
                 </p>
                 <div className="flex gap-3 w-full">
-                  <button
+                  <Button
                     onClick={() => setIsDeleteModalOpen(false)}
-                    className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
+                    variant="ghost"
+                    className="flex-1 py-2.5 text-sm"
                   >
                     {t("customers.modal.cancel")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleConfirmDelete}
-                    className="flex-1 btn-liquid bg-red-500 hover:bg-red-600 text-white py-2.5 text-sm"
+                    variant="danger"
+                    className="flex-1 py-2.5 text-sm"
                   >
                     {t("customers.delete_modal.delete")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </motion.div>

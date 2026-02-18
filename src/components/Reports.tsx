@@ -19,6 +19,7 @@ import { OrderStatus, OrderWithCustomer } from "../types/order";
 import { Customer } from "../types/customer";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
+import { Button } from "./ui";
 import {
   ResponsiveContainer,
   LineChart,
@@ -1244,13 +1245,14 @@ export default function Reports() {
                         {formatDate(order.timelineDate)}
                       </td>
                       <td className="py-3 px-3 text-right">
-                        <button
+                        <Button
                           type="button"
                           onClick={() => navigate(`/orders/${order.id}`)}
-                          className="btn-liquid btn-liquid-ghost px-3 py-1.5 text-xs"
+                          variant="ghost"
+                          className="px-3 py-1.5 text-xs"
                         >
                           {t("reports.view_order")}
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   ))}

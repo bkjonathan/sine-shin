@@ -16,7 +16,7 @@ import { OrderStatus, OrderWithCustomer, OrderItemPayload } from "../types/order
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
-import { Select } from "./ui/Select";
+import { Button, Input, Select } from "./ui";
 import { parseCSV } from "../utils/csvUtils";
 import { processOrderCSV } from "../utils/orderImportUtils";
 import { useAppSettings } from "../context/AppSettingsContext";
@@ -629,10 +629,11 @@ export default function Orders() {
             onChange={handleFileUpload}
             className="hidden"
           />
-          <button
+          <Button
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
-            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
           >
             {isImporting ? (
               <div className="w-4 h-4 border-2 border-text-secondary border-t-text-primary rounded-full animate-spin" />
@@ -640,21 +641,23 @@ export default function Orders() {
               <IconUpload size={16} strokeWidth={2} />
             )}
             {t("orders.import_csv")}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleExport}
-            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
           >
             <IconDownload size={16} strokeWidth={2} />
             {t("orders.export_csv")}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => handleOpenModal()}
-            className="btn-liquid btn-liquid-primary px-4 py-2 text-sm flex items-center gap-2"
+            variant="primary"
+            className="px-4 py-2 text-sm flex items-center gap-2"
           >
             <IconPlus size={16} strokeWidth={2} />
             {t("orders.add_order")}
-          </button>
+          </Button>
         </div>
       </motion.div>
       {/* ── Search Bar ── */}
@@ -696,7 +699,7 @@ export default function Orders() {
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <IconSearch className="h-4 w-4 text-text-muted" strokeWidth={2} />
               </div>
-              <input
+              <Input
                 type="text"
                 className="input-liquid pl-10 w-full"
                 placeholder={t("orders.search_placeholder")}
@@ -975,17 +978,18 @@ export default function Orders() {
                     }}
                   />
                 </div>
-                <button
+                <Button
                   onClick={() =>
                     setCurrentPage((prev) => Math.max(1, prev - 1))
                   }
                   disabled={
                     isPageTransitioning || currentPage <= 1 || totalPages === 0
                   }
-                  className="btn-liquid btn-liquid-ghost px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  variant="ghost"
+                  className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {t("common.previous")}
-                </button>
+                </Button>
                 <div className="flex items-center gap-1 overflow-x-auto max-w-full py-1">
                   {displayPages.map((item, index) =>
                     item === "..." ? (
@@ -1019,7 +1023,7 @@ export default function Orders() {
                     total: totalPages,
                   })}
                 </span>
-                <button
+                <Button
                   onClick={() =>
                     setCurrentPage((prev) =>
                       totalPages === 0 ? 1 : Math.min(totalPages, prev + 1),
@@ -1030,10 +1034,11 @@ export default function Orders() {
                     totalPages === 0 ||
                     currentPage >= totalPages
                   }
-                  className="btn-liquid btn-liquid-ghost px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  variant="ghost"
+                  className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {t("common.next")}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1138,7 +1143,7 @@ export default function Orders() {
                       <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.exchange_rate")}
                       </label>
-                      <input
+                      <Input
                         type="number"
                         min="0"
                         step="0.01"
@@ -1156,7 +1161,7 @@ export default function Orders() {
                       <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.order_date")}
                       </label>
-                      <input
+                      <Input
                         type={formData.order_date ? "date" : "text"}
                         className="input-liquid w-full"
                         autoComplete="off"
@@ -1235,7 +1240,7 @@ export default function Orders() {
                             <label className="block text-xs font-medium text-text-secondary mb-1">
                               {t("orders.form.product_url")}
                             </label>
-                            <input
+                            <Input
                               type="text"
                               className="input-liquid w-full text-sm py-1.5"
                               value={item.product_url || ""}
@@ -1253,7 +1258,7 @@ export default function Orders() {
                               <label className="block text-xs font-medium text-text-secondary mb-1">
                                 {t("orders.qty")}
                               </label>
-                              <input
+                              <Input
                                 type="number"
                                 min="1"
                                 className="input-liquid w-full text-sm py-1.5"
@@ -1270,7 +1275,7 @@ export default function Orders() {
                               <label className="block text-xs font-medium text-text-secondary mb-1">
                                 {t("orders.price")}
                               </label>
-                              <input
+                              <Input
                                 type="number"
                                 min="0"
                                 step="0.01"
@@ -1288,7 +1293,7 @@ export default function Orders() {
                               <label className="block text-xs font-medium text-text-secondary mb-1">
                                 {t("orders.form.weight")}
                               </label>
-                              <input
+                              <Input
                                 type="number"
                                 min="0"
                                 step="0.01"
@@ -1320,7 +1325,7 @@ export default function Orders() {
                         {t("orders.form.service_fee_label")}
                       </label>
                       <div className="flex gap-2">
-                        <input
+                        <Input
                           type="number"
                           min="0"
                           step="0.01"
@@ -1333,28 +1338,27 @@ export default function Orders() {
                             })
                           }
                         />
-                        <select
-                          className="input-liquid w-24"
+                        <Select
+                          className="w-24"
                           value={formData.service_fee_type}
-                          onChange={(e) =>
+                          options={[
+                            { value: "fixed", label: t("orders.form.fixed") },
+                            { value: "percent", label: "%" },
+                          ]}
+                          onChange={(value) =>
                             setFormData({
                               ...formData,
-                              service_fee_type: e.target.value,
+                              service_fee_type: value.toString(),
                             })
                           }
-                        >
-                          <option value="fixed">
-                            {t("orders.form.fixed")}
-                          </option>
-                          <option value="percent">%</option>
-                        </select>
+                        />
                       </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.product_discount")}
                       </label>
-                      <input
+                      <Input
                         type="number"
                         min="0"
                         step="0.01"
@@ -1374,7 +1378,7 @@ export default function Orders() {
                       <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.shipping_fee")}
                       </label>
-                      <input
+                      <Input
                         type="number"
                         min="0"
                         step="0.01"
@@ -1392,7 +1396,7 @@ export default function Orders() {
                       <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.delivery_fee")}
                       </label>
-                      <input
+                      <Input
                         type="number"
                         min="0"
                         step="0.01"
@@ -1410,7 +1414,7 @@ export default function Orders() {
                       <label className="block text-sm font-medium text-text-secondary mb-1">
                         {t("orders.form.cargo_fee")}
                       </label>
-                      <input
+                      <Input
                         type="number"
                         min="0"
                         step="0.01"
@@ -1438,7 +1442,7 @@ export default function Orders() {
                         <label className="block text-sm font-medium text-text-secondary mb-1">
                           {t("orders.form.arrived_date")}
                         </label>
-                        <input
+                        <Input
                           type={formData.arrived_date ? "date" : "text"}
                           className="input-liquid w-full"
                           autoComplete="off"
@@ -1460,7 +1464,7 @@ export default function Orders() {
                         <label className="block text-sm font-medium text-text-secondary mb-1">
                           {t("orders.form.shipment_date")}
                         </label>
-                        <input
+                        <Input
                           type={formData.shipment_date ? "date" : "text"}
                           className="input-liquid w-full"
                           autoComplete="off"
@@ -1482,7 +1486,7 @@ export default function Orders() {
                         <label className="block text-sm font-medium text-text-secondary mb-1">
                           {t("orders.form.user_withdraw_date")}
                         </label>
-                        <input
+                        <Input
                           type={formData.user_withdraw_date ? "date" : "text"}
                           className="input-liquid w-full"
                           autoComplete="off"
@@ -1505,25 +1509,23 @@ export default function Orders() {
                 )}
 
                 <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-glass-border">
-                  <button
+                  <Button
                     type="button"
                     onClick={handleCloseModal}
-                    className="btn-liquid btn-liquid-ghost"
+                    variant="ghost"
                   >
                     {t("orders.modal.cancel")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="btn-liquid btn-liquid-primary flex items-center gap-2"
+                    variant="primary"
+                    className="flex items-center gap-2"
+                    loading={isSubmitting}
                   >
-                    {isSubmitting && (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    )}
                     {editingOrder
                       ? t("orders.modal.update")
                       : t("orders.modal.create")}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </motion.div>
@@ -1560,18 +1562,20 @@ export default function Orders() {
                   {t("orders.delete_modal.message")}
                 </p>
                 <div className="flex gap-3 w-full">
-                  <button
+                  <Button
                     onClick={() => setIsDeleteModalOpen(false)}
-                    className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
+                    variant="ghost"
+                    className="flex-1 py-2.5 text-sm"
                   >
                     {t("orders.modal.cancel")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleConfirmDelete}
-                    className="flex-1 btn-liquid bg-red-500 hover:bg-red-600 text-white py-2.5 text-sm"
+                    variant="danger"
+                    className="flex-1 py-2.5 text-sm"
                   >
                     {t("orders.delete_modal.delete")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </motion.div>

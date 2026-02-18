@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
-import { Select } from "./ui/Select";
+import { Button, Input, Select } from "./ui";
 import DatePicker from "./ui/DatePicker";
 import {
   IconDollarSign,
@@ -545,20 +545,22 @@ export default function Expenses() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
             onClick={handleExport}
-            className="btn-liquid btn-liquid-ghost px-4 py-2 text-sm flex items-center gap-2"
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
           >
             <IconDownload size={16} strokeWidth={2} />
             {t("expenses.export_csv")}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => handleOpenModal()}
-            className="btn-liquid btn-liquid-primary px-4 py-2 text-sm flex items-center gap-2"
+            variant="primary"
+            className="px-4 py-2 text-sm flex items-center gap-2"
           >
             <IconPlus size={16} strokeWidth={2} />
             {t("expenses.add_expense")}
-          </button>
+          </Button>
         </div>
       </motion.div>
 
@@ -633,7 +635,7 @@ export default function Expenses() {
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
                 <IconSearch className="h-4 w-4 text-text-muted" strokeWidth={2} />
               </div>
-              <input
+              <Input
                 type="text"
                 className="input-liquid pl-10 w-full"
                 placeholder={t("expenses.search_placeholder")}
@@ -880,13 +882,14 @@ export default function Expenses() {
                     }}
                   />
                 </div>
-                <button
+                <Button
                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   disabled={isPageTransitioning || currentPage <= 1 || totalPages === 0}
-                  className="btn-liquid btn-liquid-ghost px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  variant="ghost"
+                  className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {t("common.previous")}
-                </button>
+                </Button>
                 <div className="flex items-center gap-1 overflow-x-auto max-w-full py-1">
                   {displayPages.map((item, index) =>
                     item === "..." ? (
@@ -920,7 +923,7 @@ export default function Expenses() {
                     total: totalPages,
                   })}
                 </span>
-                <button
+                <Button
                   onClick={() =>
                     setCurrentPage((prev) =>
                       totalPages === 0 ? 1 : Math.min(totalPages, prev + 1),
@@ -929,10 +932,11 @@ export default function Expenses() {
                   disabled={
                     isPageTransitioning || totalPages === 0 || currentPage >= totalPages
                   }
-                  className="btn-liquid btn-liquid-ghost px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  variant="ghost"
+                  className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {t("common.next")}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -975,7 +979,7 @@ export default function Expenses() {
                   <label className="block text-sm font-medium text-text-secondary mb-1">
                     {t("expenses.form.title")} <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <Input
                     type="text"
                     required
                     className="input-liquid w-full"
@@ -992,7 +996,7 @@ export default function Expenses() {
                     <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("expenses.form.amount")} <span className="text-red-500">*</span>
                     </label>
-                    <input
+                    <Input
                       type="number"
                       min="0"
                       step="0.01"
@@ -1009,7 +1013,7 @@ export default function Expenses() {
                     <label className="block text-sm font-medium text-text-secondary mb-1">
                       {t("expenses.form.expense_date")}
                     </label>
-                    <input
+                    <Input
                       type="date"
                       className="input-liquid w-full"
                       value={formData.expense_date}
@@ -1074,25 +1078,23 @@ export default function Expenses() {
                 </div>
 
                 <div className="flex justify-end gap-3 mt-6">
-                  <button
+                  <Button
                     type="button"
                     onClick={handleCloseModal}
-                    className="btn-liquid btn-liquid-ghost"
+                    variant="ghost"
                   >
                     {t("expenses.modal.cancel")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="btn-liquid btn-liquid-primary flex items-center gap-2"
+                    variant="primary"
+                    className="flex items-center gap-2"
+                    loading={isSubmitting}
                   >
-                    {isSubmitting && (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    )}
                     {editingExpense
                       ? t("expenses.modal.update")
                       : t("expenses.modal.create")}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </motion.div>
@@ -1132,18 +1134,20 @@ export default function Expenses() {
                   {t("expenses.delete_modal.message_part2")}
                 </p>
                 <div className="flex gap-3 w-full">
-                  <button
+                  <Button
                     onClick={() => setIsDeleteModalOpen(false)}
-                    className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
+                    variant="ghost"
+                    className="flex-1 py-2.5 text-sm"
                   >
                     {t("expenses.modal.cancel")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleConfirmDelete}
-                    className="flex-1 btn-liquid bg-red-500 hover:bg-red-600 text-white py-2.5 text-sm"
+                    variant="danger"
+                    className="flex-1 py-2.5 text-sm"
                   >
                     {t("expenses.delete_modal.delete")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </motion.div>

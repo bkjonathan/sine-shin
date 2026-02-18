@@ -9,6 +9,7 @@ import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
 import { IconArrowLeft, IconExternalLink } from "./icons";
+import { Button } from "./ui";
 
 const fadeVariants = {
   hidden: { opacity: 0, y: 12 },
@@ -73,12 +74,13 @@ export default function CustomerDetail() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-muted)]">
         <p>{error || "Customer not found"}</p>
-        <button
+        <Button
           onClick={handleBack}
-          className="mt-4 btn-liquid btn-liquid-ghost"
+          variant="ghost"
+          className="mt-4"
         >
           {t("customers.detail.back_to_list")}
-        </button>
+        </Button>
       </div>
     );
   }

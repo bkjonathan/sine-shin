@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../context/ThemeContext";
+import { Button, Input } from "./ui";
 import {
   IconCheck,
   IconChevronLeft,
@@ -355,21 +356,23 @@ export default function OnboardingForm() {
                   {t("auth.onboarding.welcome_subtitle")}
                 </p>
 
-                <button
-                  className="btn-liquid btn-liquid-primary px-10 py-3.5 text-base"
+                <Button
+                  variant="primary"
+                  className="px-10 py-3.5 text-base"
                   onClick={handleNext}
                 >
                   {t("auth.onboarding.get_started")}
                   <IconChevronRight size={16} strokeWidth={2} />
-                </button>
+                </Button>
 
                 <div className="mt-6">
-                  <button
-                    className="btn-liquid btn-liquid-ghost text-sm text-text-muted hover:text-text-primary px-6 py-2"
+                  <Button
+                    variant="ghost"
+                    className="text-sm text-text-muted hover:text-text-primary px-6 py-2"
                     onClick={handleRestore}
                   >
                     {t("auth.onboarding.restore_backup", "Restore from Backup")}
-                  </button>
+                  </Button>
                 </div>
               </motion.div>
             )}
@@ -522,7 +525,7 @@ export default function OnboardingForm() {
                     {t("auth.onboarding.shop_name")}{" "}
                     <span className="text-error">*</span>
                   </label>
-                  <input
+                  <Input
                     type="text"
                     className="input-liquid"
                     placeholder={t("auth.onboarding.enter_shop_name")}
@@ -536,7 +539,7 @@ export default function OnboardingForm() {
                   <label className="block text-sm font-medium text-text-secondary mb-2">
                     {t("auth.onboarding.phone_number")}
                   </label>
-                  <input
+                  <Input
                     type="tel"
                     className="input-liquid"
                     placeholder={t("auth.onboarding.enter_phone")}
@@ -649,7 +652,7 @@ export default function OnboardingForm() {
                     {t("auth.login.username")}{" "}
                     <span className="text-error">*</span>
                   </label>
-                  <input
+                  <Input
                     type="text"
                     className="input-liquid"
                     placeholder={t("auth.login.enter_username")}
@@ -663,7 +666,7 @@ export default function OnboardingForm() {
                     {t("auth.login.password")}{" "}
                     <span className="text-error">*</span>
                   </label>
-                  <input
+                  <Input
                     type="password"
                     className="input-liquid"
                     placeholder={t("auth.login.enter_password")}
@@ -677,7 +680,7 @@ export default function OnboardingForm() {
                     {t("auth.onboarding.confirm_password")}{" "}
                     <span className="text-error">*</span>
                   </label>
-                  <input
+                  <Input
                     type="password"
                     className="input-liquid"
                     placeholder={t("auth.onboarding.enter_confirm_password")}
@@ -692,40 +695,34 @@ export default function OnboardingForm() {
           {/* Navigation Buttons */}
           {currentStep > 0 && (
             <div className="flex items-center justify-between mt-8">
-              <button
-                className="btn-liquid btn-liquid-ghost"
+              <Button
+                variant="ghost"
                 onClick={handleBack}
               >
                 <IconChevronLeft size={16} strokeWidth={2} />
                 {t("auth.onboarding.back")}
-              </button>
+              </Button>
 
               {currentStep < 4 ? (
-                <button
-                  className="btn-liquid btn-liquid-primary"
+                <Button
+                  variant="primary"
                   onClick={handleNext}
                 >
                   {t("auth.onboarding.next")}
                   <IconChevronRight size={16} strokeWidth={2} />
-                </button>
+                </Button>
               ) : (
-                <button
-                  className="btn-liquid btn-liquid-primary"
+                <Button
+                  variant="primary"
                   onClick={handleSubmit}
-                  disabled={isSubmitting}
+                  loading={isSubmitting}
+                  loadingText={t("auth.onboarding.saving")}
                 >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-[var(--color-glass-border)] border-t-white rounded-full animate-spin" />
-                      {t("auth.onboarding.saving")}
-                    </>
-                  ) : (
-                    <>
-                      {t("auth.onboarding.complete_setup")}
-                      <IconCheck size={16} strokeWidth={2} />
-                    </>
-                  )}
-                </button>
+                  <>
+                    {t("auth.onboarding.complete_setup")}
+                    <IconCheck size={16} strokeWidth={2} />
+                  </>
+                </Button>
               )}
             </div>
           )}

@@ -4,7 +4,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { motion, AnimatePresence } from "framer-motion";
-import { Select } from "./ui/Select";
+import { Button, Input, Select } from "./ui";
 import { useTheme } from "../context/ThemeContext";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
@@ -272,12 +272,13 @@ function AccountSettings() {
                 <IconImage size={24} strokeWidth={1.5} className="text-text-muted" />
               )}
             </div>
-            <button
+            <Button
               onClick={handlePickLogo}
-              className="btn-liquid btn-liquid-ghost text-xs px-3 py-1.5"
+              variant="ghost"
+              className="text-xs px-3 py-1.5"
             >
               {t("settings.account.change_logo")}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -285,7 +286,7 @@ function AccountSettings() {
           <label className="block text-sm font-medium text-text-secondary mb-2">
             {t("settings.account.shop_name")}
           </label>
-          <input
+          <Input
             type="text"
             className="input-liquid"
             placeholder={t("settings.account.shop_name_placeholder")}
@@ -297,7 +298,7 @@ function AccountSettings() {
           <label className="block text-sm font-medium text-text-secondary mb-2">
             {t("settings.account.phone_number")}
           </label>
-          <input
+          <Input
             type="tel"
             className="input-liquid"
             placeholder={t("settings.account.phone_placeholder")}
@@ -320,7 +321,7 @@ function AccountSettings() {
           <label className="block text-sm font-medium text-text-secondary mb-2">
             {t("settings.account.customer_id_prefix")}
           </label>
-          <input
+          <Input
             type="text"
             className="input-liquid font-mono uppercase"
             placeholder="SSC-"
@@ -332,18 +333,15 @@ function AccountSettings() {
           </p>
         </div>
         <div className="pt-2">
-          <button
+          <Button
             onClick={handleSave}
-            disabled={saving}
-            className="btn-liquid btn-liquid-primary text-sm px-6 py-2.5 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+            variant="primary"
+            className="text-sm px-6 py-2.5 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+            loading={saving}
+            loadingText={t("settings.account.saving")}
           >
-            {saving && (
-              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            )}
-            {saving
-              ? t("settings.account.saving")
-              : t("settings.account.save_changes")}
-          </button>
+            {t("settings.account.save_changes")}
+          </Button>
         </div>
       </div>
     </motion.div>
@@ -572,35 +570,26 @@ function DataSettings() {
               </p>
 
               <div className="flex items-center gap-3">
-                <button
+                <Button
                   onClick={handleBackup}
-                  disabled={backingUp}
-                  className="px-4 py-2 btn-liquid btn-liquid-primary text-xs font-semibold flex items-center gap-2"
+                  variant="primary"
+                  className="px-4 py-2 text-xs font-semibold flex items-center gap-2"
+                  loading={backingUp}
+                  loadingText={t("settings.data_mgmt.backing_up")}
                 >
-                  {backingUp ? (
-                    <>
-                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      {t("settings.data_mgmt.backing_up")}
-                    </>
-                  ) : (
-                    t("settings.data_mgmt.backup_btn")
-                  )}
-                </button>
+                  {t("settings.data_mgmt.backup_btn")}
+                </Button>
 
-                <button
+                <Button
                   onClick={handleRestore}
                   disabled={restoring || backingUp}
-                  className="px-4 py-2 btn-liquid btn-liquid-ghost text-xs font-semibold flex items-center gap-2"
+                  variant="ghost"
+                  className="px-4 py-2 text-xs font-semibold flex items-center gap-2"
+                  loading={restoring}
+                  loadingText={t("settings.data_mgmt.restoring", "Restoring...")}
                 >
-                  {restoring ? (
-                    <>
-                      <div className="w-3 h-3 border-2 border-text-secondary/30 border-t-text-secondary rounded-full animate-spin" />
-                      {t("settings.data_mgmt.restoring", "Restoring...")}
-                    </>
-                  ) : (
-                    t("settings.data_mgmt.restore_btn", "Restore")
-                  )}
-                </button>
+                  {t("settings.data_mgmt.restore_btn", "Restore")}
+                </Button>
 
                 {successMsg && (
                   <span className="text-xs text-green-500">{successMsg}</span>
@@ -670,7 +659,7 @@ function DataSettings() {
                 </p>
 
                 <div className="w-full mb-4">
-                  <input
+                  <Input
                     type="text"
                     value={code}
                     onChange={(e) => {
@@ -687,29 +676,27 @@ function DataSettings() {
                 </div>
 
                 <div className="flex gap-3 w-full">
-                  <button
+                  <Button
                     onClick={() => {
                       setShowConfirm(false);
                       setCode("");
                       setError(null);
                     }}
                     disabled={resetting}
-                    className="flex-1 btn-liquid btn-liquid-ghost py-2.5 text-sm"
+                    variant="ghost"
+                    className="flex-1 py-2.5 text-sm"
                   >
                     {t("settings.data_mgmt.cancel")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleReset}
-                    disabled={resetting}
-                    className="flex-1 btn-liquid bg-red-500 hover:bg-red-600 text-white py-2.5 text-sm flex items-center justify-center gap-2"
+                    variant="danger"
+                    className="flex-1 py-2.5 text-sm flex items-center justify-center gap-2"
+                    loading={resetting}
+                    loadingText={t("settings.data_mgmt.resetting")}
                   >
-                    {resetting && (
-                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    )}
-                    {resetting
-                      ? t("settings.data_mgmt.resetting")
-                      : t("settings.data_mgmt.confirm_reset")}
-                  </button>
+                    {t("settings.data_mgmt.confirm_reset")}
+                  </Button>
                 </div>
               </div>
             </motion.div>
@@ -901,7 +888,7 @@ export default function Settings() {
                     <label className="block text-xs text-text-muted mb-1.5">
                       {t("settings.currency_code")}
                     </label>
-                    <input
+                    <Input
                       type="text"
                       className="input-liquid w-full uppercase"
                       placeholder={t("settings.currency_code_placeholder")}
@@ -915,7 +902,7 @@ export default function Settings() {
                     <label className="block text-xs text-text-muted mb-1.5">
                       {t("settings.currency_symbol")}
                     </label>
-                    <input
+                    <Input
                       type="text"
                       className="input-liquid w-full"
                       placeholder={t("settings.currency_symbol_placeholder")}
@@ -927,7 +914,7 @@ export default function Settings() {
                     <label className="block text-xs text-text-muted mb-1.5">
                       {t("settings.exchange_currency_code")}
                     </label>
-                    <input
+                    <Input
                       type="text"
                       className="input-liquid w-full uppercase"
                       placeholder={t(
@@ -943,7 +930,7 @@ export default function Settings() {
                     <label className="block text-xs text-text-muted mb-1.5">
                       {t("settings.exchange_currency_symbol")}
                     </label>
-                    <input
+                    <Input
                       type="text"
                       className="input-liquid w-full"
                       placeholder={t(
@@ -966,7 +953,7 @@ export default function Settings() {
                   <label className="block text-xs text-text-muted mb-1.5">
                     {t("settings.invoice_print.printer_name")}
                   </label>
-                  <input
+                  <Input
                     type="text"
                     className="input-liquid w-full"
                     placeholder={t(

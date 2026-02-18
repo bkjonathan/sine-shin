@@ -16,7 +16,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { formatDate } from "../utils/date";
 import QRCode from "qrcode";
 import DatePicker from "./ui/DatePicker";
-import { Select } from "./ui/Select";
+import { Button, Select } from "./ui";
 import {
   IconArrowLeft,
   IconCheck,
@@ -411,9 +411,9 @@ export default function OrderDetail() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
         <p className="mb-4">{error || t("orders.detail.not_found")}</p>
-        <button onClick={handleBack} className="btn-liquid btn-liquid-primary">
+        <Button onClick={handleBack} variant="primary">
           {t("orders.detail.back_to_list")}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -735,34 +735,25 @@ export default function OrderDetail() {
             </div>
           </div>
           <div className="flex items-center gap-3 sm:justify-end">
-            <button
+            <Button
               onClick={handleDownloadInvoice}
-              disabled={downloading}
-              className="btn-liquid btn-liquid-primary flex items-center gap-2"
+              variant="primary"
+              className="flex items-center gap-2"
+              loading={downloading}
+              loadingText={t("orders.invoice.generating")}
             >
-              {downloading ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <IconDownload size={18} strokeWidth={2} />
-              )}
-              {downloading
-                ? t("orders.invoice.generating")
-                : t("orders.invoice.download")}
-            </button>
-            <button
+              {!downloading && <IconDownload size={18} strokeWidth={2} />}
+              {t("orders.invoice.download")}
+            </Button>
+            <Button
               onClick={handlePrintInvoice}
-              disabled={printing}
-              className="btn-liquid btn-liquid-secondary flex items-center gap-2"
+              className="flex items-center gap-2"
+              loading={printing}
+              loadingText={t("orders.invoice.generating")}
             >
-              {printing ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <IconPrinter size={18} strokeWidth={2} />
-              )}
-              {printing
-                ? t("orders.invoice.generating")
-                : t("orders.invoice.print")}
-            </button>
+              {!printing && <IconPrinter size={18} strokeWidth={2} />}
+              {t("orders.invoice.print")}
+            </Button>
           </div>
         </motion.div>
 

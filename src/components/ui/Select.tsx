@@ -1,21 +1,29 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { IconCheck, IconChevronDown } from "../icons";
 
-interface Option {
+export interface Option {
   value: string | number;
   label: string;
 }
 
 interface SelectProps {
   options: Option[];
-  value: string | number;
+  value: string | number | null | undefined;
   onChange: (value: string | number) => void;
   placeholder?: string;
   className?: string;
   label?: string;
   required?: boolean;
+  disabled?: boolean;
+  error?: string;
+  id?: string;
   menuPlacement?: "auto" | "top" | "bottom";
+  emptyStateText?: string;
+}
+
+function joinClasses(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
 }
 
 export function Select({
@@ -26,13 +34,20 @@ export function Select({
   className = "",
   label,
   required = false,
+  disabled = false,
+  error,
+  id,
   menuPlacement = "auto",
+  emptyStateText = "No options available",
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [resolvedPlacement, setResolvedPlacement] = useState<"top" | "bottom">(
     "bottom",
   );
   const containerRef = useRef<HTMLDivElement>(null);
+  const generatedId = useId();
+  const triggerId = id ?? `select-${generatedId}`;
+  const errorId = error ? `${triggerId}-error` : undefined;
 
   const selectedOption = options.find((opt) => opt.value === value);
 
@@ -78,25 +93,47 @@ export function Select({
     setResolvedPlacement("bottom");
   }, [isOpen, menuPlacement, options.length]);
 
+  useEffect(() => {
+    if (disabled && isOpen) {
+      setIsOpen(false);
+    }
+  }, [disabled, isOpen]);
+
   return (
     <div
       className={`relative ${isOpen ? "z-[120]" : "z-0"} ${className}`}
       ref={containerRef}
     >
       {label && (
-        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+        <label
+          htmlFor={triggerId}
+          className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
+        >
           {label} {required && <span className="text-red-500">*</span>}
         </label>
       )}
 
       {/* Trigger Button */}
-      <div
-        className={`input-liquid w-full flex items-center justify-between cursor-pointer transition-all ${
-          isOpen
-            ? "!border-[var(--color-accent-blue)] bg-[var(--color-glass-white-hover)] shadow-[0_0_0_3px_rgba(91,127,255,0.25)]"
-            : ""
-        }`}
-        onClick={() => setIsOpen(!isOpen)}
+      <button
+        id={triggerId}
+        type="button"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={`${triggerId}-menu`}
+        aria-invalid={Boolean(error)}
+        aria-describedby={errorId}
+        className={joinClasses(
+          "input-liquid w-full flex items-center justify-between text-left transition-all",
+          isOpen &&
+            "!border-[var(--color-accent-blue)] bg-[var(--color-glass-white-hover)] shadow-[0_0_0_3px_rgba(91,127,255,0.25)]",
+          disabled && "opacity-50 cursor-not-allowed",
+          error &&
+            "!border-red-500/50 !shadow-[0_0_0_3px_rgba(248,113,113,0.2),0_0_20px_rgba(248,113,113,0.1)]",
+        )}
+        onClick={() => {
+          if (!disabled) setIsOpen(!isOpen);
+        }}
       >
         <span
           className={`truncate ${
@@ -114,7 +151,7 @@ export function Select({
             isOpen ? "rotate-180" : ""
           }`}
         />
-      </div>
+      </button>
 
       {/* Options Dropdown */}
       <AnimatePresence>
@@ -124,6 +161,9 @@ export function Select({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -5, scale: 0.98 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
+            id={`${triggerId}-menu`}
+            role="listbox"
+            aria-labelledby={label ? triggerId : undefined}
             className={`absolute z-50 w-full overflow-hidden glass-panel border border-[var(--color-glass-border-light)] shadow-xl max-h-60 overflow-y-auto ${
               resolvedPlacement === "top" ? "bottom-full mb-1" : "top-full mt-1"
             }`}
@@ -134,9 +174,12 @@ export function Select({
           >
             {options.length > 0 ? (
               options.map((option) => (
-                <div
+                <button
+                  type="button"
                   key={option.value}
-                  className={`px-4 py-2.5 text-sm cursor-pointer transition-colors flex items-center justify-between ${
+                  role="option"
+                  aria-selected={option.value === value}
+                  className={`w-full text-left bg-transparent border-0 px-4 py-2.5 text-sm cursor-pointer transition-colors flex items-center justify-between ${
                     option.value === value
                       ? "bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] font-medium"
                       : "text-[var(--color-text-secondary)] hover:bg-[var(--color-glass-white-hover)] hover:text-[var(--color-text-primary)]"
@@ -150,16 +193,26 @@ export function Select({
                   {option.value === value && (
                     <IconCheck size={14} strokeWidth={2.5} />
                   )}
-                </div>
+                </button>
               ))
             ) : (
               <div className="px-4 py-3 text-sm text-[var(--color-text-muted)] text-center italic">
-                No options available
+                {emptyStateText}
               </div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {error && (
+        <p
+          id={errorId}
+          className="mt-1 text-xs text-[var(--color-error)]"
+          role="alert"
+        >
+          {error}
+        </p>
+      )}
     </div>
   );
 }

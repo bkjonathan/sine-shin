@@ -6,6 +6,7 @@ import { getOrders } from "../api/orderApi";
 import { OrderWithCustomer } from "../types/order";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
+import { Button, Input } from "./ui";
 import { IconSearch } from "./icons";
 
 const containerVariants = {
@@ -132,7 +133,7 @@ export default function AccountBook() {
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <IconSearch className="h-4 w-4 text-text-muted" strokeWidth={2} />
           </div>
-          <input
+          <Input
             type="text"
             className="input-liquid pl-10 w-full"
             placeholder={t("account_book.search_placeholder")}
@@ -236,13 +237,14 @@ export default function AccountBook() {
                       {formatPrice(row.profit)}
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <button
+                      <Button
                         type="button"
                         onClick={() => navigate(`/orders/${row.order.id}`)}
-                        className="btn-liquid btn-liquid-ghost px-3 py-1.5 text-xs"
+                        variant="ghost"
+                        className="px-3 py-1.5 text-xs"
                       >
                         {t("account_book.view_order")}
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}

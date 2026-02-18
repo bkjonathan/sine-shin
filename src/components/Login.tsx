@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import { IconLogIn } from "./icons";
+import { Button, Input } from "./ui";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -88,47 +89,34 @@ export default function Login() {
           </AnimatePresence>
 
           <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                {t("auth.login.username")}
-              </label>
-              <input
-                type="text"
-                className="input-liquid"
-                placeholder={t("auth.login.enter_username")}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                {t("auth.login.password")}
-              </label>
-              <input
-                type="password"
-                className="input-liquid"
-                placeholder={t("auth.login.enter_password")}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+            <Input
+              label={t("auth.login.username")}
+              type="text"
+              placeholder={t("auth.login.enter_username")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+            <Input
+              label={t("auth.login.password")}
+              type="password"
+              placeholder={t("auth.login.enter_password")}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
 
-            <button
+            <Button
               type="submit"
-              className="btn-liquid btn-liquid-primary w-full py-3 mt-4"
-              disabled={isSubmitting}
+              variant="primary"
+              fullWidth
+              size="lg"
+              className="mt-4"
+              loading={isSubmitting}
+              loadingText={t("auth.login.signing_in")}
             >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                  {t("auth.login.signing_in")}
-                </>
-              ) : (
-                t("auth.login.sign_in")
-              )}
-            </button>
+              {t("auth.login.sign_in")}
+            </Button>
           </form>
         </div>
       </div>

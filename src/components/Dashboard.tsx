@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { DollarSign, ShoppingBag, Users, TrendingUp, Truck } from "lucide-react";
+import { Button } from "./ui";
 
 interface ShopData {
   shop_name: string;
@@ -138,12 +139,13 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <button
+        <Button
           onClick={handleLogout}
-          className="btn-liquid btn-liquid-ghost text-sm px-4 py-2"
+          variant="ghost"
+          className="text-sm px-4 py-2"
         >
           {t("app.logout")}
-        </button>
+        </Button>
       </motion.div>
 
       {/* ── Stats Grid ── */}
