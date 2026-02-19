@@ -204,7 +204,14 @@ export default function Reports() {
         : undefined;
       const serviceFeeAmount = calculateServiceFeeAmount(order);
       const discountAmount = order.product_discount || 0;
-      const profit = serviceFeeAmount + discountAmount;
+      const profit =
+        serviceFeeAmount +
+        discountAmount +
+        (order.shipping_fee_by_shop ? order.shipping_fee || 0 : 0) +
+        (order.delivery_fee_by_shop ? order.delivery_fee || 0 : 0) +
+        (order.cargo_fee_by_shop && !order.exclude_cargo_fee
+          ? order.cargo_fee || 0
+          : 0);
       const city = safeValue(customer?.city) || t("common.others");
       const platform =
         safeValue(customer?.platform) ||
@@ -221,7 +228,7 @@ export default function Reports() {
         serviceFeeAmount,
         discountAmount,
         profit,
-        cargoFee: order.cargo_fee || 0,
+        cargoFee: order.exclude_cargo_fee ? 0 : order.cargo_fee || 0,
         timelineDate: parseOrderDate(order),
         city,
         platform,

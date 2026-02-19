@@ -97,6 +97,10 @@ pub struct Order {
     pub delivery_fee_paid: Option<bool>,
     pub cargo_fee_paid: Option<bool>,
     pub service_fee_paid: Option<bool>,
+    pub shipping_fee_by_shop: Option<bool>,
+    pub delivery_fee_by_shop: Option<bool>,
+    pub cargo_fee_by_shop: Option<bool>,
+    pub exclude_cargo_fee: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -146,6 +150,10 @@ pub struct OrderWithCustomer {
     pub total_qty: Option<i64>,
     pub total_weight: Option<f64>,
     pub first_product_url: Option<String>,
+    pub shipping_fee_by_shop: Option<bool>,
+    pub delivery_fee_by_shop: Option<bool>,
+    pub cargo_fee_by_shop: Option<bool>,
+    pub exclude_cargo_fee: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -199,4 +207,7 @@ pub struct OrderExportRow {
     pub product_price: Option<f64>,
     pub product_weight: Option<f64>,
     pub created_at: Option<String>,
+    pub shipping_fee_by_shop: Option<bool>,
+    pub delivery_fee_by_shop: Option<bool>,
+    pub cargo_fee_by_shop: Option<bool>,
 }

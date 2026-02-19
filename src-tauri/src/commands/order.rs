@@ -62,6 +62,10 @@ pub async fn create_order(
     delivery_fee_paid: Option<bool>,
     cargo_fee_paid: Option<bool>,
     service_fee_paid: Option<bool>,
+    shipping_fee_by_shop: Option<bool>,
+    delivery_fee_by_shop: Option<bool>,
+    cargo_fee_by_shop: Option<bool>,
+    exclude_cargo_fee: Option<bool>,
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -72,7 +76,7 @@ pub async fn create_order(
 
     let inserted_id = if let Some(provided_id) = id {
         sqlx::query(
-            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(provided_id)
         .bind(customer_id)
@@ -93,13 +97,17 @@ pub async fn create_order(
         .bind(delivery_fee_paid.unwrap_or(false))
         .bind(cargo_fee_paid.unwrap_or(false))
         .bind(service_fee_paid.unwrap_or(false))
+        .bind(shipping_fee_by_shop.unwrap_or(false))
+        .bind(delivery_fee_by_shop.unwrap_or(false))
+        .bind(cargo_fee_by_shop.unwrap_or(false))
+        .bind(exclude_cargo_fee.unwrap_or(false))
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?
         .last_insert_rowid()
     } else {
         sqlx::query(
-            "INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(customer_id)
         .bind(normalized_status)
@@ -119,6 +127,10 @@ pub async fn create_order(
         .bind(delivery_fee_paid.unwrap_or(false))
         .bind(cargo_fee_paid.unwrap_or(false))
         .bind(service_fee_paid.unwrap_or(false))
+        .bind(shipping_fee_by_shop.unwrap_or(false))
+        .bind(delivery_fee_by_shop.unwrap_or(false))
+        .bind(cargo_fee_by_shop.unwrap_or(false))
+        .bind(exclude_cargo_fee.unwrap_or(false))
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?
@@ -395,6 +407,10 @@ pub async fn update_order(
     delivery_fee_paid: Option<bool>,
     cargo_fee_paid: Option<bool>,
     service_fee_paid: Option<bool>,
+    shipping_fee_by_shop: Option<bool>,
+    delivery_fee_by_shop: Option<bool>,
+    cargo_fee_by_shop: Option<bool>,
+    exclude_cargo_fee: Option<bool>,
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -404,7 +420,7 @@ pub async fn update_order(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     sqlx::query(
-        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ? WHERE id = ?",
+        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?",
     )
     .bind(customer_id)
     .bind(normalized_status)
@@ -424,6 +440,10 @@ pub async fn update_order(
     .bind(delivery_fee_paid.unwrap_or(false))
     .bind(cargo_fee_paid.unwrap_or(false))
     .bind(service_fee_paid.unwrap_or(false))
+    .bind(shipping_fee_by_shop.unwrap_or(false))
+    .bind(delivery_fee_by_shop.unwrap_or(false))
+    .bind(cargo_fee_by_shop.unwrap_or(false))
+    .bind(exclude_cargo_fee.unwrap_or(false))
     .bind(id)
     .execute(&mut *tx)
     .await
@@ -488,6 +508,9 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
                     COALESCE(service_fee, 0)
             END
             + COALESCE(product_discount, 0)
+            + CASE WHEN shipping_fee_by_shop = 1 THEN COALESCE(shipping_fee, 0) ELSE 0 END
+            + CASE WHEN delivery_fee_by_shop = 1 THEN COALESCE(delivery_fee, 0) ELSE 0 END
+            + CASE WHEN cargo_fee_by_shop = 1 AND exclude_cargo_fee != 1 THEN COALESCE(cargo_fee, 0) ELSE 0 END
         ), 0.0)
         FROM orders
         "#,
@@ -507,7 +530,7 @@ pub async fn get_dashboard_stats(app: AppHandle) -> Result<DashboardStats, Strin
         .map_err(|e| e.to_string())?;
 
     let total_cargo_fee: (f64,) =
-        sqlx::query_as("SELECT COALESCE(SUM(cargo_fee), 0.0) FROM orders")
+        sqlx::query_as("SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 THEN cargo_fee ELSE 0 END), 0.0) FROM orders")
             .fetch_one(&*pool)
             .await
             .map_err(|e| e.to_string())?;
@@ -553,6 +576,9 @@ pub async fn get_orders_for_export(app: AppHandle) -> Result<Vec<OrderExportRow>
             o.shipping_fee,
             o.delivery_fee,
             o.cargo_fee,
+            o.shipping_fee_by_shop,
+            o.delivery_fee_by_shop,
+            o.cargo_fee_by_shop,
             oi.product_url,
             oi.product_qty,
             oi.price as product_price,

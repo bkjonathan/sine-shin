@@ -27,6 +27,10 @@ export interface Order {
   delivery_fee_paid?: boolean;
   cargo_fee_paid?: boolean;
   service_fee_paid?: boolean;
+  shipping_fee_by_shop?: boolean;
+  delivery_fee_by_shop?: boolean;
+  cargo_fee_by_shop?: boolean;
+  exclude_cargo_fee?: boolean;
 }
 
 export interface OrderItem {
@@ -66,6 +70,10 @@ export interface OrderFormData {
   arrived_date: string;
   shipment_date: string;
   user_withdraw_date: string;
+  shipping_fee_by_shop?: boolean;
+  delivery_fee_by_shop?: boolean;
+  cargo_fee_by_shop?: boolean;
+  exclude_cargo_fee?: boolean;
   service_fee: string;
   product_discount: string;
   service_fee_type: "fixed" | "percent";
@@ -112,6 +120,10 @@ export const createEmptyOrderFormData = (): OrderFormData => ({
   user_withdraw_date: "",
   service_fee: "",
   product_discount: "",
+  shipping_fee_by_shop: false,
+  delivery_fee_by_shop: false,
+  cargo_fee_by_shop: false,
+  exclude_cargo_fee: false,
   service_fee_type: "fixed",
 });
 
@@ -152,6 +164,10 @@ export interface OrderExportRow {
   shipping_fee?: number;
   delivery_fee?: number;
   cargo_fee?: number;
+  shipping_fee_by_shop?: boolean;
+  delivery_fee_by_shop?: boolean;
+  cargo_fee_by_shop?: boolean;
+  exclude_cargo_fee?: boolean;
   product_url?: string;
   product_qty?: number;
   product_price?: number;

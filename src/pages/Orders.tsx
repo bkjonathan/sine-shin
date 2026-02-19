@@ -65,7 +65,9 @@ const ORDER_STATUS_FILTER_OPTIONS: Array<{
   labelKey: string;
 }> = [{ value: "all", labelKey: "common.all" }, ...ORDER_STATUS_OPTIONS];
 
-const getOrderStatusDisplay = (status?: OrderStatus): {
+const getOrderStatusDisplay = (
+  status?: OrderStatus,
+): {
   labelKey: string;
   className: string;
 } => {
@@ -84,7 +86,8 @@ const getOrderStatusDisplay = (status?: OrderStatus): {
     case "shipping":
       return {
         labelKey: "orders.status_shipping",
-        className: "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20",
+        className:
+          "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20",
       };
     case "completed":
       return {
@@ -151,7 +154,9 @@ const getOrdersListPath = (page: number): string => {
 const MAX_SERVICE_FEE_PERCENT = 100;
 
 const hasOrderFormErrors = (errors: OrderFormErrors): boolean => {
-  if (errors.itemErrors?.some((itemError) => Object.keys(itemError).length > 0)) {
+  if (
+    errors.itemErrors?.some((itemError) => Object.keys(itemError).length > 0)
+  ) {
     return true;
   }
 
@@ -251,7 +256,15 @@ export default function Orders() {
 
   useEffect(() => {
     fetchOrders(currentPage);
-  }, [currentPage, pageSize, searchKey, searchTerm, statusFilter, sortBy, sortOrder]);
+  }, [
+    currentPage,
+    pageSize,
+    searchKey,
+    searchTerm,
+    statusFilter,
+    sortBy,
+    sortOrder,
+  ]);
 
   const fetchOrders = async (page: number) => {
     const fetchId = ++latestFetchIdRef.current;
@@ -340,15 +353,16 @@ export default function Orders() {
     if (value.items.length === 0) {
       errors.items = t("orders.validation.items_required");
     } else {
-      const itemErrors: NonNullable<OrderFormErrors["itemErrors"]> = value.items.map(
-        () => ({}),
-      );
+      const itemErrors: NonNullable<OrderFormErrors["itemErrors"]> =
+        value.items.map(() => ({}));
 
       value.items.forEach((item, index) => {
         const currentItemErrors = itemErrors[index];
 
         if (!Number.isInteger(item.product_qty) || item.product_qty < 1) {
-          currentItemErrors.product_qty = t("orders.validation.product_qty_invalid");
+          currentItemErrors.product_qty = t(
+            "orders.validation.product_qty_invalid",
+          );
         }
 
         if (!Number.isFinite(item.price) || item.price < 0) {
@@ -356,7 +370,9 @@ export default function Orders() {
         }
 
         if (!Number.isFinite(item.product_weight) || item.product_weight < 0) {
-          currentItemErrors.product_weight = t("orders.validation.weight_invalid");
+          currentItemErrors.product_weight = t(
+            "orders.validation.weight_invalid",
+          );
         }
       });
 
@@ -399,7 +415,10 @@ export default function Orders() {
     return errors;
   };
 
-  const handleFormFieldChange = (field: keyof OrderFormData, value: string) => {
+  const handleFormFieldChange = (
+    field: keyof OrderFormData,
+    value: string | boolean,
+  ) => {
     setFormData((prev) => {
       const next = { ...prev };
 
@@ -530,6 +549,10 @@ export default function Orders() {
           service_fee: order.service_fee?.toString() || "",
           product_discount: order.product_discount?.toString() || "",
           service_fee_type: order.service_fee_type || "fixed",
+          shipping_fee_by_shop: order.shipping_fee_by_shop,
+          delivery_fee_by_shop: order.delivery_fee_by_shop,
+          cargo_fee_by_shop: order.cargo_fee_by_shop,
+          exclude_cargo_fee: order.exclude_cargo_fee,
         });
         setIsModalOpen(true);
       } catch (e) {
@@ -570,7 +593,8 @@ export default function Orders() {
         order_from: formData.order_from || undefined,
         items: formData.items.map((item) => ({
           product_url: item.product_url.trim() || undefined,
-          product_qty: item.product_qty > 0 ? Number(item.product_qty) : undefined,
+          product_qty:
+            item.product_qty > 0 ? Number(item.product_qty) : undefined,
           price: Number.isFinite(item.price) ? Number(item.price) : undefined,
           product_weight: Number.isFinite(item.product_weight)
             ? Number(item.product_weight)
@@ -587,6 +611,10 @@ export default function Orders() {
         service_fee: parseOptionalNumber(formData.service_fee),
         product_discount: parseOptionalNumber(formData.product_discount),
         service_fee_type: formData.service_fee_type || "fixed",
+        shipping_fee_by_shop: !!formData.shipping_fee_by_shop,
+        delivery_fee_by_shop: !!formData.delivery_fee_by_shop,
+        cargo_fee_by_shop: !!formData.cargo_fee_by_shop,
+        exclude_cargo_fee: !!formData.exclude_cargo_fee,
       };
 
       if (editingOrder) {
@@ -873,7 +901,10 @@ export default function Orders() {
             </div>
             <div className="relative flex-1">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <IconSearch className="h-4 w-4 text-text-muted" strokeWidth={2} />
+                <IconSearch
+                  className="h-4 w-4 text-text-muted"
+                  strokeWidth={2}
+                />
               </div>
               <Input
                 type="text"
@@ -925,7 +956,9 @@ export default function Orders() {
           {ORDER_STATUS_FILTER_OPTIONS.map((option) => {
             const isActive = statusFilter === option.value;
             const statusDisplay =
-              option.value === "all" ? null : getOrderStatusDisplay(option.value);
+              option.value === "all"
+                ? null
+                : getOrderStatusDisplay(option.value);
 
             return (
               <button
@@ -1008,7 +1041,9 @@ export default function Orders() {
                           className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
                           onClick={() =>
                             navigate(`/orders/${order.id}`, {
-                              state: { returnTo: getOrdersListPath(currentPage) },
+                              state: {
+                                returnTo: getOrdersListPath(currentPage),
+                              },
                             })
                           }
                         >

@@ -16,6 +16,10 @@ interface OrderDetailFinancialSummaryCardProps {
     suffix?: string,
     feePaidField?: string,
     isPaid?: boolean,
+    shopExpenseField?: string,
+    isShopExpense?: boolean,
+    excludeCargoField?: string,
+    isExcluded?: boolean,
   ) => ReactNode;
 }
 
@@ -38,7 +42,9 @@ export default function OrderDetailFinancialSummaryCard({
       <div className="space-y-3">
         <div className="flex justify-between items-center py-2 border-b border-glass-border">
           <span className="text-text-secondary">{t("orders.total_price")}</span>
-          <span className="text-text-primary">{formatPrice(order.total_price || 0)}</span>
+          <span className="text-text-primary">
+            {formatPrice(order.total_price || 0)}
+          </span>
         </div>
         {renderEditableFee(
           t("orders.form.service_fee"),
@@ -55,6 +61,8 @@ export default function OrderDetailFinancialSummaryCard({
           undefined,
           "shipping_fee_paid",
           !!order.shipping_fee_paid,
+          "shipping_fee_by_shop",
+          !!order.shipping_fee_by_shop,
         )}
         {renderEditableFee(
           t("orders.form.delivery_fee"),
@@ -63,6 +71,8 @@ export default function OrderDetailFinancialSummaryCard({
           undefined,
           "delivery_fee_paid",
           !!order.delivery_fee_paid,
+          "delivery_fee_by_shop",
+          !!order.delivery_fee_by_shop,
         )}
         {renderEditableFee(
           t("orders.form.cargo_fee"),
@@ -71,6 +81,10 @@ export default function OrderDetailFinancialSummaryCard({
           undefined,
           "cargo_fee_paid",
           !!order.cargo_fee_paid,
+          "cargo_fee_by_shop",
+          !!order.cargo_fee_by_shop,
+          "exclude_cargo_fee",
+          !!order.exclude_cargo_fee,
         )}
         {renderEditableFee(
           t("orders.form.product_discount"),
@@ -78,20 +92,26 @@ export default function OrderDetailFinancialSummaryCard({
           order.product_discount,
         )}
         <div className="mt-4 pt-4 flex justify-between items-center">
-          <span className="font-semibold text-text-primary">{t("orders.total")}</span>
-          <span className="font-bold text-xl text-success">{formatPrice(orderTotal)}</span>
-        </div>
-        <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-center">
-          <span className="font-semibold text-text-primary">{t("orders.detail.profit")}</span>
-          <span className="font-bold text-xl text-emerald-500">
-            {formatPrice(orderProfit)}
+          <span className="font-semibold text-text-primary">
+            {t("orders.total")}
+          </span>
+          <span className="font-bold text-xl text-success">
+            {formatPrice(orderTotal)}
           </span>
         </div>
         <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-center">
           <span className="font-semibold text-text-primary">
+            {t("orders.detail.profit")}
+          </span>
+          <span className="font-bold text-xl text-emerald-500">
+            {formatPrice(orderProfit)}
+          </span>
+        </div>
+        <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-start gap-4">
+          <span className="font-semibold text-text-primary text-sm leading-snug">
             {t("orders.invoice.total_with_exchange")}
           </span>
-          <span className="font-bold text-xl text-accent-blue">
+          <span className="font-bold text-xl text-accent-blue shrink-0 text-right">
             {formatExchangePrice(totalWithExchange)}
           </span>
         </div>

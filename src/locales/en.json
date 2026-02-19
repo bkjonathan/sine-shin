@@ -166,7 +166,9 @@
       "service_fee": "Service Fee",
       "product_discount": "Product Discount",
       "fixed": "Fixed",
-      "percent": "Percent"
+      "percent": "Percent",
+      "shop_expense": "Shop Expense",
+      "exclude_cargo": "Exclude from Total"
     },
     "validation": {
       "customer_required": "Customer is required",

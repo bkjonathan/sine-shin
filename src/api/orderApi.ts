@@ -94,6 +94,10 @@ export const createOrder = async (
     deliveryFeePaid: order.delivery_fee_paid,
     cargoFeePaid: order.cargo_fee_paid,
     serviceFeePaid: order.service_fee_paid,
+    shippingFeeByShop: order.shipping_fee_by_shop,
+    deliveryFeeByShop: order.delivery_fee_by_shop,
+    cargoFeeByShop: order.cargo_fee_by_shop,
+    excludeCargoFee: order.exclude_cargo_fee,
   });
 };
 
@@ -121,6 +125,10 @@ export const updateOrder = async (
     deliveryFeePaid: order.delivery_fee_paid,
     cargoFeePaid: order.cargo_fee_paid,
     serviceFeePaid: order.service_fee_paid,
+    shippingFeeByShop: order.shipping_fee_by_shop,
+    deliveryFeeByShop: order.delivery_fee_by_shop,
+    cargoFeeByShop: order.cargo_fee_by_shop,
+    excludeCargoFee: order.exclude_cargo_fee,
   });
 };
 

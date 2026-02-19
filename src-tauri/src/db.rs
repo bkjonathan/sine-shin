@@ -70,6 +70,10 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         "delivery_fee_paid",
         "cargo_fee_paid",
         "service_fee_paid",
+        "shipping_fee_by_shop",
+        "delivery_fee_by_shop",
+        "cargo_fee_by_shop",
+        "exclude_cargo_fee",
     ];
 
     for col in fee_paid_columns {
@@ -100,6 +104,18 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         .execute(pool)
         .await?;
     sqlx::query("UPDATE orders SET service_fee_paid = 0 WHERE service_fee_paid IS NULL")
+        .execute(pool)
+        .await?;
+    sqlx::query("UPDATE orders SET shipping_fee_by_shop = 0 WHERE shipping_fee_by_shop IS NULL")
+        .execute(pool)
+        .await?;
+    sqlx::query("UPDATE orders SET delivery_fee_by_shop = 0 WHERE delivery_fee_by_shop IS NULL")
+        .execute(pool)
+        .await?;
+    sqlx::query("UPDATE orders SET cargo_fee_by_shop = 0 WHERE cargo_fee_by_shop IS NULL")
+        .execute(pool)
+        .await?;
+    sqlx::query("UPDATE orders SET exclude_cargo_fee = 0 WHERE exclude_cargo_fee IS NULL")
         .execute(pool)
         .await?;
 

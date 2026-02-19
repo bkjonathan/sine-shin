@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, Variants } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Select } from "../../ui";
-import { IconPlus, IconX } from "../../icons";
+import { IconCheck, IconPlus, IconX } from "../../icons";
 import {
   OrderFormData,
   OrderFormErrors,
@@ -27,8 +27,12 @@ interface OrderFormModalProps {
   statusOptions: Array<{ value: OrderStatus; labelKey: string }>;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
-  onFieldChange: (field: keyof OrderFormData, value: string) => void;
-  onItemChange: (index: number, field: keyof OrderFormItemData, value: string) => void;
+  onFieldChange: (field: keyof OrderFormData, value: string | boolean) => void;
+  onItemChange: (
+    index: number,
+    field: keyof OrderFormItemData,
+    value: string,
+  ) => void;
   onAddItem: () => void;
   onRemoveItem: (index: number) => void;
 }
@@ -98,8 +102,14 @@ export default function OrderFormModal({
                         value: customer.id,
                         label: `${customer.name} (${customer.customer_id})`,
                       }))}
-                      value={formData.customer_id ? parseInt(formData.customer_id, 10) : ""}
-                      onChange={(value) => onFieldChange("customer_id", String(value))}
+                      value={
+                        formData.customer_id
+                          ? parseInt(formData.customer_id, 10)
+                          : ""
+                      }
+                      onChange={(value) =>
+                        onFieldChange("customer_id", String(value))
+                      }
                       placeholder={t("orders.form.select_customer")}
                     />
                     {formErrors.customer_id && (
@@ -116,7 +126,9 @@ export default function OrderFormModal({
                       { value: "Others", label: t("common.others") },
                     ]}
                     value={formData.order_from}
-                    onChange={(value) => onFieldChange("order_from", String(value))}
+                    onChange={(value) =>
+                      onFieldChange("order_from", String(value))
+                    }
                   />
                   <Select
                     label={t("orders.form.status")}
@@ -137,7 +149,9 @@ export default function OrderFormModal({
                     className="input-liquid w-full"
                     value={formData.exchange_rate}
                     error={formErrors.exchange_rate}
-                    onChange={(e) => onFieldChange("exchange_rate", e.target.value)}
+                    onChange={(e) =>
+                      onFieldChange("exchange_rate", e.target.value)
+                    }
                   />
                   <Input
                     label={t("orders.form.order_date")}
@@ -152,7 +166,9 @@ export default function OrderFormModal({
                         e.target.type = "text";
                       }
                     }}
-                    onChange={(e) => onFieldChange("order_date", e.target.value)}
+                    onChange={(e) =>
+                      onFieldChange("order_date", e.target.value)
+                    }
                   />
                 </div>
               </div>
@@ -205,7 +221,9 @@ export default function OrderFormModal({
                             className="input-liquid w-full text-sm py-1.5"
                             value={item.product_url}
                             error={itemError?.product_url}
-                            onChange={(e) => onItemChange(index, "product_url", e.target.value)}
+                            onChange={(e) =>
+                              onItemChange(index, "product_url", e.target.value)
+                            }
                             placeholder="https://..."
                           />
 
@@ -218,7 +236,11 @@ export default function OrderFormModal({
                               value={String(item.product_qty)}
                               error={itemError?.product_qty}
                               onChange={(e) =>
-                                onItemChange(index, "product_qty", e.target.value)
+                                onItemChange(
+                                  index,
+                                  "product_qty",
+                                  e.target.value,
+                                )
                               }
                             />
                             <Input
@@ -229,7 +251,9 @@ export default function OrderFormModal({
                               className="input-liquid w-full text-sm py-1.5"
                               value={String(item.price)}
                               error={itemError?.price}
-                              onChange={(e) => onItemChange(index, "price", e.target.value)}
+                              onChange={(e) =>
+                                onItemChange(index, "price", e.target.value)
+                              }
                             />
                             <Input
                               label={t("orders.form.weight")}
@@ -240,7 +264,11 @@ export default function OrderFormModal({
                               value={String(item.product_weight)}
                               error={itemError?.product_weight}
                               onChange={(e) =>
-                                onItemChange(index, "product_weight", e.target.value)
+                                onItemChange(
+                                  index,
+                                  "product_weight",
+                                  e.target.value,
+                                )
                               }
                             />
                           </div>
@@ -268,7 +296,9 @@ export default function OrderFormModal({
                         className="input-liquid w-full"
                         value={formData.service_fee}
                         error={formErrors.service_fee}
-                        onChange={(e) => onFieldChange("service_fee", e.target.value)}
+                        onChange={(e) =>
+                          onFieldChange("service_fee", e.target.value)
+                        }
                       />
                       <Select
                         className="w-24"
@@ -291,40 +321,176 @@ export default function OrderFormModal({
                     className="input-liquid w-full"
                     value={formData.product_discount}
                     error={formErrors.product_discount}
-                    onChange={(e) => onFieldChange("product_discount", e.target.value)}
+                    onChange={(e) =>
+                      onFieldChange("product_discount", e.target.value)
+                    }
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Input
-                    label={t("orders.form.shipping_fee")}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="input-liquid w-full"
-                    value={formData.shipping_fee}
-                    error={formErrors.shipping_fee}
-                    onChange={(e) => onFieldChange("shipping_fee", e.target.value)}
-                  />
-                  <Input
-                    label={t("orders.form.delivery_fee")}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="input-liquid w-full"
-                    value={formData.delivery_fee}
-                    error={formErrors.delivery_fee}
-                    onChange={(e) => onFieldChange("delivery_fee", e.target.value)}
-                  />
-                  <Input
-                    label={t("orders.form.cargo_fee")}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="input-liquid w-full"
-                    value={formData.cargo_fee}
-                    error={formErrors.cargo_fee}
-                    onChange={(e) => onFieldChange("cargo_fee", e.target.value)}
-                  />
+                  <div>
+                    <Input
+                      label={t("orders.form.shipping_fee")}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="input-liquid w-full"
+                      value={formData.shipping_fee}
+                      error={formErrors.shipping_fee}
+                      onChange={(e) =>
+                        onFieldChange("shipping_fee", e.target.value)
+                      }
+                    />
+                    <label
+                      className="flex items-center gap-2 mt-2 cursor-pointer select-none group"
+                      onClick={() =>
+                        onFieldChange(
+                          "shipping_fee_by_shop",
+                          !formData.shipping_fee_by_shop,
+                        )
+                      }
+                    >
+                      <div
+                        className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
+                          formData.shipping_fee_by_shop
+                            ? "bg-amber-500 text-white"
+                            : "bg-glass-surface border border-glass-border group-hover:border-text-muted"
+                        }`}
+                      >
+                        {formData.shipping_fee_by_shop && (
+                          <IconCheck size={12} strokeWidth={3} />
+                        )}
+                      </div>
+                      <span
+                        className={`text-xs ${
+                          formData.shipping_fee_by_shop
+                            ? "text-amber-500 font-medium"
+                            : "text-text-muted group-hover:text-text-secondary"
+                        }`}
+                      >
+                        {t("orders.form.shop_expense")}
+                      </span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <Input
+                      label={t("orders.form.delivery_fee")}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="input-liquid w-full"
+                      value={formData.delivery_fee}
+                      error={formErrors.delivery_fee}
+                      onChange={(e) =>
+                        onFieldChange("delivery_fee", e.target.value)
+                      }
+                    />
+                    <label
+                      className="flex items-center gap-2 mt-2 cursor-pointer select-none group"
+                      onClick={() =>
+                        onFieldChange(
+                          "delivery_fee_by_shop",
+                          !formData.delivery_fee_by_shop,
+                        )
+                      }
+                    >
+                      <div
+                        className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
+                          formData.delivery_fee_by_shop
+                            ? "bg-amber-500 text-white"
+                            : "bg-glass-surface border border-glass-border group-hover:border-text-muted"
+                        }`}
+                      >
+                        {formData.delivery_fee_by_shop && (
+                          <IconCheck size={12} strokeWidth={3} />
+                        )}
+                      </div>
+                      <span
+                        className={`text-xs ${
+                          formData.delivery_fee_by_shop
+                            ? "text-amber-500 font-medium"
+                            : "text-text-muted group-hover:text-text-secondary"
+                        }`}
+                      >
+                        {t("orders.form.shop_expense")}
+                      </span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <Input
+                      label={t("orders.form.cargo_fee")}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="input-liquid w-full"
+                      value={formData.cargo_fee}
+                      error={formErrors.cargo_fee}
+                      onChange={(e) =>
+                        onFieldChange("cargo_fee", e.target.value)
+                      }
+                    />
+                    <label
+                      className="flex items-center gap-2 mt-2 cursor-pointer select-none group"
+                      onClick={() =>
+                        onFieldChange(
+                          "cargo_fee_by_shop",
+                          !formData.cargo_fee_by_shop,
+                        )
+                      }
+                    >
+                      <div
+                        className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
+                          formData.cargo_fee_by_shop
+                            ? "bg-amber-500 text-white"
+                            : "bg-glass-surface border border-glass-border group-hover:border-text-muted"
+                        }`}
+                      >
+                        {formData.cargo_fee_by_shop && (
+                          <IconCheck size={12} strokeWidth={3} />
+                        )}
+                      </div>
+                      <span
+                        className={`text-xs ${
+                          formData.cargo_fee_by_shop
+                            ? "text-amber-500 font-medium"
+                            : "text-text-muted group-hover:text-text-secondary"
+                        }`}
+                      >
+                        {t("orders.form.shop_expense")}
+                      </span>
+                    </label>
+                    <label
+                      className="flex items-center gap-2 mt-1 cursor-pointer select-none group"
+                      onClick={() =>
+                        onFieldChange(
+                          "exclude_cargo_fee",
+                          !formData.exclude_cargo_fee,
+                        )
+                      }
+                    >
+                      <div
+                        className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
+                          formData.exclude_cargo_fee
+                            ? "bg-rose-500 text-white"
+                            : "bg-glass-surface border border-glass-border group-hover:border-text-muted"
+                        }`}
+                      >
+                        {formData.exclude_cargo_fee && (
+                          <IconCheck size={12} strokeWidth={3} />
+                        )}
+                      </div>
+                      <span
+                        className={`text-xs ${
+                          formData.exclude_cargo_fee
+                            ? "text-rose-500 font-medium"
+                            : "text-text-muted group-hover:text-text-secondary"
+                        }`}
+                      >
+                        {t("orders.form.exclude_cargo")}
+                      </span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -347,7 +513,9 @@ export default function OrderFormModal({
                           e.target.type = "text";
                         }
                       }}
-                      onChange={(e) => onFieldChange("arrived_date", e.target.value)}
+                      onChange={(e) =>
+                        onFieldChange("arrived_date", e.target.value)
+                      }
                     />
                     <Input
                       label={t("orders.form.shipment_date")}
@@ -362,7 +530,9 @@ export default function OrderFormModal({
                           e.target.type = "text";
                         }
                       }}
-                      onChange={(e) => onFieldChange("shipment_date", e.target.value)}
+                      onChange={(e) =>
+                        onFieldChange("shipment_date", e.target.value)
+                      }
                     />
                     <Input
                       label={t("orders.form.user_withdraw_date")}

@@ -24,12 +24,7 @@ import OrderDetailProductsCard from "../components/pages/order-detail/OrderDetai
 import OrderDetailStatusCard from "../components/pages/order-detail/OrderDetailStatusCard";
 import OrderDetailTimelineCard from "../components/pages/order-detail/OrderDetailTimelineCard";
 import OrderInvoicePrintLayout from "../components/pages/order-detail/OrderInvoicePrintLayout";
-import {
-  IconCheck,
-  IconCircle,
-  IconEdit,
-  IconX,
-} from "../components/icons";
+import { IconCheck, IconCircle, IconEdit, IconX } from "../components/icons";
 
 const ORDER_STATUS_OPTIONS: OrderStatus[] = [
   "pending",
@@ -477,7 +472,7 @@ export default function OrderDetail() {
                 placeholderText="Select date"
                 placement="top-start"
                 autoFocus
-                className="!py-1"
+                className="py-1!"
                 showMonthDropdown
                 showYearDropdown
                 dropdownMode="select"
@@ -614,6 +609,10 @@ export default function OrderDetail() {
         delivery_fee_paid: order.delivery_fee_paid,
         cargo_fee_paid: order.cargo_fee_paid,
         service_fee_paid: order.service_fee_paid,
+        shipping_fee_by_shop: order.shipping_fee_by_shop,
+        delivery_fee_by_shop: order.delivery_fee_by_shop,
+        cargo_fee_by_shop: order.cargo_fee_by_shop,
+        exclude_cargo_fee: order.exclude_cargo_fee,
       };
       updatedOrder[feePaidField] = !currentValue;
       await updateOrder(updatedOrder);
@@ -634,38 +633,89 @@ export default function OrderDetail() {
     suffix?: string,
     feePaidField?: string,
     isPaid?: boolean,
+    shopExpenseField?: string,
+    isShopExpense?: boolean,
+    excludeCargoField?: string,
+    isExcluded?: boolean,
   ) => {
     const isEditing = editingField === field;
 
     return (
-      <div className="flex justify-between items-center py-2 border-b border-glass-border">
-        <div className="flex items-center gap-2">
-          <span className="text-text-secondary">{label}</span>
-          {feePaidField !== undefined && (
-            <button
-              type="button"
-              disabled={isUpdating}
-              onClick={() => handleToggleFeePaid(feePaidField, !!isPaid)}
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer ${
-                isPaid
-                  ? "bg-success/15 text-success hover:bg-success/25"
-                  : "bg-rose-500/15 text-rose-500 hover:bg-rose-500/25"
-              }`}
-              title={
-                isPaid ? t("orders.detail.paid") : t("orders.detail.unpaid")
-              }
-            >
-              {isPaid ? (
-                <IconCheck size={12} strokeWidth={2.5} />
-              ) : (
-                <IconCircle size={12} strokeWidth={2.5} />
+      <div className="flex justify-between items-start py-2.5 border-b border-glass-border gap-4">
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className="text-text-secondary text-sm whitespace-nowrap">
+            {label}
+          </span>
+          {(feePaidField !== undefined ||
+            shopExpenseField !== undefined ||
+            excludeCargoField !== undefined) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {feePaidField !== undefined && (
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() => handleToggleFeePaid(feePaidField, !!isPaid)}
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer ${
+                    isPaid
+                      ? "bg-success/15 text-success hover:bg-success/25"
+                      : "bg-rose-500/15 text-rose-500 hover:bg-rose-500/25"
+                  }`}
+                  title={
+                    isPaid ? t("orders.detail.paid") : t("orders.detail.unpaid")
+                  }
+                >
+                  {isPaid ? (
+                    <IconCheck size={10} strokeWidth={2.5} />
+                  ) : (
+                    <IconCircle size={10} strokeWidth={2.5} />
+                  )}
+                  {isPaid ? t("orders.detail.paid") : t("orders.detail.unpaid")}
+                </button>
               )}
-              {isPaid ? t("orders.detail.paid") : t("orders.detail.unpaid")}
-            </button>
+              {shopExpenseField !== undefined && (
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() =>
+                    handleToggleFeePaid(shopExpenseField, !!isShopExpense)
+                  }
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-all cursor-pointer ${
+                    isShopExpense
+                      ? "bg-amber-500/15 text-amber-500 border border-amber-500/30 hover:bg-amber-500/20"
+                      : "bg-glass-surface text-text-muted border border-glass-border hover:bg-glass-surface-hover"
+                  }`}
+                  title={t("orders.form.shop_expense")}
+                >
+                  Shop
+                  {isShopExpense ? (
+                    <IconCheck size={10} strokeWidth={2.5} />
+                  ) : (
+                    <IconCircle size={10} strokeWidth={2.5} />
+                  )}
+                </button>
+              )}
+              {excludeCargoField !== undefined && (
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() =>
+                    handleToggleFeePaid(excludeCargoField, !!isExcluded)
+                  }
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-all cursor-pointer ${
+                    isExcluded
+                      ? "bg-rose-500/15 text-rose-500 border border-rose-500/30 hover:bg-rose-500/20"
+                      : "bg-glass-surface text-text-muted border border-glass-border hover:bg-glass-surface-hover"
+                  }`}
+                  title={t("orders.form.exclude_cargo")}
+                >
+                  {isExcluded ? "Excluded" : "Include"}
+                </button>
+              )}
+            </div>
           )}
         </div>
         {isEditing ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <input
               type="number"
               value={tempValue}
@@ -690,14 +740,14 @@ export default function OrderDetail() {
           </div>
         ) : (
           <div
-            className="flex items-center gap-2 cursor-pointer group"
+            className="flex items-center gap-2 cursor-pointer group shrink-0"
             onClick={() => handleEditClick(field, value, "number")}
             title="Click to edit"
           >
             <span className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-blue">
               <IconEdit size={14} strokeWidth={2} />
             </span>
-            <span className="text-text-primary hover:text-accent-blue hover:underline decoration-dashed underline-offset-4 transition-colors">
+            <span className="text-text-primary font-medium hover:text-accent-blue hover:underline decoration-dashed underline-offset-4 transition-colors">
               {(value || 0).toLocaleString()} {suffix && suffix}
             </span>
           </div>
@@ -747,7 +797,10 @@ export default function OrderDetail() {
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <motion.div variants={itemVariants} className="lg:col-span-2 space-y-6">
+          <motion.div
+            variants={itemVariants}
+            className="lg:col-span-2 space-y-6"
+          >
             <OrderDetailCustomerCard
               customerName={customerName}
               customerCode={customerCode}
