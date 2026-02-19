@@ -65,20 +65,16 @@ export default function CustomerDetail() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full">
-        <div className="w-8 h-8 border-2 border-[var(--color-glass-border)] border-t-[var(--color-accent-blue)] rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
       </div>
     );
   }
 
   if (error || !customer) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-muted)]">
+      <div className="flex flex-col items-center justify-center h-full text-text-muted">
         <p>{error || "Customer not found"}</p>
-        <Button
-          onClick={handleBack}
-          variant="ghost"
-          className="mt-4"
-        >
+        <Button onClick={handleBack} variant="ghost" className="mt-4">
           {t("customers.detail.back_to_list")}
         </Button>
       </div>
@@ -102,17 +98,15 @@ export default function CustomerDetail() {
       <motion.div variants={fadeVariants} className="flex items-center gap-4">
         <button
           onClick={handleBack}
-          className="p-2 hover:bg-[var(--color-glass-white-hover)] rounded-lg transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          className="p-2 hover:bg-glass-white-hover rounded-lg transition-colors text-text-muted hover:text-text-primary"
         >
           <IconArrowLeft size={20} strokeWidth={2} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+          <h1 className="text-2xl font-bold text-text-primary">
             {customer.name}
           </h1>
-          <p className="text-sm text-[var(--color-text-muted)]">
-            {customer.customer_id}
-          </p>
+          <p className="text-sm text-text-muted">{customer.customer_id}</p>
         </div>
       </motion.div>
 
@@ -120,40 +114,40 @@ export default function CustomerDetail() {
         {/* Customer Info Card */}
         <motion.div variants={fadeVariants} className="lg:col-span-1 space-y-6">
           <div className="glass-panel p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h2 className="text-lg font-semibold text-text-primary mb-4">
               {t("customers.detail.title")}
             </h2>
 
             <div className="space-y-3">
               <div className="flex items-start gap-3 text-sm">
-                <span className="text-[var(--color-text-muted)] w-20">
+                <span className="text-text-muted w-20">
                   {t("customers.form.phone")}:
                 </span>
-                <span className="text-[var(--color-text-primary)]">
+                <span className="text-text-primary">
                   {customer.phone || "-"}
                 </span>
               </div>
               <div className="flex items-start gap-3 text-sm">
-                <span className="text-[var(--color-text-muted)] w-20">
+                <span className="text-text-muted w-20">
                   {t("customers.form.city")}:
                 </span>
-                <span className="text-[var(--color-text-primary)]">
+                <span className="text-text-primary">
                   {customer.city || "-"}
                 </span>
               </div>
               <div className="flex items-start gap-3 text-sm">
-                <span className="text-[var(--color-text-muted)] w-20">
+                <span className="text-text-muted w-20">
                   {t("customers.form.address")}:
                 </span>
-                <span className="text-[var(--color-text-primary)]">
+                <span className="text-text-primary">
                   {customer.address || "-"}
                 </span>
               </div>
               <div className="flex items-start gap-3 text-sm">
-                <span className="text-[var(--color-text-muted)] w-20">
+                <span className="text-text-muted w-20">
                   {t("customers.form.platform")}:
                 </span>
-                <span className="text-[var(--color-text-primary)]">
+                <span className="text-text-primary">
                   {customer.platform || "-"}
                 </span>
               </div>
@@ -163,7 +157,7 @@ export default function CustomerDetail() {
                     href={customer.social_media_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm text-[var(--color-accent-blue)] hover:underline"
+                    className="inline-flex items-center gap-2 text-sm text-accent-blue hover:underline"
                   >
                     {t("customers.visit_social")}
                     <IconExternalLink size={14} strokeWidth={2} />
@@ -177,13 +171,13 @@ export default function CustomerDetail() {
         {/* Orders List */}
         <motion.div variants={fadeVariants} className="lg:col-span-2">
           <div className="glass-panel p-6 h-full flex flex-col">
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-4">
+            <h2 className="text-lg font-semibold text-text-primary mb-4">
               {t("customers.detail.order_history")} ({orders.length})
             </h2>
 
             <div className="flex-1 overflow-auto">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-[var(--color-text-muted)] uppercase border-b border-[var(--color-glass-border)]">
+                <thead className="text-xs text-text-muted uppercase border-b border-glass-border">
                   <tr>
                     <th className="px-4 py-3">
                       {t("customers.detail.order_id")}
@@ -198,12 +192,12 @@ export default function CustomerDetail() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--color-glass-border)]">
+                <tbody className="divide-y divide-glass-border">
                   {orders.length === 0 ? (
                     <tr>
                       <td
                         colSpan={5}
-                        className="px-4 py-8 text-center text-[var(--color-text-muted)]"
+                        className="px-4 py-8 text-center text-text-muted"
                       >
                         {t("customers.detail.no_orders")}
                       </td>
@@ -212,21 +206,21 @@ export default function CustomerDetail() {
                     orders.map((order) => (
                       <tr
                         key={order.id}
-                        className="hover:bg-[var(--color-glass-white-hover)] transition-colors"
+                        className="hover:bg-glass-white-hover transition-colors"
                       >
-                        <td className="px-4 py-3 font-medium text-[var(--color-text-primary)]">
+                        <td className="px-4 py-3 font-medium text-text-primary">
                           {order.order_id}
                         </td>
-                        <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                        <td className="px-4 py-3 text-text-secondary">
                           {formatDate(order.order_date)}
                         </td>
-                        <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                        <td className="px-4 py-3 text-text-secondary">
                           {order.first_product_url ? (
                             <a
                               href={order.first_product_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[var(--color-accent-blue)] hover:underline truncate max-w-[150px] block"
+                              className="text-accent-blue hover:underline truncate max-w-[150px] block"
                             >
                               {t("customers.detail.view_item")}
                             </a>
@@ -234,10 +228,10 @@ export default function CustomerDetail() {
                             "-"
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right text-[var(--color-text-secondary)]">
+                        <td className="px-4 py-3 text-right text-text-secondary">
                           {order.total_qty || 0}
                         </td>
-                        <td className="px-4 py-3 text-right text-[var(--color-text-secondary)]">
+                        <td className="px-4 py-3 text-right text-text-secondary">
                           {formatPrice(order.total_price || 0)}
                         </td>
                       </tr>

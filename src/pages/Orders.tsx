@@ -99,7 +99,8 @@ const getOrderStatusDisplay = (status?: OrderStatus): {
     default:
       return {
         labelKey: "orders.status_unknown",
-        className: "bg-slate-500/10 text-slate-400 border border-slate-500/20",
+        className:
+          "bg-glass-white text-text-secondary border border-glass-border",
       };
   }
 };

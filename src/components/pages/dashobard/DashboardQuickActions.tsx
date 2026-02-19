@@ -58,7 +58,7 @@ export default function DashboardQuickActions({
           >
             <span className="text-lg">{action.icon}</span>
             <div>
-              <p className="text-sm font-medium text-text-primary group-hover:text-white transition-colors">
+              <p className="text-sm font-medium text-text-primary group-hover:text-accent-blue transition-colors">
                 {t(action.label)}
               </p>
               <p className="text-xs text-text-muted">{t(action.desc)}</p>

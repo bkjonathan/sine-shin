@@ -64,7 +64,7 @@ export default function DashboardRecentActivity({
                 {getInitials(order.customer_name)}
               </div>
               <div>
-                <p className="text-sm font-medium text-text-primary group-hover:text-white transition-colors">
+                <p className="text-sm font-medium text-text-primary group-hover:text-accent-blue transition-colors">
                   {order.customer_name || t("common.na")}
                 </p>
                 <p className="text-xs text-text-muted">{order.order_id}</p>
@@ -72,7 +72,7 @@ export default function DashboardRecentActivity({
             </div>
             <div className="flex items-center gap-4">
               <div className="flex flex-col items-end mr-2">
-                <span className="text-xs text-text-muted">
+                <span className="text-xs text-text-secondary">
                   {t("dashboard.service_fee")}
                 </span>
                 <span className="text-sm font-medium text-text-primary">
@@ -81,17 +81,17 @@ export default function DashboardRecentActivity({
               </div>
 
               <div className="flex flex-col items-end mr-2">
-                <span className="text-xs text-text-muted">{t("dashboard.price")}</span>
+                <span className="text-xs text-text-secondary">{t("dashboard.price")}</span>
                 <span className="text-sm font-semibold text-text-primary">
                   {formatPrice(order.total_price || 0)}
                 </span>
               </div>
 
               <div className="flex flex-col items-end w-24">
-                <span className="text-xs text-text-muted">
+                <span className="text-xs text-text-secondary">
                   {t("dashboard.order_date")}
                 </span>
-                <span className="text-xs text-text-muted text-right">
+                <span className="text-xs text-text-secondary text-right">
                   {order.created_at
                     ? new Date(order.created_at).toLocaleDateString()
                     : ""}

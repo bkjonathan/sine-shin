@@ -61,9 +61,9 @@
   --glass-border: rgba(255, 255, 255, 0.12);
   --glass-border-light: rgba(255, 255, 255, 0.2);
 
-  --text-primary: #f0f0f8;
-  --text-secondary: #a0a0c0;
-  --text-muted: #606080;
+  --text-primary: #f5f7ff;
+  --text-secondary: #cfd7f5;
+  --text-muted: #b3bddf;
 
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
 
