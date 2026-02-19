@@ -8,16 +8,18 @@ interface DatePickerProps {
   label?: string;
   error?: string;
   className?: string;
+  required?: boolean;
   [key: string]: any;
 }
 
 const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
-  ({ label, error, className, ...props }, _ref) => {
+  ({ label, error, className, required, ...props }, _ref) => {
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-medium text-text-secondary mb-1">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             {label}
+            {required && <span className="text-error ml-1">*</span>}
           </label>
         )}
         <div className="relative">
@@ -90,13 +92,10 @@ const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
           </style>
           <ReactDatePicker
             {...props}
+            wrapperClassName="w-full"
             className={`
-            w-full bg-glass-white border border-glass-border rounded-lg px-3 py-2 
-            text-sm text-text-primary placeholder:text-text-secondary/50
-            focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue/50
-            disabled:opacity-50 disabled:cursor-not-allowed
-            transition-all duration-200
-            ${error ? "border-error focus:border-error focus:ring-error/50" : ""}
+            input-liquid w-full pr-10
+            ${error ? "border-red-500/50 focus:shadow-[0_0_0_3px_rgba(248,113,113,0.2),0_0_20px_rgba(248,113,113,0.1)]!" : ""}
             ${className}
           `}
             renderCustomHeader={({
@@ -112,13 +111,13 @@ const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
                   disabled={prevMonthButtonDisabled}
                   type="button"
                   className={`
-                  p-1 rounded-lg hover:bg-glass-white/10 transition-colors
-                  ${prevMonthButtonDisabled ? "opacity-50 cursor-not-allowed" : "text-text-secondary hover:text-text-primary"}
+                  p-1.5 rounded-lg transition-colors
+                  ${prevMonthButtonDisabled ? "opacity-50 cursor-not-allowed text-slate-500" : "text-slate-300 hover:text-white hover:bg-white/10"}
                 `}
                 >
                   <ChevronLeft size={16} />
                 </button>
-                <div className="text-sm font-semibold text-text-primary">
+                <div className="text-sm font-semibold text-slate-100">
                   {date.toLocaleString("default", {
                     month: "long",
                     year: "numeric",
@@ -129,8 +128,8 @@ const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
                   disabled={nextMonthButtonDisabled}
                   type="button"
                   className={`
-                  p-1 rounded-lg hover:bg-glass-white/10 transition-colors
-                  ${nextMonthButtonDisabled ? "opacity-50 cursor-not-allowed" : "text-text-secondary hover:text-text-primary"}
+                  p-1.5 rounded-lg transition-colors
+                  ${nextMonthButtonDisabled ? "opacity-50 cursor-not-allowed text-slate-500" : "text-slate-300 hover:text-white hover:bg-white/10"}
                 `}
                 >
                   <ChevronRight size={16} />
@@ -138,10 +137,9 @@ const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
               </div>
             )}
           />
-          <Calendar
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none"
-            size={16}
-          />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none">
+            <Calendar size={18} />
+          </div>
         </div>
         {error && <p className="mt-1 text-xs text-error">{error}</p>}
       </div>

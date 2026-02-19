@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, Variants } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Select } from "../../ui";
+import DatePicker from "../../ui/DatePicker";
 import { IconCheck, IconPlus, IconX } from "../../icons";
 import {
   OrderFormData,
@@ -153,22 +154,27 @@ export default function OrderFormModal({
                       onFieldChange("exchange_rate", e.target.value)
                     }
                   />
-                  <Input
+                  <DatePicker
                     label={t("orders.form.order_date")}
-                    type={formData.order_date ? "date" : "text"}
-                    className="input-liquid w-full"
-                    autoComplete="off"
-                    placeholder={DATE_PLACEHOLDER}
-                    value={formData.order_date}
-                    onFocus={(e) => (e.target.type = "date")}
-                    onBlur={(e) => {
-                      if (!e.target.value) {
-                        e.target.type = "text";
+                    required
+                    selected={
+                      formData.order_date
+                        ? new Date(formData.order_date + "T00:00:00")
+                        : null
+                    }
+                    onChange={(date: Date | null) => {
+                      if (date) {
+                        const y = date.getFullYear();
+                        const m = String(date.getMonth() + 1).padStart(2, "0");
+                        const d = String(date.getDate()).padStart(2, "0");
+                        onFieldChange("order_date", `${y}-${m}-${d}`);
+                      } else {
+                        onFieldChange("order_date", "");
                       }
                     }}
-                    onChange={(e) =>
-                      onFieldChange("order_date", e.target.value)
-                    }
+                    error={formErrors.order_date}
+                    placeholderText="YYYY-MM-DD"
+                    dateFormat="yyyy-MM-dd"
                   />
                 </div>
               </div>
@@ -285,32 +291,50 @@ export default function OrderFormModal({
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("orders.form.service_fee_label")}
-                    </label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.service_fee}
-                        error={formErrors.service_fee}
-                        onChange={(e) =>
-                          onFieldChange("service_fee", e.target.value)
-                        }
-                      />
-                      <Select
-                        className="w-24"
-                        value={formData.service_fee_type}
-                        options={[
-                          { value: "fixed", label: t("orders.form.fixed") },
-                          { value: "percent", label: "%" },
-                        ]}
-                        onChange={(value) =>
-                          onFieldChange("service_fee_type", String(value))
-                        }
-                      />
+                    <div className="relative">
+                      <label className="block text-sm font-medium text-text-secondary mb-2">
+                        {t("orders.form.service_fee_label")}
+                      </label>
+                      <div
+                        className={`input-liquid w-full flex items-center p-0 overflow-hidden ${
+                          formErrors.service_fee
+                            ? "border-red-500/50 focus-within:shadow-[0_0_0_3px_rgba(248,113,113,0.2),0_0_20px_rgba(248,113,113,0.1)]!"
+                            : "focus-within:border-accent-blue focus-within:ring-1 focus-within:ring-accent-blue/50"
+                        }`}
+                      >
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="flex-1 bg-transparent border-none px-4 py-2.5 text-text-primary placeholder:text-text-muted focus:ring-0 text-sm h-full"
+                          value={formData.service_fee}
+                          onChange={(e) =>
+                            onFieldChange("service_fee", e.target.value)
+                          }
+                          placeholder="0.00"
+                        />
+                        <div className="h-6 w-px bg-glass-border mx-1" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newType =
+                              formData.service_fee_type === "percent"
+                                ? "fixed"
+                                : "percent";
+                            onFieldChange("service_fee_type", newType);
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-glass-white-hover transition-colors m-1 rounded-md min-w-[60px] text-center"
+                        >
+                          {formData.service_fee_type === "percent"
+                            ? "%"
+                            : t("orders.form.fixed")}
+                        </button>
+                      </div>
+                      {formErrors.service_fee && (
+                        <p className="mt-1 text-xs text-error">
+                          {formErrors.service_fee}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <Input

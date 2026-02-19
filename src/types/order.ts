@@ -95,6 +95,7 @@ export interface OrderFormErrors {
   cargo_fee?: string;
   service_fee?: string;
   product_discount?: string;
+  order_date?: string;
   itemErrors?: OrderFormItemErrors[];
 }
 
@@ -124,7 +125,7 @@ export const createEmptyOrderFormData = (): OrderFormData => ({
   delivery_fee_by_shop: false,
   cargo_fee_by_shop: false,
   exclude_cargo_fee: false,
-  service_fee_type: "fixed",
+  service_fee_type: "percent",
 });
 
 export interface OrderWithCustomer extends Order {

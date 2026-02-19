@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -18,7 +18,6 @@ import {
   BreakdownRow,
   CustomerPerformance,
   EnrichedOrder,
-  RangeKey,
   TrendPoint,
 } from "../types/report";
 import { useAppSettings } from "../context/AppSettingsContext";
@@ -29,13 +28,18 @@ import ReportTopCustomersTable from "../components/pages/reports/ReportTopCustom
 import ReportTopOrdersTable from "../components/pages/reports/ReportTopOrdersTable";
 import ReportTopSummaryCards from "../components/pages/reports/ReportTopSummaryCards";
 import ReportTrendChart from "../components/pages/reports/ReportTrendChart";
+import DashboardDateFilter, {
+  computeRange,
+  type DateFilterValue,
+} from "../components/pages/dashobard/DashboardDateFilter";
 
-const RANGE_OPTIONS: Array<{ value: RangeKey; labelKey: string }> = [
-  { value: "7d", labelKey: "reports.range_7d" },
-  { value: "30d", labelKey: "reports.range_30d" },
-  { value: "90d", labelKey: "reports.range_90d" },
-  { value: "all", labelKey: "reports.range_all" },
-];
+const DEFAULT_RANGE = computeRange("this_month");
+const DEFAULT_FILTER: DateFilterValue = {
+  dateFrom: DEFAULT_RANGE.dateFrom,
+  dateTo: DEFAULT_RANGE.dateTo,
+  dateField: "order_date",
+  preset: "this_month",
+};
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -162,7 +166,11 @@ export default function Reports() {
   const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState<RangeKey>("all");
+  const [filter, setFilter] = useState<DateFilterValue>(DEFAULT_FILTER);
+
+  const handleFilterChange = useCallback((newFilter: DateFilterValue) => {
+    setFilter(newFilter);
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -239,18 +247,38 @@ export default function Reports() {
   }, [orders, customerIndex, t]);
 
   const filteredOrders = useMemo(() => {
-    if (range === "all") {
+    if (!filter.dateFrom || !filter.dateTo) {
       return [...enrichedOrders];
     }
 
-    const rangeDays = Number.parseInt(range.replace("d", ""), 10);
-    const cutoff = Date.now() - rangeDays * 24 * 60 * 60 * 1000;
+    const from = new Date(filter.dateFrom + "T00:00:00");
+    const to = new Date(filter.dateTo + "T23:59:59");
 
     return enrichedOrders.filter((order) => {
-      if (!order.timelineDate) return false;
-      return order.timelineDate.getTime() >= cutoff;
+      // Strictly use the selected date field — no fallback, matching backend SQL behavior
+      const dateStr =
+        filter.dateField === "created_at" ? order.created_at : order.order_date;
+      if (!dateStr) return false;
+
+      const raw = dateStr.trim();
+      if (!raw) return false;
+
+      // Parse the date string (handle YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, etc.)
+      let parsed: Date | null = null;
+      const sqliteMatch = raw.match(
+        /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/,
+      );
+      if (sqliteMatch) {
+        parsed = new Date(`${sqliteMatch[1]}T${sqliteMatch[2]}`);
+      } else {
+        parsed = new Date(raw.includes("T") ? raw : raw + "T00:00:00");
+      }
+
+      if (!parsed || isNaN(parsed.getTime())) return false;
+
+      return parsed >= from && parsed <= to;
     });
-  }, [enrichedOrders, range]);
+  }, [enrichedOrders, filter]);
 
   const sortedOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {
@@ -303,7 +331,9 @@ export default function Reports() {
       : 0;
 
   const trendData = useMemo<TrendPoint[]>(() => {
-    const groupByDay = range === "7d" || range === "30d";
+    // Group by day for short ranges, by month for longer ones
+    const groupByDay =
+      filter.preset === "this_week" || filter.preset === "this_month";
     const buckets = new Map<string, TrendPoint>();
 
     for (const order of filteredOrders) {
@@ -351,7 +381,7 @@ export default function Reports() {
     return Array.from(buckets.values()).sort(
       (a, b) => a.timestamp - b.timestamp,
     );
-  }, [filteredOrders, range]);
+  }, [filteredOrders, filter.preset]);
 
   const cityBreakdown = useMemo<BreakdownRow[]>(() => {
     const map = new Map<string, BreakdownRow>();
@@ -490,22 +520,10 @@ export default function Reports() {
             {t("reports.subtitle")}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {RANGE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setRange(option.value)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
-                range === option.value
-                  ? "bg-white/15 text-text-primary border-white/25"
-                  : "bg-transparent text-text-secondary border-white/10 hover:bg-white/8"
-              }`}
-            >
-              {t(option.labelKey)}
-            </button>
-          ))}
-        </div>
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <DashboardDateFilter value={filter} onChange={handleFilterChange} />
       </motion.div>
 
       <motion.div variants={itemVariants}>

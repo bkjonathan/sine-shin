@@ -350,6 +350,10 @@ export default function Orders() {
       errors.customer_id = t("orders.validation.customer_required");
     }
 
+    if (!value.order_date) {
+      errors.order_date = t("orders.validation.order_date_required");
+    }
+
     if (value.items.length === 0) {
       errors.items = t("orders.validation.items_required");
     } else {
