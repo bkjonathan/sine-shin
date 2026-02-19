@@ -1,12 +1,9 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   BarChart3,
-  Building2,
-  Globe,
-  MapPin,
   ShoppingBag,
   TrendingUp,
   Truck,
@@ -17,65 +14,21 @@ import { getOrders } from "../api/orderApi";
 import { getCustomers } from "../api/customerApi";
 import { OrderStatus, OrderWithCustomer } from "../types/order";
 import { Customer } from "../types/customer";
-import { useAppSettings } from "../context/AppSettingsContext";
-import { formatDate } from "../utils/date";
-import { Button } from "../components/ui";
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  BarChart as RechartsBarChart,
-  Bar,
-  PieChart as RechartsPieChart,
-  Pie,
-  Cell,
-} from "recharts";
-
-type RangeKey = "7d" | "30d" | "90d" | "all";
-
-interface EnrichedOrder extends OrderWithCustomer {
-  revenue: number;
-  serviceFeeAmount: number;
-  discountAmount: number;
-  profit: number;
-  cargoFee: number;
-  timelineDate: Date | null;
-  city: string;
-  platform: string;
-  customerLabel: string;
-  normalizedStatus: OrderStatus | "unknown";
-}
-
-interface TrendPoint {
-  key: string;
-  label: string;
-  timestamp: number;
-  revenue: number;
-  profit: number;
-  cargoFee: number;
-  orders: number;
-}
-
-interface BreakdownRow {
-  name: string;
-  orders: number;
-  revenue: number;
-  profit: number;
-}
-
-interface CustomerPerformance {
-  key: string;
-  name: string;
-  city: string;
-  platform: string;
-  orders: number;
-  revenue: number;
-  profit: number;
-}
+  BreakdownRow,
+  CustomerPerformance,
+  EnrichedOrder,
+  RangeKey,
+  TrendPoint,
+} from "../types/report";
+import { useAppSettings } from "../context/AppSettingsContext";
+import ReportBreakdownBars from "../components/pages/reports/ReportBreakdownBars";
+import ReportMetricCard from "../components/pages/reports/ReportMetricCard";
+import ReportStatusDonut from "../components/pages/reports/ReportStatusDonut";
+import ReportTopCustomersTable from "../components/pages/reports/ReportTopCustomersTable";
+import ReportTopOrdersTable from "../components/pages/reports/ReportTopOrdersTable";
+import ReportTopSummaryCards from "../components/pages/reports/ReportTopSummaryCards";
+import ReportTrendChart from "../components/pages/reports/ReportTrendChart";
 
 const RANGE_OPTIONS: Array<{ value: RangeKey; labelKey: string }> = [
   { value: "7d", labelKey: "reports.range_7d" },
@@ -200,355 +153,6 @@ const normalizeStatus = (status?: OrderStatus): OrderStatus | "unknown" => {
 };
 
 const safeValue = (value?: string | null) => value?.trim() || "";
-
-function MetricCard({
-  label,
-  value,
-  helperText,
-  icon: Icon,
-  gradientClass,
-}: {
-  label: string;
-  value: string;
-  helperText?: string;
-  icon: typeof Wallet;
-  gradientClass: string;
-}) {
-  return (
-    <div className="glass-panel p-5">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs uppercase tracking-wider text-text-muted">
-          {label}
-        </p>
-        <div
-          className={`h-9 w-9 rounded-xl bg-linear-to-br ${gradientClass} flex items-center justify-center`}
-        >
-          <Icon size={18} className="text-white" />
-        </div>
-      </div>
-      <p className="text-2xl font-bold text-text-primary">{value}</p>
-      {helperText ? (
-        <p className="mt-1 text-xs text-text-muted">{helperText}</p>
-      ) : null}
-    </div>
-  );
-}
-
-function TrendChart({
-  data,
-  formatPrice,
-  revenueLabel,
-  profitLabel,
-  cargoLabel,
-  ordersLabel,
-  emptyLabel,
-}: {
-  data: TrendPoint[];
-  formatPrice: (amount: number) => string;
-  revenueLabel: string;
-  profitLabel: string;
-  cargoLabel: string;
-  ordersLabel: string;
-  emptyLabel: string;
-}) {
-  if (data.length === 0) {
-    return (
-      <div className="h-[320px] flex items-center justify-center text-sm text-text-muted">
-        {emptyLabel}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="h-[320px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={data}
-            margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
-            aria-label={`${revenueLabel}, ${profitLabel}, and ${cargoLabel} trend`}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="rgba(255,255,255,0.12)"
-            />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 11 }}
-              axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
-              tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
-            />
-            <YAxis
-              tick={{ fill: "rgba(255,255,255,0.65)", fontSize: 11 }}
-              axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
-              tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
-              tickFormatter={(value) => formatPrice(Number(value) || 0)}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "rgba(12, 12, 28, 0.92)",
-                border: "1px solid rgba(255,255,255,0.16)",
-                borderRadius: "12px",
-                color: "#fff",
-              }}
-              formatter={(value, name) => [
-                formatPrice(Number(value) || 0),
-                name === "revenue"
-                  ? revenueLabel
-                  : name === "profit"
-                    ? profitLabel
-                    : name === "cargoFee"
-                      ? cargoLabel
-                    : ordersLabel,
-              ]}
-              labelStyle={{ color: "rgba(255,255,255,0.85)" }}
-            />
-            <Line
-              type="monotone"
-              dataKey="revenue"
-              name="revenue"
-              stroke="#5b7fff"
-              strokeWidth={2.6}
-              dot={{ r: 3, strokeWidth: 0 }}
-              activeDot={{ r: 5 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="profit"
-              name="profit"
-              stroke="#34d399"
-              strokeWidth={2.6}
-              dot={{ r: 3, strokeWidth: 0 }}
-              activeDot={{ r: 5 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="cargoFee"
-              name="cargoFee"
-              stroke="#f59e0b"
-              strokeWidth={2.6}
-              dot={{ r: 3, strokeWidth: 0 }}
-              activeDot={{ r: 5 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="flex items-center gap-5 text-xs text-text-secondary">
-        <span className="inline-flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-[#5b7fff]" />
-          {revenueLabel}
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-[#34d399]" />
-          {profitLabel}
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-[#f59e0b]" />
-          {cargoLabel}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function BreakdownBars({
-  title,
-  subtitle,
-  rows,
-  metric,
-  formatPrice,
-  emptyLabel,
-}: {
-  title: string;
-  subtitle: string;
-  rows: BreakdownRow[];
-  metric: "orders" | "profit";
-  formatPrice: (amount: number) => string;
-  emptyLabel: string;
-}) {
-  const gradientId = useId().replace(/:/g, "");
-  const chartData = rows.map((row) => ({
-    name: row.name,
-    value: metric === "orders" ? row.orders : row.profit,
-  }));
-
-  return (
-    <div className="glass-panel p-5">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
-        <p className="text-sm text-text-muted mt-1">{subtitle}</p>
-      </div>
-
-      <div className="space-y-4">
-        {rows.length === 0 ? (
-          <p className="text-sm text-text-muted">{emptyLabel}</p>
-        ) : (
-          <>
-            <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RechartsBarChart
-                  data={chartData}
-                  layout="vertical"
-                  margin={{ top: 6, right: 8, left: 4, bottom: 6 }}
-                >
-                  <defs>
-                    <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#5b7fff" />
-                      <stop offset="100%" stopColor="#06b6d4" />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.12)"
-                    horizontal={false}
-                  />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: "rgba(255,255,255,0.65)", fontSize: 11 }}
-                    axisLine={{ stroke: "rgba(255,255,255,0.2)" }}
-                    tickLine={{ stroke: "rgba(255,255,255,0.2)" }}
-                    tickFormatter={(value) =>
-                      metric === "orders"
-                        ? Number(value).toLocaleString()
-                        : formatPrice(Number(value) || 0)
-                    }
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={95}
-                    tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(12, 12, 28, 0.92)",
-                      border: "1px solid rgba(255,255,255,0.16)",
-                      borderRadius: "12px",
-                    }}
-                    formatter={(value) =>
-                      metric === "orders"
-                        ? Number(value).toLocaleString()
-                        : formatPrice(Number(value) || 0)
-                    }
-                  />
-                  <Bar
-                    dataKey="value"
-                    fill={`url(#${gradientId})`}
-                    radius={[0, 6, 6, 0]}
-                  />
-                </RechartsBarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="space-y-2">
-              {rows.slice(0, 3).map((row) => (
-                <div
-                  key={row.name}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-text-secondary truncate pr-3">
-                    {row.name}
-                  </span>
-                  <span className="text-text-primary">
-                    {metric === "orders"
-                      ? row.orders.toLocaleString()
-                      : formatPrice(row.profit)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StatusDonut({
-  segments,
-  total,
-  emptyLabel,
-  title,
-}: {
-  segments: Array<{ key: string; label: string; value: number; color: string }>;
-  total: number;
-  emptyLabel: string;
-  title: string;
-}) {
-  if (segments.length === 0 || total === 0) {
-    return (
-      <div className="glass-panel p-5 h-full">
-        <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
-        <p className="text-sm text-text-muted mt-1">{emptyLabel}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="glass-panel p-5 h-full">
-      <h3 className="text-lg font-semibold text-text-primary mb-5">{title}</h3>
-      <div className="flex flex-col xl:flex-row xl:items-center gap-5">
-        <div className="relative h-[220px] w-[220px] mx-auto xl:mx-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <RechartsPieChart>
-              <Pie
-                data={segments}
-                dataKey="value"
-                nameKey="label"
-                innerRadius={56}
-                outerRadius={86}
-                strokeWidth={2}
-                stroke="rgba(10, 10, 26, 0.75)"
-              >
-                {segments.map((segment) => (
-                  <Cell key={segment.key} fill={segment.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "rgba(12, 12, 28, 0.92)",
-                  border: "1px solid rgba(255,255,255,0.16)",
-                  borderRadius: "12px",
-                }}
-                formatter={(value) => Number(value).toLocaleString()}
-              />
-            </RechartsPieChart>
-          </ResponsiveContainer>
-
-          <div className="absolute inset-[30%] rounded-full glass-panel flex flex-col items-center justify-center text-center px-2">
-            <p className="text-xs text-text-muted">Total</p>
-            <p className="text-lg font-bold text-text-primary">
-              {total.toLocaleString()}
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-2 text-sm flex-1">
-          {segments.map((segment) => (
-            <div
-              key={segment.key}
-              className="flex items-center justify-between gap-2"
-            >
-              <span className="inline-flex items-center gap-2 text-text-secondary">
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: segment.color }}
-                />
-                {segment.label}
-              </span>
-              <span className="text-text-primary">
-                {segment.value.toLocaleString()}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function Reports() {
   const navigate = useNavigate();
@@ -932,49 +536,49 @@ export default function Reports() {
             variants={itemVariants}
             className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"
           >
-            <MetricCard
+            <ReportMetricCard
               label={t("reports.total_revenue")}
               value={formatPrice(totals.totalRevenue)}
               helperText={t("reports.total_revenue_hint")}
               icon={Wallet}
               gradientClass="from-accent-blue to-accent-cyan"
             />
-            <MetricCard
+            <ReportMetricCard
               label={t("reports.total_profit")}
               value={formatPrice(totals.totalProfit)}
               helperText={`${profitMargin.toFixed(1)}% ${t("reports.margin")}`}
               icon={TrendingUp}
               gradientClass="from-emerald-500 to-teal-500"
             />
-            <MetricCard
+            <ReportMetricCard
               label={t("reports.total_cargo_fee")}
               value={formatPrice(totals.totalCargoFee)}
               helperText={t("reports.total_cargo_fee_hint")}
               icon={Truck}
               gradientClass="from-sky-500 to-indigo-500"
             />
-            <MetricCard
+            <ReportMetricCard
               label={t("reports.total_orders")}
               value={totals.totalOrders.toLocaleString()}
               helperText={`${completionRate.toFixed(1)}% ${t("reports.completed_rate")}`}
               icon={ShoppingBag}
               gradientClass="from-amber-500 to-orange-500"
             />
-            <MetricCard
+            <ReportMetricCard
               label={t("reports.avg_order_value")}
               value={formatPrice(avgOrderValue)}
               helperText={t("reports.avg_order_value_hint")}
               icon={BarChart3}
               gradientClass="from-fuchsia-500 to-pink-500"
             />
-            <MetricCard
+            <ReportMetricCard
               label={t("reports.avg_profit_per_order")}
               value={formatPrice(avgProfitPerOrder)}
               helperText={`${cancelRate.toFixed(1)}% ${t("reports.cancel_rate")}`}
               icon={Users}
               gradientClass="from-indigo-500 to-violet-500"
             />
-            <MetricCard
+            <ReportMetricCard
               label={t("reports.top_profit_order")}
               value={
                 highestProfitOrder
@@ -1002,7 +606,7 @@ export default function Reports() {
                 </p>
               </div>
             </div>
-            <TrendChart
+            <ReportTrendChart
               data={trendData}
               formatPrice={formatPrice}
               revenueLabel={t("reports.total_revenue")}
@@ -1018,7 +622,7 @@ export default function Reports() {
             className="grid grid-cols-1 xl:grid-cols-3 gap-4"
           >
             <div className="xl:col-span-1">
-              <StatusDonut
+              <ReportStatusDonut
                 segments={statusSummary}
                 total={totals.totalOrders}
                 emptyLabel={t("reports.chart_no_data")}
@@ -1026,7 +630,7 @@ export default function Reports() {
               />
             </div>
             <div className="xl:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <BreakdownBars
+              <ReportBreakdownBars
                 title={t("reports.city_breakdown")}
                 subtitle={t("reports.city_breakdown_hint")}
                 rows={cityBreakdown}
@@ -1034,7 +638,7 @@ export default function Reports() {
                 formatPrice={formatPrice}
                 emptyLabel={t("reports.chart_no_data")}
               />
-              <BreakdownBars
+              <ReportBreakdownBars
                 title={t("reports.platform_breakdown")}
                 subtitle={t("reports.platform_breakdown_hint")}
                 rows={platformBreakdown}
@@ -1045,220 +649,28 @@ export default function Reports() {
             </div>
           </motion.div>
 
-          <motion.div
-            variants={itemVariants}
-            className="grid grid-cols-1 md:grid-cols-3 gap-4"
-          >
-            <div className="glass-panel p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <MapPin size={16} className="text-accent-cyan" />
-                <p className="text-sm text-text-muted uppercase tracking-wider">
-                  {t("reports.top_city")}
-                </p>
-              </div>
-              <p className="text-xl font-bold text-text-primary">
-                {topCity?.name || t("common.na")}
-              </p>
-              <p className="text-sm text-text-secondary mt-1">
-                {topCity
-                  ? t("reports.orders_and_profit", {
-                      orders: topCity.orders.toLocaleString(),
-                      profit: formatPrice(topCity.profit),
-                    })
-                  : t("reports.chart_no_data")}
-              </p>
-            </div>
-
-            <div className="glass-panel p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Globe size={16} className="text-accent-blue" />
-                <p className="text-sm text-text-muted uppercase tracking-wider">
-                  {t("reports.top_platform")}
-                </p>
-              </div>
-              <p className="text-xl font-bold text-text-primary">
-                {topPlatform?.name || t("common.na")}
-              </p>
-              <p className="text-sm text-text-secondary mt-1">
-                {topPlatform
-                  ? t("reports.orders_and_profit", {
-                      orders: topPlatform.orders.toLocaleString(),
-                      profit: formatPrice(topPlatform.profit),
-                    })
-                  : t("reports.chart_no_data")}
-              </p>
-            </div>
-
-            <div className="glass-panel p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Building2 size={16} className="text-emerald-400" />
-                <p className="text-sm text-text-muted uppercase tracking-wider">
-                  {t("reports.top_customer")}
-                </p>
-              </div>
-              <p className="text-xl font-bold text-text-primary truncate">
-                {topCustomer?.name || t("common.na")}
-              </p>
-              <p className="text-sm text-text-secondary mt-1">
-                {topCustomer
-                  ? t("reports.orders_and_profit", {
-                      orders: topCustomer.orders.toLocaleString(),
-                      profit: formatPrice(topCustomer.profit),
-                    })
-                  : t("reports.chart_no_data")}
-              </p>
-            </div>
+          <motion.div variants={itemVariants}>
+            <ReportTopSummaryCards
+              topCity={topCity}
+              topPlatform={topPlatform}
+              topCustomer={topCustomer}
+              formatPrice={formatPrice}
+            />
           </motion.div>
 
-          <motion.div variants={itemVariants} className="glass-panel p-5">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-text-primary">
-                  {t("reports.top_customers_title")}
-                </h2>
-                <p className="text-sm text-text-muted mt-1">
-                  {t("reports.top_customers_hint")}
-                </p>
-              </div>
-            </div>
-
-            <div className="overflow-auto">
-              <table className="w-full min-w-[840px] text-sm">
-                <thead className="text-xs uppercase tracking-wider text-text-muted border-b border-glass-border">
-                  <tr>
-                    <th className="text-left py-3 px-3">
-                      {t("customers.name")}
-                    </th>
-                    <th className="text-left py-3 px-3">
-                      {t("customers.form.city")}
-                    </th>
-                    <th className="text-left py-3 px-3">
-                      {t("customers.form.platform")}
-                    </th>
-                    <th className="text-right py-3 px-3">
-                      {t("reports.total_orders")}
-                    </th>
-                    <th className="text-right py-3 px-3">
-                      {t("reports.total_revenue")}
-                    </th>
-                    <th className="text-right py-3 px-3">
-                      {t("reports.total_profit")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-glass-border">
-                  {customerPerformance.slice(0, 12).map((customer) => (
-                    <tr
-                      key={customer.key}
-                      className="hover:bg-glass-white/40 transition-colors"
-                    >
-                      <td className="py-3 px-3 text-text-primary font-medium">
-                        {customer.name}
-                      </td>
-                      <td className="py-3 px-3 text-text-secondary">
-                        {customer.city}
-                      </td>
-                      <td className="py-3 px-3 text-text-secondary">
-                        {customer.platform}
-                      </td>
-                      <td className="py-3 px-3 text-right text-text-primary">
-                        {customer.orders.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-3 text-right text-text-primary">
-                        {formatPrice(customer.revenue)}
-                      </td>
-                      <td className="py-3 px-3 text-right text-emerald-400 font-semibold">
-                        {formatPrice(customer.profit)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <motion.div variants={itemVariants}>
+            <ReportTopCustomersTable
+              customers={customerPerformance}
+              formatPrice={formatPrice}
+            />
           </motion.div>
 
-          <motion.div variants={itemVariants} className="glass-panel p-5">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-text-primary">
-                  {t("reports.top_orders_title")}
-                </h2>
-                <p className="text-sm text-text-muted mt-1">
-                  {t("reports.top_orders_hint")}
-                </p>
-              </div>
-            </div>
-
-            <div className="overflow-auto">
-              <table className="w-full min-w-[980px] text-sm">
-                <thead className="text-xs uppercase tracking-wider text-text-muted border-b border-glass-border">
-                  <tr>
-                    <th className="text-left py-3 px-3">
-                      {t("orders.search_key_order_id")}
-                    </th>
-                    <th className="text-left py-3 px-3">
-                      {t("orders.customer")}
-                    </th>
-                    <th className="text-left py-3 px-3">
-                      {t("customers.form.platform")}
-                    </th>
-                    <th className="text-left py-3 px-3">
-                      {t("customers.form.city")}
-                    </th>
-                    <th className="text-right py-3 px-3">
-                      {t("reports.total_revenue")}
-                    </th>
-                    <th className="text-right py-3 px-3">
-                      {t("reports.total_profit")}
-                    </th>
-                    <th className="text-right py-3 px-3">{t("orders.date")}</th>
-                    <th className="text-right py-3 px-3">
-                      {t("account_book.action")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-glass-border">
-                  {topOrdersByProfit.map((order) => (
-                    <tr
-                      key={order.id}
-                      className="hover:bg-glass-white/40 transition-colors"
-                    >
-                      <td className="py-3 px-3 text-text-primary font-medium">
-                        {order.order_id || order.id}
-                      </td>
-                      <td className="py-3 px-3 text-text-secondary">
-                        {order.customerLabel}
-                      </td>
-                      <td className="py-3 px-3 text-text-secondary">
-                        {order.platform}
-                      </td>
-                      <td className="py-3 px-3 text-text-secondary">
-                        {order.city}
-                      </td>
-                      <td className="py-3 px-3 text-right text-text-primary">
-                        {formatPrice(order.revenue)}
-                      </td>
-                      <td className="py-3 px-3 text-right text-emerald-400 font-semibold">
-                        {formatPrice(order.profit)}
-                      </td>
-                      <td className="py-3 px-3 text-right text-text-secondary">
-                        {formatDate(order.timelineDate)}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <Button
-                          type="button"
-                          onClick={() => navigate(`/orders/${order.id}`)}
-                          variant="ghost"
-                          className="px-3 py-1.5 text-xs"
-                        >
-                          {t("reports.view_order")}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <motion.div variants={itemVariants}>
+            <ReportTopOrdersTable
+              orders={topOrdersByProfit}
+              formatPrice={formatPrice}
+              onViewOrder={(orderId) => navigate(`/orders/${orderId}`)}
+            />
           </motion.div>
         </>
       )}

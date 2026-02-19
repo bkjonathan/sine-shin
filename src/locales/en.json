@@ -354,6 +354,12 @@
       "notes": "Notes",
       "notes_placeholder": "Optional note"
     },
+    "validation": {
+      "title_required": "Title is required",
+      "title_too_long": "Title must be {{max}} characters or less",
+      "amount_invalid": "Amount must be a valid non-negative number",
+      "notes_too_long": "Notes must be {{max}} characters or less"
+    },
     "delete_modal": {
       "title": "Delete Expense?",
       "message_part1": "Are you sure you want to delete ",

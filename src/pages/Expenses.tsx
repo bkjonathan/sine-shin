@@ -11,13 +11,20 @@ import {
   getExpensesPaginated,
   updateExpense,
 } from "../api/expenseApi";
-import { Expense } from "../types/expense";
+import {
+  createEmptyExpenseFormData,
+  Expense,
+  ExpenseFormData,
+  ExpenseFormErrors,
+} from "../types/expense";
 import { useTranslation } from "react-i18next";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
 import { Button, Input, Select } from "../components/ui";
 import DatePicker from "../components/ui/DatePicker";
+import ExpenseDeleteModal from "../components/pages/expenses/ExpenseDeleteModal";
+import ExpenseFormModal from "../components/pages/expenses/ExpenseFormModal";
 import {
   IconDollarSign,
   IconDownload,
@@ -27,7 +34,6 @@ import {
   IconSortAsc,
   IconSortDesc,
   IconTrash,
-  IconX,
 } from "../components/icons";
 
 const fadeVariants: Variants = {
@@ -37,12 +43,6 @@ const fadeVariants: Variants = {
     y: 0,
     transition: { type: "spring", stiffness: 300, damping: 24 },
   },
-};
-
-const modalVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95, y: 10 },
-  visible: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.95, y: 10 },
 };
 
 const EXPENSE_CATEGORIES = [
@@ -132,6 +132,13 @@ const getCategoryBadgeClass = (category?: string | null) => {
   }
 };
 
+const MAX_EXPENSE_TITLE_LENGTH = 150;
+const MAX_EXPENSE_NOTES_LENGTH = 1000;
+
+const hasExpenseFormErrors = (errors: ExpenseFormErrors): boolean => {
+  return Object.values(errors).some(Boolean);
+};
+
 export default function Expenses() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
   const [searchParams, setSearchParams] = useSearchParams();
@@ -174,14 +181,10 @@ export default function Expenses() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    title: "",
-    amount: "",
-    category: "operation",
-    expense_date: "",
-    payment_method: "cash",
-    notes: "",
-  });
+  const [formData, setFormData] = useState<ExpenseFormData>(() =>
+    createEmptyExpenseFormData(),
+  );
+  const [formErrors, setFormErrors] = useState<ExpenseFormErrors>({});
 
   const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -359,7 +362,54 @@ export default function Expenses() {
     }
   };
 
+  const categoryOptions = EXPENSE_CATEGORIES.map((category) => ({
+    value: category,
+    label: getCategoryLabel(category),
+  }));
+
+  const paymentMethodOptions = PAYMENT_METHODS.map((paymentMethod) => ({
+    value: paymentMethod,
+    label: getPaymentMethodLabel(paymentMethod),
+  }));
+
+  const validateExpenseForm = (value: ExpenseFormData): ExpenseFormErrors => {
+    const errors: ExpenseFormErrors = {};
+    const normalizedTitle = value.title.trim();
+    const normalizedNotes = value.notes.trim();
+    const amount = Number.parseFloat(value.amount);
+
+    if (!normalizedTitle) {
+      errors.title = t("expenses.validation.title_required");
+    } else if (normalizedTitle.length > MAX_EXPENSE_TITLE_LENGTH) {
+      errors.title = t("expenses.validation.title_too_long", {
+        max: MAX_EXPENSE_TITLE_LENGTH,
+      });
+    }
+
+    if (Number.isNaN(amount) || amount < 0) {
+      errors.amount = t("expenses.validation.amount_invalid");
+    }
+
+    if (normalizedNotes.length > MAX_EXPENSE_NOTES_LENGTH) {
+      errors.notes = t("expenses.validation.notes_too_long", {
+        max: MAX_EXPENSE_NOTES_LENGTH,
+      });
+    }
+
+    return errors;
+  };
+
+  const handleFormFieldChange = (
+    field: keyof ExpenseFormData,
+    value: string,
+  ) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
   const handleOpenModal = (expense?: Expense) => {
+    setFormErrors({});
+
     if (expense) {
       setEditingExpense(expense);
       setFormData({
@@ -372,14 +422,7 @@ export default function Expenses() {
       });
     } else {
       setEditingExpense(null);
-      setFormData({
-        title: "",
-        amount: "",
-        category: "operation",
-        expense_date: "",
-        payment_method: "cash",
-        notes: "",
-      });
+      setFormData(createEmptyExpenseFormData());
     }
     setIsModalOpen(true);
     playSound("click");
@@ -388,18 +431,21 @@ export default function Expenses() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingExpense(null);
+    setFormErrors({});
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    const title = formData.title.trim();
-    const amount = Number.parseFloat(formData.amount);
-
-    if (!title || Number.isNaN(amount) || amount < 0) {
+    const validationErrors = validateExpenseForm(formData);
+    setFormErrors(validationErrors);
+    if (hasExpenseFormErrors(validationErrors)) {
       playSound("error");
       return;
     }
+
+    const title = formData.title.trim();
+    const amount = Number.parseFloat(formData.amount);
 
     try {
       setIsSubmitting(true);
@@ -651,10 +697,7 @@ export default function Expenses() {
               <Select
                 options={[
                   { value: "all", label: t("common.all") },
-                  ...EXPENSE_CATEGORIES.map((category) => ({
-                    value: category,
-                    label: getCategoryLabel(category),
-                  })),
+                  ...categoryOptions,
                 ]}
                 value={categoryFilter}
                 onChange={(value) => {
@@ -943,217 +986,28 @@ export default function Expenses() {
         )}
       </motion.div>
 
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={handleCloseModal}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="relative w-full max-w-xl glass-panel p-6 shadow-2xl border border-glass-border"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-text-primary">
-                  {editingExpense
-                    ? t("expenses.modal.title_edit")
-                    : t("expenses.modal.title_add")}
-                </h2>
-                <button
-                  onClick={handleCloseModal}
-                  className="p-2 hover:bg-glass-white-hover rounded-full transition-colors"
-                >
-                  <IconX size={20} strokeWidth={2} />
-                </button>
-              </div>
+      <ExpenseFormModal
+        isOpen={isModalOpen}
+        editingExpense={editingExpense}
+        formData={formData}
+        formErrors={formErrors}
+        categoryOptions={categoryOptions}
+        paymentMethodOptions={paymentMethodOptions}
+        isSubmitting={isSubmitting}
+        onClose={handleCloseModal}
+        onSubmit={handleSubmit}
+        onFieldChange={handleFormFieldChange}
+      />
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">
-                    {t("expenses.form.title")} <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    required
-                    className="input-liquid w-full"
-                    placeholder={t("expenses.form.title_placeholder")}
-                    value={formData.title}
-                    onChange={(event) =>
-                      setFormData({ ...formData, title: event.target.value })
-                    }
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("expenses.form.amount")} <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      required
-                      className="input-liquid w-full"
-                      placeholder="0"
-                      value={formData.amount}
-                      onChange={(event) =>
-                        setFormData({ ...formData, amount: event.target.value })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("expenses.form.expense_date")}
-                    </label>
-                    <Input
-                      type="date"
-                      className="input-liquid w-full"
-                      value={formData.expense_date}
-                      onChange={(event) =>
-                        setFormData({
-                          ...formData,
-                          expense_date: event.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("expenses.form.category")}
-                    </label>
-                    <Select
-                      options={EXPENSE_CATEGORIES.map((category) => ({
-                        value: category,
-                        label: getCategoryLabel(category),
-                      }))}
-                      value={formData.category}
-                      onChange={(value) =>
-                        setFormData({ ...formData, category: value.toString() })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("expenses.form.payment_method")}
-                    </label>
-                    <Select
-                      options={PAYMENT_METHODS.map((paymentMethod) => ({
-                        value: paymentMethod,
-                        label: getPaymentMethodLabel(paymentMethod),
-                      }))}
-                      value={formData.payment_method}
-                      onChange={(value) =>
-                        setFormData({
-                          ...formData,
-                          payment_method: value.toString(),
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">
-                    {t("expenses.form.notes")}
-                  </label>
-                  <textarea
-                    className="input-liquid w-full min-h-[90px]"
-                    placeholder={t("expenses.form.notes_placeholder")}
-                    value={formData.notes}
-                    onChange={(event) =>
-                      setFormData({ ...formData, notes: event.target.value })
-                    }
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 mt-6">
-                  <Button
-                    type="button"
-                    onClick={handleCloseModal}
-                    variant="ghost"
-                  >
-                    {t("expenses.modal.cancel")}
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    className="flex items-center gap-2"
-                    loading={isSubmitting}
-                  >
-                    {editingExpense
-                      ? t("expenses.modal.update")
-                      : t("expenses.modal.create")}
-                  </Button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-glass-border"
-            >
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
-                  <IconTrash size={24} strokeWidth={2} />
-                </div>
-                <h3 className="text-lg font-bold text-text-primary mb-2">
-                  {t("expenses.delete_modal.title")}
-                </h3>
-                <p className="text-sm text-text-muted mb-6">
-                  {t("expenses.delete_modal.message_part1")}
-                  <span className="font-semibold text-text-primary">
-                    {expenseToDelete?.title}
-                  </span>
-                  {t("expenses.delete_modal.message_part2")}
-                </p>
-                <div className="flex gap-3 w-full">
-                  <Button
-                    onClick={() => setIsDeleteModalOpen(false)}
-                    variant="ghost"
-                    className="flex-1 py-2.5 text-sm"
-                  >
-                    {t("expenses.modal.cancel")}
-                  </Button>
-                  <Button
-                    onClick={handleConfirmDelete}
-                    variant="danger"
-                    className="flex-1 py-2.5 text-sm"
-                  >
-                    {t("expenses.delete_modal.delete")}
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <ExpenseDeleteModal
+        isOpen={isDeleteModalOpen}
+        expense={expenseToDelete}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setExpenseToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+      />
     </motion.div>
   );
 }
