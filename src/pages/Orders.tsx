@@ -12,7 +12,15 @@ import {
 } from "../api/orderApi";
 import { formatDate } from "../utils/date";
 import { getCustomers } from "../api/customerApi";
-import { OrderStatus, OrderWithCustomer, OrderItemPayload } from "../types/order";
+import {
+  createEmptyOrderFormData,
+  createEmptyOrderFormItem,
+  OrderFormData,
+  OrderFormErrors,
+  OrderFormItemData,
+  OrderStatus,
+  OrderWithCustomer,
+} from "../types/order";
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
@@ -20,6 +28,8 @@ import { Button, Input, Select } from "../components/ui";
 import { parseCSV } from "../utils/csvUtils";
 import { processOrderCSV } from "../utils/orderImportUtils";
 import { useAppSettings } from "../context/AppSettingsContext";
+import OrderDeleteModal from "../components/pages/orders/OrderDeleteModal";
+import OrderFormModal from "../components/pages/orders/OrderFormModal";
 import {
   IconDownload,
   IconEdit,
@@ -30,7 +40,6 @@ import {
   IconSortDesc,
   IconTrash,
   IconUpload,
-  IconX,
 } from "../components/icons";
 
 // ── Animation Variants ──
@@ -41,12 +50,6 @@ const fadeVariants: Variants = {
     y: 0,
     transition: { type: "spring", stiffness: 300, damping: 24 },
   },
-};
-
-const modalVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95, y: 10 },
-  visible: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.95, y: 10 },
 };
 
 const ORDER_STATUS_OPTIONS: Array<{ value: OrderStatus; labelKey: string }> = [
@@ -144,6 +147,22 @@ const getOrdersListPath = (page: number): string => {
   return page > 1 ? `/orders?page=${page}` : "/orders";
 };
 
+const MAX_SERVICE_FEE_PERCENT = 100;
+
+const hasOrderFormErrors = (errors: OrderFormErrors): boolean => {
+  if (errors.itemErrors?.some((itemError) => Object.keys(itemError).length > 0)) {
+    return true;
+  }
+
+  return Object.entries(errors).some(([key, value]) => {
+    if (key === "itemErrors") {
+      return false;
+    }
+
+    return Boolean(value);
+  });
+};
+
 export default function Orders() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
   const navigate = useNavigate();
@@ -187,29 +206,10 @@ export default function Orders() {
   const displayPages = visiblePages.length > 0 ? visiblePages : ["1"];
 
   // Form State
-  // Form State
-  const initialFormState = {
-    customer_id: "",
-    status: "pending",
-    order_from: "Facebook",
-    items: [] as OrderItemPayload[],
-    exchange_rate: "",
-    shipping_fee: "",
-    delivery_fee: "",
-    cargo_fee: "",
-    order_date: "",
-    arrived_date: "",
-    shipment_date: "",
-    user_withdraw_date: "",
-    service_fee: "",
-    product_discount: "",
-    service_fee_type: "fixed",
-  };
-  const [formData, setFormData] = useState(initialFormState);
-
-  useEffect(() => {
-    // console.log("Form Data Changed:", formData);
-  }, [formData]);
+  const [formData, setFormData] = useState<OrderFormData>(() =>
+    createEmptyOrderFormData(),
+  );
+  const [formErrors, setFormErrors] = useState<OrderFormErrors>({});
 
   // Delete State
   const [orderToDelete, setOrderToDelete] = useState<OrderWithCustomer | null>(
@@ -310,23 +310,214 @@ export default function Orders() {
     }
   };
 
+  const isValidNonNegativeNumber = (value: string): boolean => {
+    if (!value.trim()) {
+      return true;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0;
+  };
+
+  const parseOptionalNumber = (value: string): number | undefined => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const validateOrderForm = (value: OrderFormData): OrderFormErrors => {
+    const errors: OrderFormErrors = {};
+
+    if (!value.customer_id) {
+      errors.customer_id = t("orders.validation.customer_required");
+    }
+
+    if (value.items.length === 0) {
+      errors.items = t("orders.validation.items_required");
+    } else {
+      const itemErrors: NonNullable<OrderFormErrors["itemErrors"]> = value.items.map(
+        () => ({}),
+      );
+
+      value.items.forEach((item, index) => {
+        const currentItemErrors = itemErrors[index];
+
+        if (!Number.isInteger(item.product_qty) || item.product_qty < 1) {
+          currentItemErrors.product_qty = t("orders.validation.product_qty_invalid");
+        }
+
+        if (!Number.isFinite(item.price) || item.price < 0) {
+          currentItemErrors.price = t("orders.validation.price_invalid");
+        }
+
+        if (!Number.isFinite(item.product_weight) || item.product_weight < 0) {
+          currentItemErrors.product_weight = t("orders.validation.weight_invalid");
+        }
+      });
+
+      if (itemErrors.some((itemError) => Object.keys(itemError).length > 0)) {
+        errors.itemErrors = itemErrors;
+      }
+    }
+
+    if (!isValidNonNegativeNumber(value.exchange_rate)) {
+      errors.exchange_rate = t("orders.validation.exchange_rate_invalid");
+    }
+
+    if (!isValidNonNegativeNumber(value.shipping_fee)) {
+      errors.shipping_fee = t("orders.validation.shipping_fee_invalid");
+    }
+
+    if (!isValidNonNegativeNumber(value.delivery_fee)) {
+      errors.delivery_fee = t("orders.validation.delivery_fee_invalid");
+    }
+
+    if (!isValidNonNegativeNumber(value.cargo_fee)) {
+      errors.cargo_fee = t("orders.validation.cargo_fee_invalid");
+    }
+
+    if (!isValidNonNegativeNumber(value.product_discount)) {
+      errors.product_discount = t("orders.validation.product_discount_invalid");
+    }
+
+    if (!isValidNonNegativeNumber(value.service_fee)) {
+      errors.service_fee = t("orders.validation.service_fee_invalid");
+    } else if (
+      value.service_fee_type === "percent" &&
+      (parseOptionalNumber(value.service_fee) ?? 0) > MAX_SERVICE_FEE_PERCENT
+    ) {
+      errors.service_fee = t("orders.validation.service_fee_percent_max", {
+        max: MAX_SERVICE_FEE_PERCENT,
+      });
+    }
+
+    return errors;
+  };
+
+  const handleFormFieldChange = (field: keyof OrderFormData, value: string) => {
+    setFormData((prev) => {
+      const next = { ...prev };
+
+      if (field === "status") {
+        next.status = value as OrderStatus;
+      } else if (field === "service_fee_type") {
+        next.service_fee_type = value as "fixed" | "percent";
+      } else if (field !== "items") {
+        (next as Record<string, unknown>)[field] = value;
+      }
+
+      return next;
+    });
+
+    setFormErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const handleOrderItemChange = (
+    index: number,
+    field: keyof OrderFormItemData,
+    value: string,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      items: prev.items.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+
+        if (field === "product_url") {
+          return { ...item, product_url: value };
+        }
+
+        const parsed = Number(value);
+        return {
+          ...item,
+          [field]: Number.isFinite(parsed) ? parsed : 0,
+        };
+      }),
+    }));
+
+    setFormErrors((prev) => {
+      const nextErrors: OrderFormErrors = { ...prev, items: undefined };
+
+      if (!prev.itemErrors) {
+        return nextErrors;
+      }
+
+      nextErrors.itemErrors = prev.itemErrors.map((itemError, itemIndex) => {
+        if (itemIndex !== index) {
+          return itemError;
+        }
+
+        return {
+          ...itemError,
+          [field]: undefined,
+        };
+      });
+
+      return nextErrors;
+    });
+  };
+
+  const handleAddOrderItem = () => {
+    setFormData((prev) => ({
+      ...prev,
+      items: [...prev.items, createEmptyOrderFormItem()],
+    }));
+    setFormErrors((prev) => ({ ...prev, items: undefined }));
+  };
+
+  const handleRemoveOrderItem = (index: number) => {
+    setFormData((prev) => {
+      if (prev.items.length <= 1) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        items: prev.items.filter((_, itemIndex) => itemIndex !== index),
+      };
+    });
+
+    setFormErrors((prev) => {
+      const nextErrors: OrderFormErrors = { ...prev, items: undefined };
+      if (!prev.itemErrors) {
+        return nextErrors;
+      }
+
+      nextErrors.itemErrors = prev.itemErrors.filter(
+        (_, itemIndex) => itemIndex !== index,
+      );
+      return nextErrors;
+    });
+  };
+
   const handleOpenModal = async (order?: OrderWithCustomer) => {
+    setFormErrors({});
+
     if (order) {
       setEditingOrder(order);
-      // Fetch details to get items
+
       try {
         const detail = await getOrderById(order.id);
+        const nextItems =
+          detail.items.length > 0
+            ? detail.items.map((item) => ({
+                product_url: item.product_url || "",
+                product_qty: item.product_qty ?? 1,
+                price: item.price ?? 0,
+                product_weight: item.product_weight ?? 0,
+              }))
+            : [createEmptyOrderFormItem()];
+
         setFormData({
           customer_id: order.customer_id?.toString() || "",
           status: order.status || "pending",
           order_from: order.order_from || "Facebook",
-          // Map OrderItem to OrderItemPayload
-          items: detail.items.map((item) => ({
-            product_url: item.product_url,
-            product_qty: item.product_qty,
-            price: item.price,
-            product_weight: item.product_weight,
-          })),
+          items: nextItems,
           exchange_rate: order.exchange_rate?.toString() || "",
           shipping_fee: order.shipping_fee?.toString() || "",
           delivery_fee: order.delivery_fee?.toString() || "",
@@ -342,74 +533,58 @@ export default function Orders() {
         setIsModalOpen(true);
       } catch (e) {
         console.error("Failed to load details for editing", e);
-        // Maybe show error notification
       }
     } else {
       setEditingOrder(null);
-      setFormData({
-        ...initialFormState,
-        items: [
-          { product_url: "", product_qty: 1, price: 0, product_weight: 0 },
-        ],
-        order_date: "",
-        arrived_date: "",
-        shipment_date: "",
-        user_withdraw_date: "",
-        service_fee: "",
-        product_discount: "",
-        service_fee_type: "fixed",
-      });
+      setFormData(createEmptyOrderFormData());
       setIsModalOpen(true);
     }
+
     playSound("click");
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingOrder(null);
+    setFormErrors({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.customer_id) return;
+
+    const validationErrors = validateOrderForm(formData);
+    setFormErrors(validationErrors);
+
+    if (hasOrderFormErrors(validationErrors)) {
+      playSound("error");
+      return;
+    }
 
     try {
       setIsSubmitting(true);
 
-      const payload: any = {
-        customer_id: parseInt(formData.customer_id),
+      const payload = {
+        customer_id: parseInt(formData.customer_id, 10),
         status: formData.status || "pending",
         order_from: formData.order_from || undefined,
         items: formData.items.map((item) => ({
-          product_url: item.product_url || undefined,
-          product_qty: item.product_qty ? Number(item.product_qty) : undefined,
-          price: item.price ? Number(item.price) : undefined,
-          product_weight: item.product_weight
+          product_url: item.product_url.trim() || undefined,
+          product_qty: item.product_qty > 0 ? Number(item.product_qty) : undefined,
+          price: Number.isFinite(item.price) ? Number(item.price) : undefined,
+          product_weight: Number.isFinite(item.product_weight)
             ? Number(item.product_weight)
             : undefined,
         })),
-        exchange_rate: formData.exchange_rate
-          ? parseFloat(formData.exchange_rate)
-          : undefined,
-        shipping_fee: formData.shipping_fee
-          ? parseFloat(formData.shipping_fee)
-          : undefined,
-        delivery_fee: formData.delivery_fee
-          ? parseFloat(formData.delivery_fee)
-          : undefined,
-        cargo_fee: formData.cargo_fee
-          ? parseFloat(formData.cargo_fee)
-          : undefined,
+        exchange_rate: parseOptionalNumber(formData.exchange_rate),
+        shipping_fee: parseOptionalNumber(formData.shipping_fee),
+        delivery_fee: parseOptionalNumber(formData.delivery_fee),
+        cargo_fee: parseOptionalNumber(formData.cargo_fee),
         order_date: formData.order_date || undefined,
         arrived_date: formData.arrived_date || undefined,
         shipment_date: formData.shipment_date || undefined,
         user_withdraw_date: formData.user_withdraw_date || undefined,
-        service_fee: formData.service_fee
-          ? parseFloat(formData.service_fee)
-          : undefined,
-        product_discount: formData.product_discount
-          ? parseFloat(formData.product_discount)
-          : undefined,
+        service_fee: parseOptionalNumber(formData.service_fee),
+        product_discount: parseOptionalNumber(formData.product_discount),
         service_fee_type: formData.service_fee_type || "fixed",
       };
 
@@ -1045,543 +1220,31 @@ export default function Orders() {
         )}
       </motion.div>
 
-      {/* ── Add/Edit Modal ── */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={handleCloseModal}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="relative w-full max-w-4xl glass-panel p-6 shadow-2xl border border-glass-border max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
-                  {editingOrder
-                    ? t("orders.modal.title_edit")
-                    : t("orders.modal.title_add")}
-                </h2>
-                <button
-                  onClick={handleCloseModal}
-                  className="p-2 hover:bg-glass-white-hover rounded-full transition-colors"
-                >
-                  <IconX size={20} strokeWidth={2} />
-                </button>
-              </div>
+      <OrderFormModal
+        isOpen={isModalOpen}
+        editingOrder={editingOrder}
+        customers={customers}
+        formData={formData}
+        formErrors={formErrors}
+        isSubmitting={isSubmitting}
+        statusOptions={ORDER_STATUS_OPTIONS}
+        onClose={handleCloseModal}
+        onSubmit={handleSubmit}
+        onFieldChange={handleFormFieldChange}
+        onItemChange={handleOrderItemChange}
+        onAddItem={handleAddOrderItem}
+        onRemoveItem={handleRemoveOrderItem}
+      />
 
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-6"
-                autoComplete="off"
-              >
-                {/* Section: Basic Info */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-text-primary border-b border-glass-border pb-1">
-                    {t("orders.modal.basic_info")}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Select
-                      label={t("orders.form.customer")}
-                      required
-                      options={customers.map((c) => ({
-                        value: c.id,
-                        label: `${c.name} (${c.customer_id})`,
-                      }))}
-                      value={
-                        formData.customer_id
-                          ? parseInt(formData.customer_id)
-                          : ""
-                      }
-                      onChange={(val) =>
-                        setFormData({
-                          ...formData,
-                          customer_id: val.toString(),
-                        })
-                      }
-                      placeholder={t("orders.form.select_customer")}
-                    />
-                    <Select
-                      label={t("orders.form.order_from")}
-                      options={[
-                        { value: "Facebook", label: "Facebook" },
-                        { value: "TikTok", label: "TikTok" },
-                        { value: "Others", label: t("common.others") },
-                      ]}
-                      value={formData.order_from}
-                      onChange={(val) =>
-                        setFormData({
-                          ...formData,
-                          order_from: val.toString(),
-                        })
-                      }
-                    />
-                    <Select
-                      label={t("orders.form.status")}
-                      options={ORDER_STATUS_OPTIONS.map((statusOption) => ({
-                        value: statusOption.value,
-                        label: t(statusOption.labelKey),
-                      }))}
-                      value={formData.status}
-                      onChange={(val) =>
-                        setFormData({
-                          ...formData,
-                          status: val.toString(),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">
-                        {t("orders.form.exchange_rate")}
-                      </label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.exchange_rate}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            exchange_rate: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">
-                        {t("orders.form.order_date")}
-                      </label>
-                      <Input
-                        type={formData.order_date ? "date" : "text"}
-                        className="input-liquid w-full"
-                        autoComplete="off"
-                        placeholder="dd/mm/yyyy"
-                        value={formData.order_date}
-                        onFocus={(e) => (e.target.type = "date")}
-                        onBlur={(e) => {
-                          if (!e.target.value) e.target.type = "text";
-                        }}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            order_date: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section: Items */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-glass-border pb-1">
-                    <h3 className="text-sm font-semibold text-text-primary">
-                      {t("orders.modal.product_details")}
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          items: [
-                            ...formData.items,
-                            {
-                              product_url: "",
-                              product_qty: 1,
-                              price: 0,
-                              product_weight: 0,
-                            },
-                          ],
-                        })
-                      }
-                      className="text-xs flex items-center gap-1 text-accent-blue hover:text-accent-blue-hover transition-colors"
-                    >
-                      <IconPlus size={14} strokeWidth={2} />
-                      {t("orders.form.add_item")}
-                    </button>
-                  </div>
-
-                  <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                    {formData.items.map((item, index) => (
-                      <div
-                        key={index}
-                        className="p-4 bg-glass-white/30 rounded-lg border border-glass-border relative group"
-                      >
-                        {formData.items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setFormData({
-                                ...formData,
-                                items: formData.items.filter(
-                                  (_, i) => i !== index,
-                                ),
-                              })
-                            }
-                            className="absolute top-2 right-2 text-text-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
-                            title={t("common.delete")}
-                          >
-                            <IconX size={16} strokeWidth={2} />
-                          </button>
-                        )}
-
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-medium text-text-secondary mb-1">
-                              {t("orders.form.product_url")}
-                            </label>
-                            <Input
-                              type="text"
-                              className="input-liquid w-full text-sm py-1.5"
-                              value={item.product_url || ""}
-                              onChange={(e) => {
-                                const newItems = [...formData.items];
-                                newItems[index].product_url = e.target.value;
-                                setFormData({ ...formData, items: newItems });
-                              }}
-                              placeholder="https://..."
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-text-secondary mb-1">
-                                {t("orders.qty")}
-                              </label>
-                              <Input
-                                type="number"
-                                min="1"
-                                className="input-liquid w-full text-sm py-1.5"
-                                value={item.product_qty || ""}
-                                onChange={(e) => {
-                                  const newItems = [...formData.items];
-                                  newItems[index].product_qty =
-                                    parseInt(e.target.value) || 0;
-                                  setFormData({ ...formData, items: newItems });
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-text-secondary mb-1">
-                                {t("orders.price")}
-                              </label>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                className="input-liquid w-full text-sm py-1.5"
-                                value={item.price || ""}
-                                onChange={(e) => {
-                                  const newItems = [...formData.items];
-                                  newItems[index].price =
-                                    parseFloat(e.target.value) || 0;
-                                  setFormData({ ...formData, items: newItems });
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-text-secondary mb-1">
-                                {t("orders.form.weight")}
-                              </label>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                className="input-liquid w-full text-sm py-1.5"
-                                value={item.product_weight || ""}
-                                onChange={(e) => {
-                                  const newItems = [...formData.items];
-                                  newItems[index].product_weight =
-                                    parseFloat(e.target.value) || 0;
-                                  setFormData({ ...formData, items: newItems });
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Section: Fees */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-text-primary border-b border-glass-border pb-1">
-                    {t("orders.modal.fees")}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">
-                        {t("orders.form.service_fee_label")}
-                      </label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="input-liquid w-full"
-                          value={formData.service_fee}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              service_fee: e.target.value,
-                            })
-                          }
-                        />
-                        <Select
-                          className="w-24"
-                          value={formData.service_fee_type}
-                          options={[
-                            { value: "fixed", label: t("orders.form.fixed") },
-                            { value: "percent", label: "%" },
-                          ]}
-                          onChange={(value) =>
-                            setFormData({
-                              ...formData,
-                              service_fee_type: value.toString(),
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">
-                        {t("orders.form.product_discount")}
-                      </label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.product_discount}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            product_discount: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">
-                        {t("orders.form.shipping_fee")}
-                      </label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.shipping_fee}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            shipping_fee: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">
-                        {t("orders.form.delivery_fee")}
-                      </label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.delivery_fee}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            delivery_fee: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-1">
-                        {t("orders.form.cargo_fee")}
-                      </label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="input-liquid w-full"
-                        value={formData.cargo_fee}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            cargo_fee: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section: Status Dates */}
-                {editingOrder && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-text-primary border-b border-glass-border pb-1">
-                      {t("orders.modal.status_dates")}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">
-                          {t("orders.form.arrived_date")}
-                        </label>
-                        <Input
-                          type={formData.arrived_date ? "date" : "text"}
-                          className="input-liquid w-full"
-                          autoComplete="off"
-                          placeholder="dd/mm/yyyy"
-                          value={formData.arrived_date}
-                          onFocus={(e) => (e.target.type = "date")}
-                          onBlur={(e) => {
-                            if (!e.target.value) e.target.type = "text";
-                          }}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              arrived_date: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">
-                          {t("orders.form.shipment_date")}
-                        </label>
-                        <Input
-                          type={formData.shipment_date ? "date" : "text"}
-                          className="input-liquid w-full"
-                          autoComplete="off"
-                          placeholder="dd/mm/yyyy"
-                          value={formData.shipment_date}
-                          onFocus={(e) => (e.target.type = "date")}
-                          onBlur={(e) => {
-                            if (!e.target.value) e.target.type = "text";
-                          }}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              shipment_date: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">
-                          {t("orders.form.user_withdraw_date")}
-                        </label>
-                        <Input
-                          type={formData.user_withdraw_date ? "date" : "text"}
-                          className="input-liquid w-full"
-                          autoComplete="off"
-                          placeholder="dd/mm/yyyy"
-                          value={formData.user_withdraw_date}
-                          onFocus={(e) => (e.target.type = "date")}
-                          onBlur={(e) => {
-                            if (!e.target.value) e.target.type = "text";
-                          }}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              user_withdraw_date: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-glass-border">
-                  <Button
-                    type="button"
-                    onClick={handleCloseModal}
-                    variant="ghost"
-                  >
-                    {t("orders.modal.cancel")}
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    className="flex items-center gap-2"
-                    loading={isSubmitting}
-                  >
-                    {editingOrder
-                      ? t("orders.modal.update")
-                      : t("orders.modal.create")}
-                  </Button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Delete Confirmation Modal ── */}
-      <AnimatePresence>
-        {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-[var(--color-glass-border)]"
-            >
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
-                  <IconTrash size={24} strokeWidth={2} />
-                </div>
-                <h3 className="text-lg font-bold text-text-primary mb-2">
-                  {t("orders.delete_modal.title")}
-                </h3>
-                <p className="text-sm text-text-muted mb-6">
-                  {t("orders.delete_modal.message")}
-                </p>
-                <div className="flex gap-3 w-full">
-                  <Button
-                    onClick={() => setIsDeleteModalOpen(false)}
-                    variant="ghost"
-                    className="flex-1 py-2.5 text-sm"
-                  >
-                    {t("orders.modal.cancel")}
-                  </Button>
-                  <Button
-                    onClick={handleConfirmDelete}
-                    variant="danger"
-                    className="flex-1 py-2.5 text-sm"
-                  >
-                    {t("orders.delete_modal.delete")}
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <OrderDeleteModal
+        isOpen={isDeleteModalOpen}
+        order={orderToDelete}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setOrderToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+      />
     </motion.div>
   );
 }

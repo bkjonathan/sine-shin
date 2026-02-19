@@ -9,11 +9,18 @@ import {
   updateCustomer,
   deleteCustomer,
 } from "../api/customerApi";
-import { Customer } from "../types/customer";
+import {
+  createEmptyCustomerFormData,
+  Customer,
+  CustomerFormData,
+  CustomerFormErrors,
+} from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Select } from "../components/ui";
 import { parseCSV } from "../utils/csvUtils";
+import CustomerDeleteModal from "../components/pages/customers/CustomerDeleteModal";
+import CustomerFormModal from "../components/pages/customers/CustomerFormModal";
 import {
   IconDownload,
   IconEdit,
@@ -27,7 +34,6 @@ import {
   IconTrash,
   IconUpload,
   IconUsers,
-  IconX,
 } from "../components/icons";
 
 // ── Animation Variants ──
@@ -38,12 +44,6 @@ const fadeVariants: Variants = {
     y: 0,
     transition: { type: "spring", stiffness: 300, damping: 24 },
   },
-};
-
-const modalVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95, y: 10 },
-  visible: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.95, y: 10 },
 };
 
 const getVisiblePages = (currentPage: number, totalPages: number): string[] => {
@@ -89,6 +89,12 @@ const getCustomersListPath = (page: number): string => {
   return page > 1 ? `/customers?page=${page}` : "/customers";
 };
 
+const PHONE_REGEX = /^[0-9+\-\s()]{6,20}$/;
+const URL_REGEX = /^https?:\/\/\S+$/i;
+const MAX_NAME_LENGTH = 100;
+const MAX_CITY_LENGTH = 100;
+const MAX_ADDRESS_LENGTH = 500;
+
 export default function Customers() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
   const navigate = useNavigate();
@@ -124,14 +130,10 @@ export default function Customers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    address: "",
-    city: "",
-    social_media_url: "",
-    platform: "",
-  });
+  const [formData, setFormData] = useState<CustomerFormData>(
+    createEmptyCustomerFormData(),
+  );
+  const [formErrors, setFormErrors] = useState<CustomerFormErrors>({});
 
   // Delete State
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(
@@ -145,6 +147,70 @@ export default function Customers() {
   const [isImporting, setIsImporting] = useState(false);
   const visiblePages = getVisiblePages(currentPage, totalPages);
   const displayPages = visiblePages.length > 0 ? visiblePages : ["1"];
+
+  const validateCustomerForm = (
+    value: CustomerFormData,
+  ): CustomerFormErrors => {
+    const errors: CustomerFormErrors = {};
+
+    if (!value.name) {
+      errors.name = t("customers.validation.name_required");
+    } else if (value.name.length > MAX_NAME_LENGTH) {
+      errors.name = t("customers.validation.name_too_long", {
+        max: MAX_NAME_LENGTH,
+      });
+    }
+
+    if (value.phone && !PHONE_REGEX.test(value.phone)) {
+      errors.phone = t("customers.validation.phone_invalid");
+    }
+
+    if (value.city.length > MAX_CITY_LENGTH) {
+      errors.city = t("customers.validation.city_too_long", {
+        max: MAX_CITY_LENGTH,
+      });
+    }
+
+    if (value.address.length > MAX_ADDRESS_LENGTH) {
+      errors.address = t("customers.validation.address_too_long", {
+        max: MAX_ADDRESS_LENGTH,
+      });
+    }
+
+    if (
+      value.social_media_url &&
+      value.social_media_url !== "-" &&
+      !URL_REGEX.test(value.social_media_url)
+    ) {
+      errors.social_media_url = t("customers.validation.social_url_invalid");
+    }
+
+    return errors;
+  };
+
+  const handleFormFieldChange = (field: keyof CustomerFormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const handlePlatformChange = (platform: string) => {
+    let socialUrl = formData.social_media_url;
+
+    if (platform === "Facebook") {
+      socialUrl = "https://facebook.com";
+    } else if (platform === "TikTok") {
+      socialUrl = "https://tiktok.com";
+    } else if (platform === "Others") {
+      socialUrl = "-";
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      platform,
+      social_media_url: socialUrl,
+    }));
+    setFormErrors((prev) => ({ ...prev, social_media_url: undefined }));
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -346,15 +412,9 @@ export default function Customers() {
       });
     } else {
       setEditingCustomer(null);
-      setFormData({
-        name: "",
-        phone: "",
-        address: "",
-        city: "",
-        social_media_url: "",
-        platform: "",
-      });
+      setFormData(createEmptyCustomerFormData());
     }
+    setFormErrors({});
     setIsModalOpen(true);
     playSound("click");
   };
@@ -362,22 +422,39 @@ export default function Customers() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingCustomer(null);
+    setFormErrors({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) return;
+
+    const normalizedFormData: CustomerFormData = {
+      name: formData.name.trim(),
+      phone: formData.phone.trim(),
+      address: formData.address.trim(),
+      city: formData.city.trim(),
+      social_media_url: formData.social_media_url.trim(),
+      platform: formData.platform.trim(),
+    };
+
+    const validationErrors = validateCustomerForm(normalizedFormData);
+    if (Object.keys(validationErrors).length > 0) {
+      setFormErrors(validationErrors);
+      playSound("error");
+      return;
+    }
 
     try {
       setIsSubmitting(true);
       if (editingCustomer) {
         await updateCustomer({
           ...editingCustomer,
-          ...formData,
+          ...normalizedFormData,
         });
       } else {
-        await createCustomer(formData);
+        await createCustomer(normalizedFormData);
       }
+      setFormData(normalizedFormData);
       playSound("success");
       await fetchCustomers(currentPage);
       handleCloseModal();
@@ -907,228 +984,24 @@ export default function Customers() {
         )}
       </motion.div>
 
-      {/* ── Add/Edit Modal ── */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={handleCloseModal}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="relative w-full max-w-lg glass-panel p-6 shadow-2xl border border-glass-border"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-text-primary">
-                  {editingCustomer
-                    ? t("customers.modal.title_edit")
-                    : t("customers.modal.title_add")}
-                </h2>
-                <button
-                  onClick={handleCloseModal}
-                  className="p-2 hover:bg-glass-white-hover rounded-full transition-colors"
-                >
-                  <IconX size={20} strokeWidth={2} />
-                </button>
-              </div>
+      <CustomerFormModal
+        isOpen={isModalOpen}
+        editingCustomer={editingCustomer}
+        formData={formData}
+        formErrors={formErrors}
+        isSubmitting={isSubmitting}
+        onClose={handleCloseModal}
+        onSubmit={handleSubmit}
+        onFieldChange={handleFormFieldChange}
+        onPlatformChange={handlePlatformChange}
+      />
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("customers.form.name")}{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      type="text"
-                      required
-                      className="input-liquid w-full"
-                      placeholder="John Doe"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("customers.form.phone")}
-                    </label>
-                    <Input
-                      type="tel"
-                      className="input-liquid w-full"
-                      placeholder="0912345678"
-                      value={formData.phone}
-                      onChange={(e) =>
-                        setFormData({ ...formData, phone: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("customers.form.platform")}
-                    </label>
-                    <div className="relative z-20">
-                      <Select
-                        options={[
-                          { value: "Facebook", label: "Facebook" },
-                          { value: "TikTok", label: "TikTok" },
-                          { value: "Others", label: t("common.others") },
-                        ]}
-                        value={formData.platform}
-                        onChange={(val) => {
-                          const platform = val.toString();
-                          let socialUrl = formData.social_media_url;
-
-                          if (platform === "Facebook") {
-                            socialUrl = "https://facebook.com";
-                          } else if (platform === "TikTok") {
-                            socialUrl = "https://tiktok.com";
-                          } else if (platform === "Others") {
-                            socialUrl = "-";
-                          }
-
-                          setFormData({
-                            ...formData,
-                            platform,
-                            social_media_url: socialUrl,
-                          });
-                        }}
-                        placeholder={t("customers.form.select_platform")}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("customers.form.city")}
-                    </label>
-                    <Input
-                      type="text"
-                      className="input-liquid w-full"
-                      placeholder="Yangon"
-                      value={formData.city}
-                      onChange={(e) =>
-                        setFormData({ ...formData, city: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("customers.form.social_url")}
-                    </label>
-                    <Input
-                      type="text"
-                      className="input-liquid w-full"
-                      placeholder="https://facebook.com/..."
-                      value={formData.social_media_url}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          social_media_url: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-text-secondary mb-1">
-                      {t("customers.form.address")}
-                    </label>
-                    <textarea
-                      className="input-liquid w-full min-h-[80px]"
-                      placeholder="Full address..."
-                      value={formData.address}
-                      onChange={(e) =>
-                        setFormData({ ...formData, address: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 mt-6">
-                  <Button
-                    type="button"
-                    onClick={handleCloseModal}
-                    variant="ghost"
-                  >
-                    {t("customers.modal.cancel")}
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    className="flex items-center gap-2"
-                    loading={isSubmitting}
-                  >
-                    {editingCustomer
-                      ? t("customers.modal.update")
-                      : t("customers.modal.create")}
-                  </Button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Delete Confirmation Modal ── */}
-      <AnimatePresence>
-        {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="relative w-full max-w-sm glass-panel p-6 shadow-2xl border border-glass-border"
-            >
-              <div className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
-                  <IconTrash size={24} strokeWidth={2} />
-                </div>
-                <h3 className="text-lg font-bold text-text-primary mb-2">
-                  {t("customers.delete_modal.title")}
-                </h3>
-                <p className="text-sm text-text-muted mb-6">
-                  {t("customers.delete_modal.message_part1")}
-                  <span className="font-semibold text-text-primary">
-                    {customerToDelete?.name}
-                  </span>
-                  {t("customers.delete_modal.message_part2")}
-                </p>
-                <div className="flex gap-3 w-full">
-                  <Button
-                    onClick={() => setIsDeleteModalOpen(false)}
-                    variant="ghost"
-                    className="flex-1 py-2.5 text-sm"
-                  >
-                    {t("customers.modal.cancel")}
-                  </Button>
-                  <Button
-                    onClick={handleConfirmDelete}
-                    variant="danger"
-                    className="flex-1 py-2.5 text-sm"
-                  >
-                    {t("customers.delete_modal.delete")}
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <CustomerDeleteModal
+        isOpen={isDeleteModalOpen}
+        customer={customerToDelete}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleConfirmDelete}
+      />
     </motion.div>
   );
 }

@@ -46,6 +46,75 @@ export interface OrderItemPayload {
   product_weight?: number;
 }
 
+export interface OrderFormItemData {
+  product_url: string;
+  product_qty: number;
+  price: number;
+  product_weight: number;
+}
+
+export interface OrderFormData {
+  customer_id: string;
+  status: OrderStatus;
+  order_from: string;
+  items: OrderFormItemData[];
+  exchange_rate: string;
+  shipping_fee: string;
+  delivery_fee: string;
+  cargo_fee: string;
+  order_date: string;
+  arrived_date: string;
+  shipment_date: string;
+  user_withdraw_date: string;
+  service_fee: string;
+  product_discount: string;
+  service_fee_type: "fixed" | "percent";
+}
+
+export interface OrderFormItemErrors {
+  product_url?: string;
+  product_qty?: string;
+  price?: string;
+  product_weight?: string;
+}
+
+export interface OrderFormErrors {
+  customer_id?: string;
+  items?: string;
+  exchange_rate?: string;
+  shipping_fee?: string;
+  delivery_fee?: string;
+  cargo_fee?: string;
+  service_fee?: string;
+  product_discount?: string;
+  itemErrors?: OrderFormItemErrors[];
+}
+
+export const createEmptyOrderFormItem = (): OrderFormItemData => ({
+  product_url: "",
+  product_qty: 1,
+  price: 0,
+  product_weight: 0,
+});
+
+export const createEmptyOrderFormData = (): OrderFormData => ({
+  customer_id: "",
+  status: "pending",
+  order_from: "Facebook",
+  items: [createEmptyOrderFormItem()],
+  exchange_rate: "",
+  shipping_fee: "",
+  delivery_fee: "",
+  cargo_fee: "",
+  order_date: "",
+  arrived_date: "",
+  shipment_date: "",
+  user_withdraw_date: "",
+  service_fee: "",
+  product_discount: "",
+  service_fee_type: "fixed",
+});
+
 export interface OrderWithCustomer extends Order {
   customer_name?: string;
   total_price?: number;

@@ -12,20 +12,22 @@ import { useSound } from "../context/SoundContext";
 import html2canvas from "html2canvas";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { formatDate } from "../utils/date";
 import QRCode from "qrcode";
 import DatePicker from "../components/ui/DatePicker";
 import { Button, Select } from "../components/ui";
+import OrderDetailCustomerCard from "../components/pages/order-detail/OrderDetailCustomerCard";
+import OrderDetailFinancialSummaryCard from "../components/pages/order-detail/OrderDetailFinancialSummaryCard";
+import OrderDetailHeader from "../components/pages/order-detail/OrderDetailHeader";
+import OrderDetailProductsCard from "../components/pages/order-detail/OrderDetailProductsCard";
+import OrderDetailStatusCard from "../components/pages/order-detail/OrderDetailStatusCard";
+import OrderDetailTimelineCard from "../components/pages/order-detail/OrderDetailTimelineCard";
+import OrderInvoicePrintLayout from "../components/pages/order-detail/OrderInvoicePrintLayout";
 import {
-  IconArrowLeft,
   IconCheck,
   IconCircle,
-  IconDownload,
   IconEdit,
-  IconMapPin,
-  IconPhone,
-  IconPrinter,
   IconX,
 } from "../components/icons";
 
@@ -711,802 +713,74 @@ export default function OrderDetail() {
         animate="visible"
         className="space-y-6"
       >
-        {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleBack}
-              className="p-2 rounded-xl hover:bg-glass-white-hover transition-colors text-text-secondary hover:text-text-primary"
-            >
-              <IconArrowLeft size={24} strokeWidth={2} />
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold text-text-primary">
-                {t("orders.detail.title")} #{order.order_id || order.id}
-              </h1>
-              <p className="text-text-secondary">
-                {t("orders.detail.created_at", {
-                  date: formatDate(order.created_at),
-                })}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 sm:justify-end">
-            <Button
-              onClick={handleDownloadInvoice}
-              variant="primary"
-              className="flex items-center gap-2"
-              loading={downloading}
-              loadingText={t("orders.invoice.generating")}
-            >
-              {!downloading && <IconDownload size={18} strokeWidth={2} />}
-              {t("orders.invoice.download")}
-            </Button>
-            <Button
-              onClick={handlePrintInvoice}
-              className="flex items-center gap-2"
-              loading={printing}
-              loadingText={t("orders.invoice.generating")}
-            >
-              {!printing && <IconPrinter size={18} strokeWidth={2} />}
-              {t("orders.invoice.print")}
-            </Button>
-          </div>
+        <motion.div variants={itemVariants}>
+          <OrderDetailHeader
+            orderDisplayId={order.order_id || order.id}
+            createdAt={order.created_at}
+            downloading={downloading}
+            printing={printing}
+            onBack={handleBack}
+            onDownloadInvoice={handleDownloadInvoice}
+            onPrintInvoice={handlePrintInvoice}
+          />
         </motion.div>
 
-        {/* Hidden Invoice Layout for Capture */}
-        <div className="fixed left-[-9999px] top-[-9999px] print-source-wrapper">
-          <div
-            id="invoice-print-container"
-            ref={invoiceRef}
-            style={{
-              width: "800px",
-              backgroundColor: "#ffffff",
-              color: "#0f172a",
-              padding: "36px",
-              fontFamily: "'Poppins', 'Noto Sans Myanmar', sans-serif",
-              borderRadius: "20px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 24px 44px -30px rgba(15, 23, 42, 0.45)",
-            }}
-          >
-            {/* Invoice Header */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                marginBottom: "40px",
-                borderBottom: "2px solid #dbeafe",
-                paddingBottom: "32px",
-              }}
-            >
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "24px" }}
-              >
-                {shopSettings?.logo_path && (
-                  <img
-                    src={convertFileSrc(shopSettings.logo_path)}
-                    alt="Logo"
-                    style={{
-                      width: "96px",
-                      height: "96px",
-                      objectFit: "contain",
-                      borderRadius: "8px",
-                      border: "1px solid #f1f5f9",
-                    }}
-                  />
-                )}
-                <div>
-                  <h1
-                    style={{
-                      fontSize: "30px",
-                      fontWeight: "bold",
-                      color: "#0f172a",
-                      marginBottom: "8px",
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    {shopSettings?.shop_name || "Sine Shin"}
-                  </h1>
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      color: "#64748b",
-                      lineHeight: "1.5",
-                    }}
-                  >
-                    {shopSettings?.phone && (
-                      <p
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          margin: 0,
-                        }}
-                      >
-                        <span>{t("common.tel")}:</span> {shopSettings.phone}
-                      </p>
-                    )}
-                    {shopSettings?.address && (
-                      <p style={{ maxWidth: "300px", margin: 0 }}>
-                        {shopSettings.address}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <h2
-                  style={{
-                    fontSize: "36px",
-                    fontWeight: "900",
-                    color: "#dbeafe",
-                    marginBottom: "8px",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.1em",
-                    margin: 0,
-                  }}
-                >
-                  {t("orders.invoice.title")}
-                </h2>
-                <div
-                  style={{
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    color: "#475569",
-                  }}
-                >
-                  <p style={{ margin: "4px 0" }}>
-                    #{order.order_id || order.id}
-                  </p>
-                  <p style={{ margin: 0 }}>{formatDate(order.order_date)}</p>
-                </div>
-              </div>
-            </div>
+        <OrderInvoicePrintLayout
+          invoiceRef={invoiceRef}
+          shopSettings={shopSettings}
+          order={order}
+          items={items}
+          customerName={customerName}
+          customerCode={customerCode}
+          customerPhone={customerPhone}
+          customerCity={customerCity}
+          customerAddress={customerAddress}
+          customerPlatform={customerPlatform}
+          qrCodeUrl={qrCodeUrl}
+          serviceFeeAmount={serviceFeeAmount}
+          orderTotal={orderTotal}
+          exchangeRate={exchangeRate}
+          totalWithExchange={totalWithExchange}
+          formatPrice={formatPrice}
+          formatExchangePrice={formatExchangePrice}
+        />
 
-            {/* Bill To */}
-            <div
-              style={{
-                marginBottom: "40px",
-                padding: "0",
-              }}
-            >
-              <h3
-                style={{
-                  fontSize: "11px",
-                  fontWeight: "700",
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  margin: "0 0 14px 0",
-                }}
-              >
-                {t("orders.invoice.bill_to")}
-              </h3>
-              <div
-                style={{
-                  border: "1px solid #dbeafe",
-                  borderRadius: "16px",
-                  background:
-                    "linear-gradient(140deg, #f8fbff 0%, #eff6ff 62%, #ecfeff 100%)",
-                  padding: "18px 20px",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "13px",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "20px",
-                      fontWeight: "700",
-                      color: "#0f172a",
-                      margin: 0,
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    {customerName}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: "12px",
-                      color: "#334155",
-                      margin: "5px 0 0",
-                      fontWeight: "600",
-                    }}
-                  >
-                    {t("customers.id_label")}: {customerCode}
-                  </p>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "110px 1fr",
-                      rowGap: "6px",
-                      columnGap: "8px",
-                      marginTop: "16px",
-                    }}
-                  >
-                    <span style={{ color: "#64748b" }}>
-                      {t("customers.form.phone")}
-                    </span>
-                    <span style={{ color: "#0f172a", fontWeight: "500" }}>
-                      {customerPhone}
-                    </span>
-                    <span style={{ color: "#64748b" }}>
-                      {t("customers.form.city")}
-                    </span>
-                    <span style={{ color: "#0f172a", fontWeight: "500" }}>
-                      {customerCity}
-                    </span>
-                    <span style={{ color: "#64748b" }}>
-                      {t("customers.form.address")}
-                    </span>
-                    <span style={{ color: "#0f172a", fontWeight: "500" }}>
-                      {customerAddress}
-                    </span>
-                    <span style={{ color: "#64748b" }}>
-                      {t("orders.invoice.platform")}
-                    </span>
-                    <span style={{ color: "#0f172a", fontWeight: "500" }}>
-                      {customerPlatform}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Order Table */}
-            <div style={{ marginBottom: "40px" }}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  textAlign: "left",
-                }}
-              >
-                <thead>
-                  <tr style={{ borderBottom: "2px solid #0f172a" }}>
-                    <th
-                      style={{
-                        padding: "12px 0",
-                        fontSize: "12px",
-                        fontWeight: "bold",
-                        color: "#0f172a",
-                        textTransform: "uppercase",
-                        width: "48px",
-                      }}
-                    >
-                      {t("common.no")}
-                    </th>
-                    <th
-                      style={{
-                        padding: "12px 0",
-                        fontSize: "12px",
-                        fontWeight: "bold",
-                        color: "#0f172a",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {t("orders.product_link")}
-                    </th>
-                    <th
-                      style={{
-                        padding: "12px 0",
-                        fontSize: "12px",
-                        fontWeight: "bold",
-                        color: "#0f172a",
-                        textTransform: "uppercase",
-                        textAlign: "right",
-                        width: "96px",
-                      }}
-                    >
-                      {t("orders.invoice.qty")}
-                    </th>
-                    <th
-                      style={{
-                        padding: "12px 0",
-                        fontSize: "12px",
-                        fontWeight: "bold",
-                        color: "#0f172a",
-                        textTransform: "uppercase",
-                        textAlign: "right",
-                        width: "128px",
-                      }}
-                    >
-                      {t("orders.invoice.price")}
-                    </th>
-                    <th
-                      style={{
-                        padding: "12px 0",
-                        fontSize: "12px",
-                        fontWeight: "bold",
-                        color: "#0f172a",
-                        textTransform: "uppercase",
-                        textAlign: "right",
-                        width: "128px",
-                      }}
-                    >
-                      {t("orders.invoice.amount")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody style={{ fontSize: "14px", color: "#334155" }}>
-                  {items.map((item, index) => (
-                    <tr
-                      key={index}
-                      style={{ borderBottom: "1px solid #f1f5f9" }}
-                    >
-                      <td
-                        style={{
-                          padding: "16px 0",
-                          color: "#94a3b8",
-                          fontWeight: "500",
-                        }}
-                      >
-                        {String(index + 1).padStart(2, "0")}
-                      </td>
-                      <td style={{ padding: "16px 0", fontWeight: "500" }}>
-                        {item.product_url && (
-                          <div
-                            style={{
-                              fontSize: "12px",
-                              color: "#0f172a",
-                              marginTop: "4px",
-                              wordBreak: "break-all",
-                              maxWidth: "300px",
-                            }}
-                          >
-                            {item.product_url}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        {item.product_qty}
-                      </td>
-                      <td style={{ padding: "16px 0", textAlign: "right" }}>
-                        {formatPrice(item.price || 0)}
-                      </td>
-                      <td
-                        style={{
-                          padding: "16px 0",
-                          textAlign: "right",
-                          fontWeight: "600",
-                        }}
-                      >
-                        {formatPrice(
-                          (item.price || 0) * (item.product_qty || 1),
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Total Section with QR Code */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-end",
-              }}
-            >
-              <div style={{ textAlign: "left" }}>
-                {qrCodeUrl && (
-                  <img
-                    src={qrCodeUrl}
-                    alt="Order QR Code"
-                    style={{ width: "100px", height: "100px" }}
-                  />
-                )}
-              </div>
-              <div
-                style={{
-                  width: "50%",
-                  backgroundColor: "#f8fafc",
-                  borderRadius: "12px",
-                  padding: "24px",
-                  border: "1px solid #f1f5f9",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "12px",
-                    fontSize: "14px",
-                    color: "#64748b",
-                  }}
-                >
-                  <span>{t("orders.invoice.subtotal")}</span>
-                  <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                    {formatPrice(order.total_price || 0)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "16px",
-                    fontSize: "14px",
-                    color: "#64748b",
-                    paddingBottom: "16px",
-                    borderBottom: "1px solid #e2e8f0",
-                  }}
-                >
-                  <span>{t("orders.invoice.total_fees")}</span>
-                  <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                    {(
-                      (order.shipping_fee || 0) +
-                      (order.delivery_fee || 0) +
-                      (order.cargo_fee || 0) +
-                      serviceFeeAmount
-                    ).toLocaleString()}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "12px",
-                    fontSize: "14px",
-                    color: "#64748b",
-                  }}
-                >
-                  <span>{t("orders.form.exchange_rate")}</span>
-                  <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                    {formatExchangePrice(exchangeRate)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: "20px",
-                    fontWeight: "bold",
-                    color: "#0f172a",
-                  }}
-                >
-                  <span>{t("orders.invoice.total")}</span>
-                  <span>{formatPrice(orderTotal)}</span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginTop: "10px",
-                    paddingTop: "10px",
-                    borderTop: "1px dashed #cbd5e1",
-                    fontSize: "14px",
-                    color: "#334155",
-                    fontWeight: "600",
-                  }}
-                >
-                  <span>{t("orders.invoice.total_with_exchange")}</span>
-                  <span>{formatExchangePrice(totalWithExchange)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div
-              style={{
-                marginTop: "64px",
-                paddingTop: "32px",
-                borderTop: "1px solid #f1f5f9",
-                textAlign: "center",
-                fontSize: "12px",
-                color: "#94a3b8",
-              }}
-            >
-              <p style={{ margin: 0 }}>{t("orders.invoice.footer_message")}</p>
-              <p style={{ marginTop: "4px" }}>
-                {t("orders.invoice.footer_credit")}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Info */}
-          <motion.div
-            variants={itemVariants}
-            className="lg:col-span-2 space-y-6"
-          >
-            {/* Customer Info Card */}
-            <div className="glass-panel p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">
-                {t("orders.detail.customer_info")}
-              </h2>
-              <div className="border border-glass-border rounded-xl p-6 bg-liquid-bg hover:border-accent-blue/30 transition-colors">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-glass-border gap-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-text-primary">
-                      {customerName}
-                    </h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-accent-blue/10 text-accent-blue border border-accent-blue/20">
-                        {t("customers.id_label")}: {customerCode}
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-glass-white/10 text-text-secondary border border-glass-border">
-                        {customerPlatform}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
-                        {t("customers.form.phone")}
-                      </label>
-                      <p className="text-text-primary font-medium flex items-center gap-2">
-                        <IconPhone className="w-4 h-4 text-accent-blue" strokeWidth={2} />
-                        {customerPhone}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
-                        {t("customers.form.city")}
-                      </label>
-                      <p className="text-text-primary font-medium flex items-center gap-2">
-                        <IconMapPin className="w-4 h-4 text-accent-blue" strokeWidth={2} />
-                        {customerCity}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
-                      {t("customers.form.address")}
-                    </label>
-                    <p className="text-text-primary font-medium leading-relaxed bg-glass-white/5 p-3 rounded-lg border border-glass-border min-h-[80px]">
-                      {customerAddress}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Product Details Card */}
-            <div className="glass-panel p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">
-                {t("orders.detail.product_details")}
-              </h2>
-              <div className="space-y-4">
-                {items.map((item, index) => (
-                  <div
-                    key={index}
-                    className="border border-glass-border rounded-xl p-4 bg-liquid-bg hover:border-accent-blue/30 transition-colors"
-                  >
-                    {/* Header with item badge */}
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="px-2.5 py-1 rounded-lg bg-accent-blue/10 text-accent-blue text-xs font-semibold">
-                        {t("orders.detail.item_index", { index: index + 1 })}
-                      </span>
-                    </div>
-
-                    {/* Product URL if exists */}
-                    {item.product_url && (
-                      <div className="mb-3 pb-3 border-b border-glass-border">
-                        <label className="text-xs uppercase tracking-wide text-text-secondary mb-1.5 block font-semibold">
-                          {t("orders.product_link")}
-                        </label>
-                        <a
-                          href={item.product_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-accent-blue hover:underline break-all text-sm"
-                        >
-                          {item.product_url}
-                        </a>
-                      </div>
-                    )}
-
-                    {/* Info Grid */}
-                    <div className="grid grid-cols-3 gap-3 mb-3">
-                      <div className="text-center p-2.5 rounded-lg bg-glass-white/5 border border-glass-border">
-                        <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
-                          {t("orders.qty")}
-                        </label>
-                        <p className="text-xl font-bold text-text-primary">
-                          {item.product_qty || 0}
-                        </p>
-                      </div>
-                      <div className="text-center p-2.5 rounded-lg bg-glass-white/5 border border-glass-border">
-                        <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
-                          {t("orders.price")}
-                        </label>
-                        <p className="text-xl font-bold text-text-primary">
-                          {formatPrice(item.price || 0)}
-                        </p>
-                      </div>
-                      <div className="text-center p-2.5 rounded-lg bg-glass-white/5 border border-glass-border">
-                        <label className="text-xs uppercase tracking-wide text-text-secondary block mb-1.5 font-semibold">
-                          {t("orders.form.weight")}
-                        </label>
-                        <p className="text-xl font-bold text-text-primary">
-                          {item.product_weight || 0}{" "}
-                          <span className="text-sm">kg</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Total Section */}
-                    <div className="pt-3 border-t border-glass-border">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
-                          {t("orders.total")}
-                        </span>
-                        <span className="text-xl font-bold text-accent-blue">
-                          {formatPrice(
-                            (item.price || 0) * (item.product_qty || 0),
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="pt-4 border-t border-glass-border grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-text-secondary mb-1">
-                      {t("orders.total_qty")}
-                    </label>
-                    <p className="text-text-primary font-bold">
-                      {order.total_qty}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-text-secondary mb-1">
-                      {t("orders.total_price")}
-                    </label>
-                    <p className="text-text-primary font-bold">
-                      {formatPrice(order.total_price || 0)}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-text-secondary mb-1">
-                      {t("orders.total_weight")}
-                    </label>
-                    <p className="text-text-primary font-bold">
-                      {order.total_weight}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-text-secondary mb-1">
-                      {t("orders.form.exchange_rate")}
-                    </label>
-                    <p className="text-text-primary font-bold">
-                      {formatExchangePrice(order.exchange_rate || 0)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Timeline/Dates Card */}
-            <div className="glass-panel p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">
-                {t("orders.detail.timeline")}
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {renderEditableDate(
-                  t("orders.form.order_date"),
-                  "order_date",
-                  order.order_date,
-                )}
-                {renderEditableDate(
-                  t("orders.form.arrived_date"),
-                  "arrived_date",
-                  order.arrived_date,
-                )}
-                {renderEditableDate(
-                  t("orders.form.shipment_date"),
-                  "shipment_date",
-                  order.shipment_date,
-                )}
-                {renderEditableDate(
-                  t("orders.form.user_withdraw_date"),
-                  "user_withdraw_date",
-                  order.user_withdraw_date,
-                )}
-              </div>
-            </div>
+          <motion.div variants={itemVariants} className="lg:col-span-2 space-y-6">
+            <OrderDetailCustomerCard
+              customerName={customerName}
+              customerCode={customerCode}
+              customerPhone={customerPhone}
+              customerCity={customerCity}
+              customerAddress={customerAddress}
+              customerPlatform={customerPlatform}
+            />
+            <OrderDetailProductsCard
+              items={items}
+              order={order}
+              formatPrice={formatPrice}
+              formatExchangePrice={formatExchangePrice}
+            />
+            <OrderDetailTimelineCard
+              order={order}
+              renderEditableDate={renderEditableDate}
+            />
           </motion.div>
 
-          {/* Sidebar - Financials */}
           <motion.div variants={itemVariants} className="space-y-6">
-            <div className="glass-panel p-6 relative z-20">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">
-                {t("orders.form.status")}
-              </h2>
-              {renderEditableStatus("", "status", order.status)}
-            </div>
-            <div className="glass-panel p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">
-                {t("orders.detail.financial_summary")}
-              </h2>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-b border-glass-border">
-                  <span className="text-text-secondary">
-                    {t("orders.total_price")}
-                  </span>
-                  <span className="text-text-primary">
-                    {formatPrice(order.total_price || 0)}
-                  </span>
-                </div>
-                {renderEditableFee(
-                  t("orders.form.service_fee"),
-                  "service_fee",
-                  order.service_fee,
-                  order.service_fee_type === "percent" ? "%" : undefined,
-                  "service_fee_paid",
-                  !!order.service_fee_paid,
-                )}
-                {renderEditableFee(
-                  t("orders.form.shipping_fee"),
-                  "shipping_fee",
-                  order.shipping_fee,
-                  undefined,
-                  "shipping_fee_paid",
-                  !!order.shipping_fee_paid,
-                )}
-                {renderEditableFee(
-                  t("orders.form.delivery_fee"),
-                  "delivery_fee",
-                  order.delivery_fee,
-                  undefined,
-                  "delivery_fee_paid",
-                  !!order.delivery_fee_paid,
-                )}
-                {renderEditableFee(
-                  t("orders.form.cargo_fee"),
-                  "cargo_fee",
-                  order.cargo_fee,
-                  undefined,
-                  "cargo_fee_paid",
-                  !!order.cargo_fee_paid,
-                )}
-                {renderEditableFee(
-                  t("orders.form.product_discount"),
-                  "product_discount",
-                  order.product_discount,
-                )}
-                <div className="mt-4 pt-4 flex justify-between items-center">
-                  <span className="font-semibold text-text-primary">
-                    {t("orders.total")}
-                  </span>
-                  <span className="font-bold text-xl text-success">
-                    {formatPrice(orderTotal)}
-                  </span>
-                </div>
-                <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-center">
-                  <span className="font-semibold text-text-primary">
-                    {t("orders.detail.profit")}
-                  </span>
-                  <span className="font-bold text-xl text-emerald-500">
-                    {formatPrice(orderProfit)}
-                  </span>
-                </div>
-                <div className="pt-3 mt-2 border-t border-glass-border flex justify-between items-center">
-                  <span className="font-semibold text-text-primary">
-                    {t("orders.invoice.total_with_exchange")}
-                  </span>
-                  <span className="font-bold text-xl text-accent-blue">
-                    {formatExchangePrice(totalWithExchange)}
-                  </span>
-                </div>
-              </div>
-            </div>
+            <OrderDetailStatusCard
+              status={order.status}
+              renderEditableStatus={renderEditableStatus}
+            />
+            <OrderDetailFinancialSummaryCard
+              order={order}
+              orderTotal={orderTotal}
+              orderProfit={orderProfit}
+              totalWithExchange={totalWithExchange}
+              formatPrice={formatPrice}
+              formatExchangePrice={formatExchangePrice}
+              renderEditableFee={renderEditableFee}
+            />
           </motion.div>
         </div>
       </motion.div>
