@@ -6,8 +6,8 @@ import { getOrders } from "../api/orderApi";
 import { OrderWithCustomer } from "../types/order";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
-import { Button, Input } from "./ui";
-import { IconSearch } from "./icons";
+import { Button, Input } from "../components/ui";
+import { IconSearch } from "../components/icons";
 
 const containerVariants = {
   hidden: { opacity: 0 },

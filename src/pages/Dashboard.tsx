@@ -7,7 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { DollarSign, ShoppingBag, Users, TrendingUp, Truck } from "lucide-react";
-import { Button } from "./ui";
+import { Button } from "../components/ui";
 
 interface ShopData {
   shop_name: string;

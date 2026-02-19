@@ -5,14 +5,14 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../context/ThemeContext";
-import { Button, Input } from "./ui";
+import { Button, Input } from "../components/ui";
 import {
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
   IconHome,
   IconImage,
-} from "./icons";
+} from "../components/icons";
 
 // ── Slide animation variants ──
 const slideVariants = {

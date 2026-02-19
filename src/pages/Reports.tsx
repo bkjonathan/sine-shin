@@ -19,7 +19,7 @@ import { OrderStatus, OrderWithCustomer } from "../types/order";
 import { Customer } from "../types/customer";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
-import { Button } from "./ui";
+import { Button } from "../components/ui";
 import {
   ResponsiveContainer,
   LineChart,

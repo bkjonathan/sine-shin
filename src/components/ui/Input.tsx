@@ -24,7 +24,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         className={joinClasses(
           "input-liquid",
           error &&
-            "border-red-500/50 focus:!shadow-[0_0_0_3px_rgba(248,113,113,0.2),0_0_20px_rgba(248,113,113,0.1)]",
+            "border-red-500/50 focus:shadow-[0_0_0_3px_rgba(248,113,113,0.2),0_0_20px_rgba(248,113,113,0.1)]!",
           className,
         )}
         aria-invalid={Boolean(error)}
@@ -42,18 +42,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2"
+            className="block text-sm font-medium text-text-secondary mb-2"
           >
             {label}
           </label>
         )}
         {inputNode}
         {error && (
-          <p
-            id={errorId}
-            className="mt-1 text-xs text-[var(--color-error)]"
-            role="alert"
-          >
+          <p id={errorId} className="mt-1 text-xs text-error" role="alert">
             {error}
           </p>
         )}

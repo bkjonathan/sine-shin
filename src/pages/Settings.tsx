@@ -4,7 +4,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button, Input, Select } from "./ui";
+import { Button, Input, Select } from "../components/ui";
 import { useTheme } from "../context/ThemeContext";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
@@ -19,7 +19,7 @@ import {
   IconTrash,
   IconTriangleAlert,
   IconUserRound,
-} from "./icons";
+} from "../components/icons";
 
 // ── Settings Categories ──
 // Categories moved inside component for translation

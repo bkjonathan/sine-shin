@@ -15,8 +15,8 @@ import { writeFile } from "@tauri-apps/plugin-fs";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { formatDate } from "../utils/date";
 import QRCode from "qrcode";
-import DatePicker from "./ui/DatePicker";
-import { Button, Select } from "./ui";
+import DatePicker from "../components/ui/DatePicker";
+import { Button, Select } from "../components/ui";
 import {
   IconArrowLeft,
   IconCheck,
@@ -27,7 +27,7 @@ import {
   IconPhone,
   IconPrinter,
   IconX,
-} from "./icons";
+} from "../components/icons";
 
 const ORDER_STATUS_OPTIONS: OrderStatus[] = [
   "pending",

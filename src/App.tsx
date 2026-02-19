@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import AppLayout from "./components/AppLayout";
-import OnboardingForm from "./components/OnboardingForm";
-import Dashboard from "./components/Dashboard";
-import Orders from "./components/Orders";
-import Expenses from "./components/Expenses";
-import AccountBook from "./components/AccountBook";
-import Customers from "./components/Customers";
-import CustomerDetail from "./components/CustomerDetail";
-import OrderDetail from "./components/OrderDetail";
-import Settings from "./components/Settings.tsx";
-import Reports from "./components/Reports";
+import AppLayout from "./pages/AppLayout";
+import OnboardingForm from "./pages/OnboardingForm";
+import Dashboard from "./pages/Dashboard";
+import Orders from "./pages/Orders";
+import Expenses from "./pages/Expenses";
+import AccountBook from "./pages/AccountBook";
+import Customers from "./pages/Customers";
+import CustomerDetail from "./pages/CustomerDetail";
+import OrderDetail from "./pages/OrderDetail";
+import Settings from "./pages/Settings.tsx";
+import Reports from "./pages/Reports";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
 import { AppSettingsProvider } from "./context/AppSettingsContext";
@@ -19,7 +19,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import "./index.css";
 import { useTranslation } from "react-i18next";
 
-import Login from "./components/Login";
+import Login from "./pages/Login";
 
 function AppRoutes() {
   const navigate = useNavigate();

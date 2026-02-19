@@ -16,8 +16,8 @@ import { useTranslation } from "react-i18next";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
-import { Button, Input, Select } from "./ui";
-import DatePicker from "./ui/DatePicker";
+import { Button, Input, Select } from "../components/ui";
+import DatePicker from "../components/ui/DatePicker";
 import {
   IconDollarSign,
   IconDownload,
@@ -28,7 +28,7 @@ import {
   IconSortDesc,
   IconTrash,
   IconX,
-} from "./icons";
+} from "../components/icons";
 
 const fadeVariants: Variants = {
   hidden: { opacity: 0, y: 12 },

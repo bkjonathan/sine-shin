@@ -4,8 +4,13 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
-import { IconLogIn } from "./icons";
-import { Button, Input } from "./ui";
+import { IconLogIn } from "../components/icons";
+import { Button, Input } from "../components/ui";
+
+interface LoginUserResponse {
+  name: string;
+  role: string;
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -23,14 +28,16 @@ export default function Login() {
 
     try {
       if (window.__TAURI_INTERNALS__) {
-        await invoke("login_user", { name, password });
-        // Use context to update state
-        await login(name);
+        const user = await invoke<LoginUserResponse>("login_user", {
+          name,
+          password,
+        });
+        await login({ name: user.name, role: user.role });
         navigate("/dashboard", { replace: true });
       } else {
         // Browser mock
         if (name === "admin" && password === "admin") {
-          await login(name);
+          await login({ name, role: "admin" });
           navigate("/dashboard", { replace: true });
         } else {
           throw new Error("Invalid credentials (try admin/admin in browser)");
@@ -64,13 +71,13 @@ export default function Login() {
       <div className="relative z-10 w-full max-w-[400px] mx-4">
         <div className="glass-panel p-8">
           <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 rounded-[1rem] bg-gradient-to-br from-[var(--color-accent-blue)] to-[var(--color-accent-purple)] flex items-center justify-center mb-4 shadow-[0_8px_30px_rgba(91,127,255,0.3)]">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-linear-to-br from-accent-blue to-accent-purple flex items-center justify-center mb-4 shadow-[0_8px_30px_rgba(91,127,255,0.3)]">
               <IconLogIn size={28} strokeWidth={2} stroke="white" />
             </div>
             <h1 className="text-2xl font-bold text-text-primary mb-2">
               {t("auth.login.welcome")}
             </h1>
-            <p className="text-sm text-[var(--color-text-secondary)]">
+            <p className="text-sm text-text-secondary">
               {t("auth.login.subtitle")}
             </p>
           </div>
@@ -81,7 +88,7 @@ export default function Login() {
                 initial={{ opacity: 0, height: 0, marginBottom: 0 }}
                 animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[var(--color-error)] text-sm mb-6 text-center"
+                className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-error text-sm mb-6 text-center"
               >
                 {error}
               </motion.div>

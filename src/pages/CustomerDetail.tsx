@@ -8,8 +8,8 @@ import { OrderWithCustomer } from "../types/order";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
-import { IconArrowLeft, IconExternalLink } from "./icons";
-import { Button } from "./ui";
+import { IconArrowLeft, IconExternalLink } from "../components/icons";
+import { Button } from "../components/ui";
 
 const fadeVariants = {
   hidden: { opacity: 0, y: 12 },

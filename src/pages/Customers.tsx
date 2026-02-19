@@ -12,7 +12,7 @@ import {
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
-import { Button, Input, Select } from "./ui";
+import { Button, Input, Select } from "../components/ui";
 import { parseCSV } from "../utils/csvUtils";
 import {
   IconDownload,
@@ -28,7 +28,7 @@ import {
   IconUpload,
   IconUsers,
   IconX,
-} from "./icons";
+} from "../components/icons";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
