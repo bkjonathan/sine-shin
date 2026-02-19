@@ -20,6 +20,7 @@ import {
 import { OnboardingAppSettings, OnboardingStep } from "../types/onboarding";
 
 const LAST_STEP: OnboardingStep = 4;
+const USERNAME_REGEX = /^[A-Za-z0-9_.-]+$/;
 
 export default function OnboardingForm() {
   const navigate = useNavigate();
@@ -108,18 +109,6 @@ export default function OnboardingForm() {
       return;
     }
 
-    if (currentStep === 4) {
-      if (!username.trim() || !password.trim()) {
-        setError(t("auth.onboarding.error_credentials"));
-        return;
-      }
-
-      if (password !== confirmPassword) {
-        setError(t("auth.onboarding.error_password_match"));
-        return;
-      }
-    }
-
     setDirection(1);
     goToStep(currentStep + 1);
   };
@@ -151,6 +140,40 @@ export default function OnboardingForm() {
 
   const handleSubmit = async () => {
     setError("");
+
+    const normalizedUsername = username.trim();
+    let validationError: string | null = null;
+
+    if (!normalizedUsername || !password.trim()) {
+      validationError = t("auth.onboarding.error_credentials");
+    } else if (
+      normalizedUsername.length < 3 ||
+      normalizedUsername.length > 30 ||
+      !USERNAME_REGEX.test(normalizedUsername)
+    ) {
+      validationError = t(
+        "auth.onboarding.error_username_rules",
+        "Username must be 3-30 characters and use only letters, numbers, ., _, or -",
+      );
+    } else if (
+      password.length < 8 ||
+      !/[A-Z]/.test(password) ||
+      !/[a-z]/.test(password) ||
+      !/\d/.test(password)
+    ) {
+      validationError = t(
+        "auth.onboarding.error_password_rules",
+        "Password must be at least 8 characters and include uppercase, lowercase, and a number",
+      );
+    } else if (password !== confirmPassword) {
+      validationError = t("auth.onboarding.error_password_match");
+    }
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {

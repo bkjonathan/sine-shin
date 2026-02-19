@@ -39,6 +39,9 @@ export default function OnboardingStepAccount({
           placeholder={t("auth.login.enter_username")}
           value={username}
           onChange={(e) => onUsernameChange(e.target.value)}
+          minLength={3}
+          maxLength={30}
+          autoComplete="username"
         />
       </div>
 
@@ -52,6 +55,8 @@ export default function OnboardingStepAccount({
           placeholder={t("auth.login.enter_password")}
           value={password}
           onChange={(e) => onPasswordChange(e.target.value)}
+          minLength={8}
+          autoComplete="new-password"
         />
       </div>
 
@@ -66,6 +71,8 @@ export default function OnboardingStepAccount({
           placeholder={t("auth.onboarding.enter_confirm_password")}
           value={confirmPassword}
           onChange={(e) => onConfirmPasswordChange(e.target.value)}
+          minLength={8}
+          autoComplete="new-password"
         />
       </div>
     </div>

@@ -46,6 +46,8 @@
       "footer_note": "You can change these settings later in the dashboard.",
       "error_shop_name": "Shop name is required",
       "error_credentials": "Username and password are required",
+      "error_username_rules": "Username must be 3-30 characters and use only letters, numbers, ., _, or -",
+      "error_password_rules": "Password must be at least 8 characters and include uppercase, lowercase, and a number",
       "error_password_match": "Passwords do not match",
       "error_failed": "Setup failed",
       "logo_preview": "Logo preview"
