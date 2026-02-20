@@ -46,7 +46,17 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Release ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download and install this release."
+          releaseBody: |
+            See the assets below to download and install this release.
+
+            **macOS Users:** 
+            Because this application is not digitally signed with an Apple Developer account, macOS Gatekeeper may show a warning that it "cannot be verified" or is "damaged and should be moved to the Trash". 
+
+            To run the app:
+            1. Drag the app to your Applications folder.
+            2. Open your Terminal and run the following command to remove the quarantine flag:
+               `xattr -cr /Applications/sine-shin.app`
+            3. You can now open the app normally!
           releaseDraft: false
           prerelease: true
           args: ${{ matrix.args }}
