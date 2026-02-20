@@ -32,6 +32,10 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Clean up local Cargo config
+        run: rm -f src-tauri/.cargo/config.toml src-tauri/.cargo/config
+        shell: bash
+
       - name: install frontend dependencies
         run: npm install
 
