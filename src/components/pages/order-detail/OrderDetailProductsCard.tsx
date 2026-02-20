@@ -25,7 +25,7 @@ export default function OrderDetailProductsCard({
         {items.map((item, index) => (
           <div
             key={index}
-            className="border border-glass-border rounded-xl p-4 bg-liquid-bg hover:border-accent-blue/30 transition-colors"
+            className="border border-glass-border rounded-xl p-4 bg-glass-white/5 hover:border-accent-blue/30 transition-colors"
           >
             <div className="flex items-center justify-between mb-3">
               <span className="px-2.5 py-1 rounded-lg bg-accent-blue/10 text-accent-blue text-xs font-semibold">
