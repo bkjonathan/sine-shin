@@ -5,6 +5,7 @@ import AppNavigation from "../components/app-layout/AppNavigation";
 import AppSidebarDragRegion from "../components/app-layout/AppSidebarDragRegion";
 import AppSidebarUser from "../components/app-layout/AppSidebarUser";
 import AppTitleBar from "../components/app-layout/AppTitleBar";
+import { version } from "../../package.json";
 
 export default function AppLayout() {
   const [platform] = useState<"macos" | "windows">(() => {
@@ -35,18 +36,18 @@ export default function AppLayout() {
       >
         {/* Drag region / traffic light spacing */}
         <AppSidebarDragRegion platform={platform} />
-
         {/* App branding */}
         <div className="px-5 pb-4">
-          <h1 className="text-lg font-bold text-text-primary tracking-tight">
+          <h1 className="text-lg font-bold text-text-primary tracking-tight flex items-center gap-2">
             {t("app.title")}
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-blue/10 text-accent-blue border border-accent-blue/20">
+              v{version}
+            </span>
           </h1>
           <p className="text-xs text-text-muted mt-0.5">{t("app.subtitle")}</p>
         </div>
-
         {/* Navigation */}
         <AppNavigation />
-
         {/* Bottom section */}
         <AppSidebarUser />
       </aside>
