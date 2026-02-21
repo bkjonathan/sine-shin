@@ -21,7 +21,7 @@ import { useTranslation } from "react-i18next";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
-import { Button, Input, Select } from "../components/ui";
+import { Button, Select } from "../components/ui";
 import DatePicker from "../components/ui/DatePicker";
 import ExpenseDeleteModal from "../components/pages/expenses/ExpenseDeleteModal";
 import ExpenseFormModal from "../components/pages/expenses/ExpenseFormModal";
@@ -265,7 +265,11 @@ export default function Expenses() {
         return;
       }
 
-      if (page > 1 && pagedData.total_pages > 0 && page > pagedData.total_pages) {
+      if (
+        page > 1 &&
+        pagedData.total_pages > 0 &&
+        page > pagedData.total_pages
+      ) {
         setCurrentPage(pagedData.total_pages);
         return;
       }
@@ -543,9 +547,10 @@ export default function Expenses() {
             .join(",");
         });
 
-      const csvContent = [headers.map((value) => `"${value}"`).join(","), ...rows].join(
-        "\n",
-      );
+      const csvContent = [
+        headers.map((value) => `"${value}"`).join(","),
+        ...rows,
+      ].join("\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -649,51 +654,122 @@ export default function Expenses() {
       </motion.div>
 
       <motion.div variants={fadeVariants} className="mb-6">
-        <div className="glass-panel p-4 border border-glass-border-light">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3">
-            <div className="xl:col-span-2">
-              <Select
-                options={[
-                  { value: "title", label: t("expenses.search_key_title") },
-                  {
-                    value: "expenseId",
-                    label: t("expenses.search_key_expense_id"),
-                  },
-                  {
-                    value: "category",
-                    label: t("expenses.search_key_category"),
-                  },
-                  {
-                    value: "paymentMethod",
-                    label: t("expenses.search_key_payment_method"),
-                  },
-                ]}
-                value={searchKey}
-                onChange={(value) => {
-                  setSearchKey(value as ExpenseSearchKey);
-                  setCurrentPage(1);
-                }}
-                placeholder={t("expenses.search_by")}
-              />
-            </div>
-
-            <div className="relative md:col-span-2 xl:col-span-4 min-w-0">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
-                <IconSearch className="h-4 w-4 text-text-muted" strokeWidth={2} />
+        <div className="glass-panel p-4 border border-glass-border-light relative z-20">
+          <div className="flex flex-col gap-3">
+            {/* Top Row: Search & Sort */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1 min-w-0">
+                <div className="input-liquid w-full flex items-center p-0 overflow-hidden focus-within:border-accent-blue focus-within:ring-1 focus-within:ring-accent-blue/50">
+                  <div className="pl-3 flex items-center pointer-events-none z-10">
+                    <IconSearch
+                      className="h-4 w-4 text-text-muted"
+                      strokeWidth={2}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    className="flex-1 bg-transparent border-none pl-2 pr-4 py-2.5 text-text-primary placeholder:text-text-muted focus:ring-0 text-sm h-full w-full outline-none"
+                    placeholder={t("expenses.search_placeholder")}
+                    value={searchInput}
+                    onChange={(event) => {
+                      setSearchInput(event.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                  <div className="h-6 w-px bg-glass-border shrink-0" />
+                  <select
+                    className="bg-transparent border-none text-text-secondary hover:text-text-primary focus:ring-0 text-sm py-2.5 pr-8 pl-3 cursor-pointer outline-none appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E')] bg-no-repeat bg-position-[right_8px_center] bg-size-[14px_14px] shrink-0 max-w-[140px] truncate"
+                    value={searchKey}
+                    onChange={(e) => {
+                      setSearchKey(e.target.value as ExpenseSearchKey);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option
+                      value="title"
+                      className="bg-glass-surface text-text-primary"
+                    >
+                      {t("expenses.search_key_title")}
+                    </option>
+                    <option
+                      value="expenseId"
+                      className="bg-glass-surface text-text-primary"
+                    >
+                      {t("expenses.search_key_expense_id")}
+                    </option>
+                    <option
+                      value="category"
+                      className="bg-glass-surface text-text-primary"
+                    >
+                      {t("expenses.search_key_category")}
+                    </option>
+                    <option
+                      value="paymentMethod"
+                      className="bg-glass-surface text-text-primary"
+                    >
+                      {t("expenses.search_key_payment_method")}
+                    </option>
+                  </select>
+                </div>
               </div>
-              <Input
-                type="text"
-                className="input-liquid pl-10 w-full"
-                placeholder={t("expenses.search_placeholder")}
-                value={searchInput}
-                onChange={(event) => {
-                  setSearchInput(event.target.value);
-                  setCurrentPage(1);
-                }}
-              />
+
+              <div className="flex items-center shrink-0 w-full sm:w-64 max-w-full">
+                <div className="input-liquid w-full flex items-center p-0 overflow-hidden focus-within:border-accent-blue focus-within:ring-1 focus-within:ring-accent-blue/50">
+                  <select
+                    className="flex-1 bg-transparent border-none text-text-primary focus:ring-0 text-sm py-2.5 pl-3 pr-8 cursor-pointer outline-none appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E')] bg-no-repeat bg-position-[right_8px_center] bg-size-[14px_14px] truncate"
+                    value={sortBy}
+                    onChange={(e) => {
+                      setSortBy(e.target.value as ExpenseSortBy);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option
+                      value="expense_date"
+                      className="bg-glass-surface text-text-primary"
+                    >
+                      {t("expenses.sort_by_date")}
+                    </option>
+                    <option
+                      value="expense_id"
+                      className="bg-glass-surface text-text-primary"
+                    >
+                      {t("expenses.sort_by_id")}
+                    </option>
+                    <option
+                      value="title"
+                      className="bg-glass-surface text-text-primary"
+                    >
+                      {t("expenses.sort_by_title")}
+                    </option>
+                    <option
+                      value="amount"
+                      className="bg-glass-surface text-text-primary"
+                    >
+                      {t("expenses.sort_by_amount")}
+                    </option>
+                  </select>
+
+                  <div className="h-6 w-px bg-glass-border shrink-0" />
+
+                  <button
+                    onClick={() =>
+                      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+                    }
+                    className="h-full px-3 shrink-0 text-text-secondary hover:text-text-primary hover:bg-glass-white/5 transition-colors flex items-center justify-center focus:outline-none"
+                    title={sortOrder === "asc" ? "Ascending" : "Descending"}
+                  >
+                    {sortOrder === "asc" ? (
+                      <IconSortAsc size={18} strokeWidth={2} />
+                    ) : (
+                      <IconSortDesc size={18} strokeWidth={2} />
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="xl:col-span-2">
+            {/* Bottom Row: Additional Filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full relative z-20">
               <Select
                 options={[
                   { value: "all", label: t("common.all") },
@@ -706,9 +782,6 @@ export default function Expenses() {
                 }}
                 placeholder={t("expenses.category")}
               />
-            </div>
-
-            <div className="xl:col-span-2">
               <DatePicker
                 selected={dateFrom}
                 onChange={(date: Date | null) => {
@@ -719,9 +792,6 @@ export default function Expenses() {
                 placeholderText={t("expenses.date_from")}
                 className="w-full"
               />
-            </div>
-
-            <div className="xl:col-span-2">
               <DatePicker
                 selected={dateTo}
                 onChange={(date: Date | null) => {
@@ -733,37 +803,6 @@ export default function Expenses() {
                 className="w-full"
               />
             </div>
-          </div>
-
-          <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
-            <div className="w-full sm:w-48">
-              <Select
-                options={[
-                  { value: "expense_date", label: t("expenses.sort_by_date") },
-                  { value: "expense_id", label: t("expenses.sort_by_id") },
-                  { value: "title", label: t("expenses.sort_by_title") },
-                  { value: "amount", label: t("expenses.sort_by_amount") },
-                ]}
-                value={sortBy}
-                onChange={(value) => {
-                  setSortBy(value as ExpenseSortBy);
-                  setCurrentPage(1);
-                }}
-              />
-            </div>
-            <button
-              onClick={() =>
-                setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
-              }
-              className="h-[46px] w-[46px] shrink-0 rounded-lg bg-glass-white border border-glass-border hover:bg-glass-white-hover transition-colors text-text-secondary flex items-center justify-center"
-              title={sortOrder === "asc" ? "Ascending" : "Descending"}
-            >
-              {sortOrder === "asc" ? (
-                <IconSortAsc size={20} strokeWidth={2} />
-              ) : (
-                <IconSortDesc size={20} strokeWidth={2} />
-              )}
-            </button>
           </div>
         </div>
       </motion.div>
@@ -849,7 +888,9 @@ export default function Expenses() {
                             {expense.title}
                           </h3>
                           <p className="text-xs text-text-muted mb-4">
-                            {formatDate(expense.expense_date || expense.created_at)}
+                            {formatDate(
+                              expense.expense_date || expense.created_at,
+                            )}
                           </p>
 
                           <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -917,7 +958,10 @@ export default function Expenses() {
                     onChange={(value) => {
                       const nextPageSize =
                         value === "all" ? "all" : Number(value);
-                      if (nextPageSize !== "all" && Number.isNaN(nextPageSize)) {
+                      if (
+                        nextPageSize !== "all" &&
+                        Number.isNaN(nextPageSize)
+                      ) {
                         return;
                       }
                       setPageSize(nextPageSize);
@@ -926,8 +970,12 @@ export default function Expenses() {
                   />
                 </div>
                 <Button
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={isPageTransitioning || currentPage <= 1 || totalPages === 0}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(1, prev - 1))
+                  }
+                  disabled={
+                    isPageTransitioning || currentPage <= 1 || totalPages === 0
+                  }
                   variant="ghost"
                   className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -973,7 +1021,9 @@ export default function Expenses() {
                     )
                   }
                   disabled={
-                    isPageTransitioning || totalPages === 0 || currentPage >= totalPages
+                    isPageTransitioning ||
+                    totalPages === 0 ||
+                    currentPage >= totalPages
                   }
                   variant="ghost"
                   className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
