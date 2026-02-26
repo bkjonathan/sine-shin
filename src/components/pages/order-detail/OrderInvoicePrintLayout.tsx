@@ -1,6 +1,5 @@
 import { RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { formatDate } from "../../../utils/date";
 import { ShopSettings } from "../../../api/settingApi";
 import { OrderItem, OrderWithCustomer } from "../../../types/order";
@@ -8,6 +7,7 @@ import { OrderItem, OrderWithCustomer } from "../../../types/order";
 interface OrderInvoicePrintLayoutProps {
   invoiceRef: RefObject<HTMLDivElement | null>;
   shopSettings: ShopSettings | null;
+  logoDataUrl: string;
   order: OrderWithCustomer;
   items: OrderItem[];
   customerName: string;
@@ -28,6 +28,7 @@ interface OrderInvoicePrintLayoutProps {
 export default function OrderInvoicePrintLayout({
   invoiceRef,
   shopSettings,
+  logoDataUrl,
   order,
   items,
   customerName,
@@ -56,7 +57,7 @@ export default function OrderInvoicePrintLayout({
           backgroundColor: "#ffffff",
           color: "#0f172a",
           padding: "36px",
-          fontFamily: "'Poppins', 'Noto Sans Myanmar', sans-serif",
+          fontFamily: "'Noto Sans Myanmar', 'Poppins', sans-serif",
           borderRadius: "20px",
           border: "1px solid #e2e8f0",
           boxShadow: "0 24px 44px -30px rgba(15, 23, 42, 0.45)",
@@ -73,9 +74,9 @@ export default function OrderInvoicePrintLayout({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-            {shopSettings?.logo_path && (
+            {logoDataUrl && (
               <img
-                src={convertFileSrc(shopSettings.logo_path)}
+                src={logoDataUrl}
                 alt="Logo"
                 style={{
                   width: "96px",
@@ -118,7 +119,9 @@ export default function OrderInvoicePrintLayout({
                   </p>
                 )}
                 {shopSettings?.address && (
-                  <p style={{ maxWidth: "300px", margin: 0 }}>{shopSettings.address}</p>
+                  <p style={{ maxWidth: "300px", margin: 0 }}>
+                    {shopSettings.address}
+                  </p>
                 )}
               </div>
             </div>
@@ -213,19 +216,27 @@ export default function OrderInvoicePrintLayout({
                   marginTop: "16px",
                 }}
               >
-                <span style={{ color: "#64748b" }}>{t("customers.form.phone")}</span>
+                <span style={{ color: "#64748b" }}>
+                  {t("customers.form.phone")}
+                </span>
                 <span style={{ color: "#0f172a", fontWeight: "500" }}>
                   {customerPhone}
                 </span>
-                <span style={{ color: "#64748b" }}>{t("customers.form.city")}</span>
+                <span style={{ color: "#64748b" }}>
+                  {t("customers.form.city")}
+                </span>
                 <span style={{ color: "#0f172a", fontWeight: "500" }}>
                   {customerCity}
                 </span>
-                <span style={{ color: "#64748b" }}>{t("customers.form.address")}</span>
+                <span style={{ color: "#64748b" }}>
+                  {t("customers.form.address")}
+                </span>
                 <span style={{ color: "#0f172a", fontWeight: "500" }}>
                   {customerAddress}
                 </span>
-                <span style={{ color: "#64748b" }}>{t("orders.invoice.platform")}</span>
+                <span style={{ color: "#64748b" }}>
+                  {t("orders.invoice.platform")}
+                </span>
                 <span style={{ color: "#0f172a", fontWeight: "500" }}>
                   {customerPlatform}
                 </span>
@@ -471,7 +482,9 @@ export default function OrderInvoicePrintLayout({
           }}
         >
           <p style={{ margin: 0 }}>{t("orders.invoice.footer_message")}</p>
-          <p style={{ marginTop: "4px" }}>{t("orders.invoice.footer_credit")}</p>
+          <p style={{ marginTop: "4px" }}>
+            {t("orders.invoice.footer_credit")}
+          </p>
         </div>
       </div>
     </div>

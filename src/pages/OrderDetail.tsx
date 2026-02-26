@@ -9,7 +9,8 @@ import { OrderDetail as OrderDetailType, OrderStatus } from "../types/order";
 import { Customer } from "../types/customer";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useSound } from "../context/SoundContext";
-import html2canvas from "html2canvas";
+import { toPng } from "html-to-image";
+import { MYANMAR_FONT_EMBED_CSS } from "../assets/fonts/myanmar-fonts";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
@@ -91,6 +92,7 @@ export default function OrderDetail() {
   const [orderDetail, setOrderDetail] = useState<OrderDetailType | null>(null);
   const [customerDetail, setCustomerDetail] = useState<Customer | null>(null);
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
+  const [logoDataUrl, setLogoDataUrl] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -118,6 +120,34 @@ export default function OrderDetail() {
       ]);
       setOrderDetail(orderData);
       setShopSettings(settingsData);
+
+      // Pre-load shop logo as a base64 data URL so we never have asset:// URLs
+      // in the invoice DOM when html-to-image tries to capture (XHR can't fetch them).
+      if (settingsData?.logo_path) {
+        try {
+          const { readFile } = await import("@tauri-apps/plugin-fs");
+          const bytes = await readFile(settingsData.logo_path);
+          let binary = "";
+          const CHUNK = 8192;
+          for (let i = 0; i < bytes.length; i += CHUNK) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+          }
+          const ext =
+            settingsData.logo_path.split(".").pop()?.toLowerCase() ?? "png";
+          const mime =
+            ext === "jpg" || ext === "jpeg"
+              ? "image/jpeg"
+              : ext === "webp"
+                ? "image/webp"
+                : "image/png";
+          setLogoDataUrl(`data:${mime};base64,${btoa(binary)}`);
+        } catch (logoErr) {
+          console.warn("Could not preload logo:", logoErr);
+          setLogoDataUrl("");
+        }
+      } else {
+        setLogoDataUrl("");
+      }
 
       if (orderData.order.customer_id) {
         try {
@@ -177,20 +207,33 @@ export default function OrderDetail() {
       });
       throw new Error(t("orders.invoice.error_element_not_found"));
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const canvas = await html2canvas(invoiceRef.current, {
-      scale: 2,
-      useCORS: true,
+    // Wait for all web fonts (including Noto Sans Myanmar) to be fully loaded
+    // so Myanmar characters are shaped correctly before capture.
+    await document.fonts.ready;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    // html-to-image uses SVG foreignObject which keeps the browser's native
+    // text shaping engine — essential for Myanmar script (Canvas 2D breaks it).
+    // MYANMAR_FONT_EMBED_CSS is baked in at build time (Vite ?inline) so no
+    // runtime fetch is needed — avoids [object Event] errors in Tauri webview.
+    const dataUrl = await toPng(invoiceRef.current, {
+      pixelRatio: 2,
       backgroundColor: "#ffffff",
-      logging: false,
+      // skipFonts: stop html-to-image from XHR-fetching font CSS files
+      // (those would throw [object Event] in Tauri's webview)
+      skipFonts: true,
+      // Our font is embedded as build-time base64 — no fetching needed
+      fontEmbedCSS: MYANMAR_FONT_EMBED_CSS,
     });
 
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, "image/png");
-    });
-    if (!blob) throw new Error(t("orders.invoice.error_blob_generation"));
-    const buffer = await blob.arrayBuffer();
-    return new Uint8Array(buffer);
+    // Convert base64 data URL → Uint8Array
+    const base64 = dataUrl.split(",")[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   };
 
   const handleDownloadInvoice = async () => {
@@ -779,6 +822,7 @@ export default function OrderDetail() {
         <OrderInvoicePrintLayout
           invoiceRef={invoiceRef}
           shopSettings={shopSettings}
+          logoDataUrl={logoDataUrl}
           order={order}
           items={items}
           customerName={customerName}
