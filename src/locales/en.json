@@ -118,9 +118,11 @@
     "search_key_order_id": "Order ID",
     "search_key_customer_id": "Customer ID",
     "search_key_customer_phone": "Customer Phone",
+    "order_id": "Order ID",
     "status": "Status",
     "customer": "Customer",
     "items": "Items",
+    "weight": "Weight (kg)",
     "total": "Total",
     "date": "Date",
     "qty": "Qty",
@@ -393,7 +395,10 @@
     "search_key_customer_id": "Customer ID",
     "search_key_phone": "Phone",
     "name": "Name",
+    "customer_id": "Customer ID",
     "phone": "Phone",
+    "city": "City",
+    "platform": "Platform",
     "orders": "Orders",
     "spent": "Spent",
     "last_order": "Last Order",
@@ -579,6 +584,7 @@
     "na": "N/A",
     "per_page": "Per page",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "actions": "Actions"
   }
 }

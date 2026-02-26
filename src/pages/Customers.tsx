@@ -24,6 +24,7 @@ import CustomerFormModal from "../components/pages/customers/CustomerFormModal";
 import {
   IconDownload,
   IconEdit,
+  IconLayoutGrid,
   IconLink,
   IconMapPin,
   IconPhone,
@@ -31,6 +32,7 @@ import {
   IconSearch,
   IconSortAsc,
   IconSortDesc,
+  IconTable,
   IconTrash,
   IconUpload,
   IconUsers,
@@ -141,6 +143,19 @@ export default function Customers() {
   );
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
+  // View Mode State (persisted in localStorage)
+  const [viewMode, setViewMode] = useState<"grid" | "table">(() => {
+    return (
+      (localStorage.getItem("customers_view_mode") as "grid" | "table") ??
+      "grid"
+    );
+  });
+
+  const handleSetViewMode = (mode: "grid" | "table") => {
+    setViewMode(mode);
+    localStorage.setItem("customers_view_mode", mode);
+  };
+
   // Import State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const latestFetchIdRef = useRef(0);
@@ -188,7 +203,10 @@ export default function Customers() {
     return errors;
   };
 
-  const handleFormFieldChange = (field: keyof CustomerFormData, value: string) => {
+  const handleFormFieldChange = (
+    field: keyof CustomerFormData,
+    value: string,
+  ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setFormErrors((prev) => ({ ...prev, [field]: undefined }));
   };
@@ -678,6 +696,32 @@ export default function Customers() {
               <IconSortDesc size={20} strokeWidth={2} />
             )}
           </button>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center rounded-lg border border-glass-border overflow-hidden bg-glass-white">
+            <button
+              onClick={() => handleSetViewMode("grid")}
+              title="Grid View"
+              className={`p-2.5 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-accent-blue text-white"
+                  : "text-text-secondary hover:bg-glass-white-hover"
+              }`}
+            >
+              <IconLayoutGrid size={18} strokeWidth={2} />
+            </button>
+            <button
+              onClick={() => handleSetViewMode("table")}
+              title="Table View"
+              className={`p-2.5 transition-colors ${
+                viewMode === "table"
+                  ? "bg-accent-blue text-white"
+                  : "text-text-secondary hover:bg-glass-white-hover"
+              }`}
+            >
+              <IconTable size={18} strokeWidth={2} />
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -714,158 +758,298 @@ export default function Customers() {
           ) : (
             <div className="relative">
               <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={pageTransitionKey}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4"
-                >
-                  <AnimatePresence mode="popLayout">
-                    {customers.map((customer) => (
-                      <motion.div
-                        key={customer.id}
-                        layout
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        onClick={() =>
-                          navigate(`/customers/${customer.id}`, {
-                            state: {
-                              returnTo: getCustomersListPath(currentPage),
-                            },
-                          })
-                        }
-                        className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
-                      >
-                        {/* Decorative background gradient on hover */}
-                        <div className="absolute inset-0 bg-linear-to-br from-accent-blue/0 to-accent-purple/0 group-hover:from-accent-blue/5 group-hover:to-accent-purple/5 transition-all duration-500 pointer-events-none" />
+                {viewMode === "grid" ? (
+                  <motion.div
+                    key={`grid-${pageTransitionKey}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4"
+                  >
+                    <AnimatePresence mode="popLayout">
+                      {customers.map((customer) => (
+                        <motion.div
+                          key={customer.id}
+                          layout
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          onClick={() =>
+                            navigate(`/customers/${customer.id}`, {
+                              state: {
+                                returnTo: getCustomersListPath(currentPage),
+                              },
+                            })
+                          }
+                          className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
+                        >
+                          {/* Decorative background gradient on hover */}
+                          <div className="absolute inset-0 bg-linear-to-br from-accent-blue/0 to-accent-purple/0 group-hover:from-accent-blue/5 group-hover:to-accent-purple/5 transition-all duration-500 pointer-events-none" />
 
-                        <div className="relative z-10">
-                          <div className="flex justify-between items-start mb-4">
-                            <div className="flex items-start gap-3.5">
-                              {/* Avatar */}
-                              <div className="w-12 h-12 rounded-xl bg-linear-to-br from-glass-white to-glass-white-hover border border-glass-border flex items-center justify-center text-text-primary font-bold text-lg shadow-sm group-hover:scale-105 transition-transform duration-300">
-                                {customer.name.charAt(0).toUpperCase()}
-                              </div>
+                          <div className="relative z-10">
+                            <div className="flex justify-between items-start mb-4">
+                              <div className="flex items-start gap-3.5">
+                                {/* Avatar */}
+                                <div className="w-12 h-12 rounded-xl bg-linear-to-br from-glass-white to-glass-white-hover border border-glass-border flex items-center justify-center text-text-primary font-bold text-lg shadow-sm group-hover:scale-105 transition-transform duration-300">
+                                  {customer.name.charAt(0).toUpperCase()}
+                                </div>
 
-                              {/* Name & Meta */}
-                              <div>
-                                <h3 className="font-semibold text-text-primary text-lg leading-tight group-hover:text-accent-blue transition-colors">
-                                  {customer.name}
-                                </h3>
+                                {/* Name & Meta */}
+                                <div>
+                                  <h3 className="font-semibold text-text-primary text-lg leading-tight group-hover:text-accent-blue transition-colors">
+                                    {customer.name}
+                                  </h3>
 
-                                <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                  {customer.customer_id && (
-                                    <span className="text-[10px] font-mono text-text-secondary bg-glass-white-hover px-2 py-0.5 rounded border border-glass-border opacity-80 group-hover:opacity-100 transition-opacity">
-                                      {customer.customer_id}
-                                    </span>
-                                  )}
-                                  {customer.platform && (
-                                    <span className="text-[10px] font-medium text-text-muted bg-glass-white px-2 py-0.5 rounded-full border border-glass-border">
-                                      {customer.platform}
-                                    </span>
-                                  )}
+                                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                    {customer.customer_id && (
+                                      <span className="text-[10px] font-mono text-text-secondary bg-glass-white-hover px-2 py-0.5 rounded border border-glass-border opacity-80 group-hover:opacity-100 transition-opacity">
+                                        {customer.customer_id}
+                                      </span>
+                                    )}
+                                    {customer.platform && (
+                                      <span className="text-[10px] font-medium text-text-muted bg-glass-white px-2 py-0.5 rounded-full border border-glass-border">
+                                        {customer.platform}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
 
-                            {/* Actions */}
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenModal(customer);
-                                }}
-                                className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
-                                title="Edit"
-                              >
-                                <IconEdit size={16} strokeWidth={2} />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setCustomerToDelete(customer);
-                                  setIsDeleteModalOpen(true);
-                                }}
-                                className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
-                                title="Delete"
-                              >
-                                <IconTrash size={16} strokeWidth={2} />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Divider */}
-                          <div className="h-px w-full bg-linear-to-r from-transparent via-glass-border to-transparent mb-3 opacity-50" />
-
-                          {/* Contact Info */}
-                          <div className="space-y-2.5">
-                            {customer.phone ? (
-                              <div className="flex items-center gap-2.5 text-sm group/phone">
-                                <div className="p-1.5 rounded-md bg-glass-white text-text-muted group-hover/phone:text-accent-blue transition-colors">
-                                  <IconPhone className="w-3.5 h-3.5" strokeWidth={2} />
-                                </div>
-                                <span className="text-text-secondary font-medium">
-                                  {customer.phone}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2.5 text-sm opacity-40">
-                                <div className="p-1.5 rounded-md bg-glass-white text-text-muted">
-                                  <IconPhone className="w-3.5 h-3.5" strokeWidth={2} />
-                                </div>
-                                <span className="text-text-muted italic">
-                                  {t("customers.no_phone")}
-                                </span>
-                              </div>
-                            )}
-
-                            {customer.address || customer.city ? (
-                              <div className="flex items-start gap-2.5 text-sm group/addr">
-                                <div className="p-1.5 mt-0.5 rounded-md bg-glass-white text-text-muted group-hover/addr:text-accent-purple transition-colors shrink-0">
-                                  <IconMapPin className="w-3.5 h-3.5" strokeWidth={2} />
-                                </div>
-                                <span className="text-text-secondary line-clamp-2 leading-snug">
-                                  {[customer.address, customer.city]
-                                    .filter(Boolean)
-                                    .join(", ")}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2.5 text-sm opacity-40">
-                                <div className="p-1.5 rounded-md bg-glass-white text-text-muted">
-                                  <IconMapPin className="w-3.5 h-3.5" strokeWidth={2} />
-                                </div>
-                                <span className="text-text-muted italic">
-                                  {t("customers.no_address")}
-                                </span>
-                              </div>
-                            )}
-
-                            {customer.social_media_url && (
-                              <div className="pt-1">
-                                <a
-                                  href={customer.social_media_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-xs text-accent-blue hover:text-accent-cyan font-medium transition-colors bg-accent-blue/5 hover:bg-accent-blue/10 px-2.5 py-1.5 rounded-md w-full justify-center group/link"
+                              {/* Actions */}
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenModal(customer);
+                                  }}
+                                  className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                  title="Edit"
                                 >
-                                  <IconLink
-                                    className="w-3.5 h-3.5 transition-transform group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5"
-                                    strokeWidth={2}
-                                  />
-                                  {t("customers.visit_social")}
-                                </a>
+                                  <IconEdit size={16} strokeWidth={2} />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCustomerToDelete(customer);
+                                    setIsDeleteModalOpen(true);
+                                  }}
+                                  className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
+                                  title="Delete"
+                                >
+                                  <IconTrash size={16} strokeWidth={2} />
+                                </button>
                               </div>
-                            )}
+                            </div>
+
+                            {/* Divider */}
+                            <div className="h-px w-full bg-linear-to-r from-transparent via-glass-border to-transparent mb-3 opacity-50" />
+
+                            {/* Contact Info */}
+                            <div className="space-y-2.5">
+                              {customer.phone ? (
+                                <div className="flex items-center gap-2.5 text-sm group/phone">
+                                  <div className="p-1.5 rounded-md bg-glass-white text-text-muted group-hover/phone:text-accent-blue transition-colors">
+                                    <IconPhone
+                                      className="w-3.5 h-3.5"
+                                      strokeWidth={2}
+                                    />
+                                  </div>
+                                  <span className="text-text-secondary font-medium">
+                                    {customer.phone}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2.5 text-sm opacity-40">
+                                  <div className="p-1.5 rounded-md bg-glass-white text-text-muted">
+                                    <IconPhone
+                                      className="w-3.5 h-3.5"
+                                      strokeWidth={2}
+                                    />
+                                  </div>
+                                  <span className="text-text-muted italic">
+                                    {t("customers.no_phone")}
+                                  </span>
+                                </div>
+                              )}
+
+                              {customer.address || customer.city ? (
+                                <div className="flex items-start gap-2.5 text-sm group/addr">
+                                  <div className="p-1.5 mt-0.5 rounded-md bg-glass-white text-text-muted group-hover/addr:text-accent-purple transition-colors shrink-0">
+                                    <IconMapPin
+                                      className="w-3.5 h-3.5"
+                                      strokeWidth={2}
+                                    />
+                                  </div>
+                                  <span className="text-text-secondary line-clamp-2 leading-snug">
+                                    {[customer.address, customer.city]
+                                      .filter(Boolean)
+                                      .join(", ")}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2.5 text-sm opacity-40">
+                                  <div className="p-1.5 rounded-md bg-glass-white text-text-muted">
+                                    <IconMapPin
+                                      className="w-3.5 h-3.5"
+                                      strokeWidth={2}
+                                    />
+                                  </div>
+                                  <span className="text-text-muted italic">
+                                    {t("customers.no_address")}
+                                  </span>
+                                </div>
+                              )}
+
+                              {customer.social_media_url && (
+                                <div className="pt-1">
+                                  <a
+                                    href={customer.social_media_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-xs text-accent-blue hover:text-accent-cyan font-medium transition-colors bg-accent-blue/5 hover:bg-accent-blue/10 px-2.5 py-1.5 rounded-md w-full justify-center group/link"
+                                  >
+                                    <IconLink
+                                      className="w-3.5 h-3.5 transition-transform group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5"
+                                      strokeWidth={2}
+                                    />
+                                    {t("customers.visit_social")}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </motion.div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </motion.div>
+                ) : (
+                  /* ── Table View ── */
+                  <motion.div
+                    key={`table-${pageTransitionKey}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="glass-panel overflow-hidden pb-2"
+                  >
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-glass-border">
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider w-12">
+                            #
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                            {t("customers.name") || "Name"}
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden md:table-cell">
+                            {t("customers.customer_id") || "Customer ID"}
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                            {t("customers.phone") || "Phone"}
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                            {t("customers.city") || "City"}
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                            {t("customers.platform") || "Platform"}
+                          </th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                            {t("common.actions") || "Actions"}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <AnimatePresence mode="popLayout">
+                          {customers.map((customer, index) => (
+                            <motion.tr
+                              key={customer.id}
+                              layout
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              onClick={() =>
+                                navigate(`/customers/${customer.id}`, {
+                                  state: {
+                                    returnTo: getCustomersListPath(currentPage),
+                                  },
+                                })
+                              }
+                              className="group border-b border-glass-border/50 last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
+                            >
+                              <td className="px-4 py-3 text-text-muted font-mono text-xs">
+                                {index + 1}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-linear-to-br from-glass-white to-glass-white-hover border border-glass-border flex items-center justify-center text-text-primary font-bold text-sm shrink-0">
+                                    {customer.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="font-medium text-text-primary group-hover:text-accent-blue transition-colors">
+                                    {customer.name}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 hidden md:table-cell">
+                                {customer.customer_id ? (
+                                  <span className="font-mono text-xs text-text-secondary bg-glass-white-hover px-2 py-0.5 rounded border border-glass-border">
+                                    {customer.customer_id}
+                                  </span>
+                                ) : (
+                                  <span className="text-text-muted">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 hidden sm:table-cell text-text-secondary">
+                                {customer.phone || (
+                                  <span className="text-text-muted">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 hidden lg:table-cell text-text-secondary">
+                                {customer.city || (
+                                  <span className="text-text-muted">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 hidden lg:table-cell">
+                                {customer.platform ? (
+                                  <span className="text-xs font-medium text-text-muted bg-glass-white px-2 py-0.5 rounded-full border border-glass-border">
+                                    {customer.platform}
+                                  </span>
+                                ) : (
+                                  <span className="text-text-muted">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenModal(customer);
+                                    }}
+                                    className="p-1.5 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                    title="Edit"
+                                  >
+                                    <IconEdit size={15} strokeWidth={2} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCustomerToDelete(customer);
+                                      setIsDeleteModalOpen(true);
+                                    }}
+                                    className="p-1.5 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
+                                    title="Delete"
+                                  >
+                                    <IconTrash size={15} strokeWidth={2} />
+                                  </button>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          ))}
+                        </AnimatePresence>
+                      </tbody>
+                    </table>
+                  </motion.div>
+                )}
               </AnimatePresence>
 
               <AnimatePresence>

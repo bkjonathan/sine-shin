@@ -118,9 +118,11 @@
     "search_key_order_id": "အော်ဒါ ID",
     "search_key_customer_id": "ဖောက်သည် ID",
     "search_key_customer_phone": "ဖောက်သည်ဖုန်း",
+    "order_id": "အော်ဒါ ID",
     "status": "အခြေအနေ",
     "customer": "ဖောက်သည်",
     "items": "ပစ္စည်းများ",
+    "weight": "အလေးချိန် (kg)",
     "total": "စုစုပေါင်း",
     "date": "နေ့စွဲ",
     "qty": "အရေအတွက်",
@@ -391,7 +393,10 @@
     "search_key_customer_id": "ဖောက်သည် ID",
     "search_key_phone": "ဖုန်း",
     "name": "အမည်",
+    "customer_id": "ဖောက်သည် ID",
     "phone": "ဖုန်း",
+    "city": "မြို့",
+    "platform": "ပလက်ဖောင်း",
     "orders": "အော်ဒါများ",
     "spent": "အသုံးစာရိတ်",
     "last_order": "နောက်ဆုံးအော်ဒါ",
@@ -577,6 +582,7 @@
     "na": "မရှိ",
     "per_page": "တစ်မျက်နှာလျှင်",
     "previous": "ယခင်",
-    "next": "နောက်"
+    "next": "နောက်",
+    "actions": "လုပ်ဆောင်ချက်များ"
   }
 }

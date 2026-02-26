@@ -33,11 +33,13 @@ import OrderFormModal from "../components/pages/orders/OrderFormModal";
 import {
   IconDownload,
   IconEdit,
+  IconLayoutGrid,
   IconPackage,
   IconPlus,
   IconSearch,
   IconSortAsc,
   IconSortDesc,
+  IconTable,
   IconTrash,
   IconUpload,
 } from "../components/icons";
@@ -222,6 +224,18 @@ export default function Orders() {
     null,
   );
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  // View Mode State (persisted in localStorage)
+  const [viewMode, setViewMode] = useState<"grid" | "table">(() => {
+    return (
+      (localStorage.getItem("orders_view_mode") as "grid" | "table") ?? "grid"
+    );
+  });
+
+  const handleSetViewMode = (mode: "grid" | "table") => {
+    setViewMode(mode);
+    localStorage.setItem("orders_view_mode", mode);
+  };
 
   useEffect(() => {
     fetchCustomers();
@@ -928,7 +942,7 @@ export default function Orders() {
             <div className="w-full md:w-48">
               <Select
                 options={[
-                  { value: "order_id", label: "Sort by ID" }, // TODO: Add translation if needed or use static
+                  { value: "order_id", label: "Sort by ID" },
                   { value: "customer_name", label: "Sort by Name" },
                   { value: "created_at", label: "Sort by Date" },
                 ]}
@@ -954,6 +968,32 @@ export default function Orders() {
                 <IconSortDesc size={20} strokeWidth={2} />
               )}
             </button>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center rounded-lg border border-glass-border overflow-hidden bg-glass-white shrink-0">
+              <button
+                onClick={() => handleSetViewMode("grid")}
+                title="Grid View"
+                className={`p-2.5 transition-colors ${
+                  viewMode === "grid"
+                    ? "bg-accent-blue text-white"
+                    : "text-text-secondary hover:bg-glass-white-hover"
+                }`}
+              >
+                <IconLayoutGrid size={18} strokeWidth={2} />
+              </button>
+              <button
+                onClick={() => handleSetViewMode("table")}
+                title="Table View"
+                className={`p-2.5 transition-colors ${
+                  viewMode === "table"
+                    ? "bg-accent-blue text-white"
+                    : "text-text-secondary hover:bg-glass-white-hover"
+                }`}
+              >
+                <IconTable size={18} strokeWidth={2} />
+              </button>
+            </div>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1023,125 +1063,260 @@ export default function Orders() {
           ) : (
             <div className="relative">
               <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={pageTransitionKey}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6"
-                >
-                  <AnimatePresence mode="popLayout">
-                    {orders.map((order) => {
-                      const statusDisplay = getOrderStatusDisplay(order.status);
+                {viewMode === "grid" ? (
+                  <motion.div
+                    key={`grid-${pageTransitionKey}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6"
+                  >
+                    <AnimatePresence mode="popLayout">
+                      {orders.map((order) => {
+                        const statusDisplay = getOrderStatusDisplay(
+                          order.status,
+                        );
 
-                      return (
-                        <motion.div
-                          key={order.id}
-                          layout
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
-                          onClick={() =>
-                            navigate(`/orders/${order.id}`, {
-                              state: {
-                                returnTo: getOrdersListPath(currentPage),
-                              },
-                            })
-                          }
-                        >
-                          <div className="relative z-10">
-                            <div className="flex justify-between items-start mb-3">
-                              <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
-                                {order.order_id || t("orders.id_pending")}
+                        return (
+                          <motion.div
+                            key={order.id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
+                            onClick={() =>
+                              navigate(`/orders/${order.id}`, {
+                                state: {
+                                  returnTo: getOrdersListPath(currentPage),
+                                },
+                              })
+                            }
+                          >
+                            <div className="relative z-10">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
+                                  {order.order_id || t("orders.id_pending")}
+                                </div>
+
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenModal(order);
+                                    }}
+                                    className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                  >
+                                    <IconEdit size={16} strokeWidth={2} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOrderToDelete(order);
+                                      setIsDeleteModalOpen(true);
+                                    }}
+                                    className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
+                                  >
+                                    <IconTrash size={16} strokeWidth={2} />
+                                  </button>
+                                </div>
                               </div>
 
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenModal(order);
-                                  }}
-                                  className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                              <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
+                                {order.customer_name}
+                              </h3>
+                              <p className="text-sm text-text-muted mb-4">
+                                {t("orders.from")}{" "}
+                                <span className="text-text-secondary">
+                                  {order.order_from || "-"}
+                                </span>
+                              </p>
+                              {order.first_product_url && (
+                                <a
+                                  href={order.first_product_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-accent-blue hover:underline mb-2 block truncate"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <IconEdit size={16} strokeWidth={2} />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOrderToDelete(order);
-                                    setIsDeleteModalOpen(true);
-                                  }}
-                                  className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
+                                  {t("orders.product_link")}
+                                </a>
+                              )}
+
+                              <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
+                                <div>
+                                  <span className="text-text-muted text-xs block">
+                                    {t("orders.date")}
+                                  </span>
+                                  {formatDate(order.order_date)}
+                                </div>
+                                <div>
+                                  <span className="text-text-muted text-xs block">
+                                    {t("orders.qty")}
+                                  </span>
+                                  {order.total_qty || 0}
+                                </div>
+                                <div>
+                                  <span className="text-text-muted text-xs block">
+                                    {t("orders.total")}
+                                  </span>
+                                  {formatPrice(order.total_price || 0)}
+                                </div>
+                                <div>
+                                  <span className="text-text-muted text-xs block">
+                                    {t("orders.weight")}
+                                  </span>
+                                  {order.total_weight || 0} kg
+                                </div>
+                              </div>
+
+                              {/* Status Indicator */}
+                              <div className="flex gap-2 text-xs">
+                                <span
+                                  className={`${statusDisplay.className} px-2 py-0.5 rounded`}
                                 >
-                                  <IconTrash size={16} strokeWidth={2} />
-                                </button>
+                                  {t(statusDisplay.labelKey)}
+                                </span>
                               </div>
                             </div>
-
-                            <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
-                              {order.customer_name}
-                            </h3>
-                            <p className="text-sm text-text-muted mb-4">
-                              {t("orders.from")}{" "}
-                              <span className="text-text-secondary">
-                                {order.order_from || "-"}
-                              </span>
-                            </p>
-                            {order.first_product_url && (
-                              <a
-                                href={order.first_product_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-accent-blue hover:underline mb-2 block truncate"
-                                onClick={(e) => e.stopPropagation()}
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </motion.div>
+                ) : (
+                  /* ── Table View ── */
+                  <motion.div
+                    key={`table-${pageTransitionKey}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="glass-panel overflow-hidden pb-2"
+                  >
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-glass-border">
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                            {t("orders.order_id") || "Order ID"}
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                            {t("orders.customer") || "Customer"}
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                            {t("orders.status") || "Status"}
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden md:table-cell">
+                            {t("orders.date") || "Date"}
+                          </th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden md:table-cell">
+                            {t("orders.qty") || "Qty"}
+                          </th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                            {t("orders.total") || "Total"}
+                          </th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                            {t("orders.weight") || "Weight"}
+                          </th>
+                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                            {t("common.actions") || "Actions"}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <AnimatePresence mode="popLayout">
+                          {orders.map((order) => {
+                            const statusDisplay = getOrderStatusDisplay(
+                              order.status,
+                            );
+                            return (
+                              <motion.tr
+                                key={order.id}
+                                layout
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() =>
+                                  navigate(`/orders/${order.id}`, {
+                                    state: {
+                                      returnTo: getOrdersListPath(currentPage),
+                                    },
+                                  })
+                                }
+                                className="group border-b border-glass-border/50 last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
                               >
-                                {t("orders.product_link")}
-                              </a>
-                            )}
-
-                            <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
-                              <div>
-                                <span className="text-text-muted text-xs block">
-                                  {t("orders.date")}
-                                </span>
-                                {formatDate(order.order_date)}
-                              </div>
-                              <div>
-                                <span className="text-text-muted text-xs block">
-                                  {t("orders.qty")}
-                                </span>
-                                {order.total_qty || 0}
-                              </div>
-                              <div>
-                                <span className="text-text-muted text-xs block">
-                                  {t("orders.total")}
-                                </span>
-                                {formatPrice(order.total_price || 0)}
-                              </div>
-                              <div>
-                                <span className="text-text-muted text-xs block">
-                                  {t("orders.weight")}
-                                </span>
-                                {order.total_weight || 0} kg
-                              </div>
-                            </div>
-
-                            {/* Status Indicator */}
-                            <div className="flex gap-2 text-xs">
-                              <span
-                                className={`${statusDisplay.className} px-2 py-0.5 rounded`}
-                              >
-                                {t(statusDisplay.labelKey)}
-                              </span>
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </motion.div>
+                                <td className="px-4 py-3">
+                                  <span className="font-mono text-xs text-text-secondary bg-glass-white-hover px-2 py-0.5 rounded border border-glass-border">
+                                    {order.order_id || t("orders.id_pending")}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-7 h-7 rounded-lg bg-linear-to-br from-glass-white to-glass-white-hover border border-glass-border flex items-center justify-center text-text-primary font-bold text-xs shrink-0">
+                                      {(order.customer_name || "?")
+                                        .charAt(0)
+                                        .toUpperCase()}
+                                    </div>
+                                    <span className="font-medium text-text-primary group-hover:text-accent-blue transition-colors truncate max-w-[140px]">
+                                      {order.customer_name}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 hidden sm:table-cell">
+                                  <span
+                                    className={`${statusDisplay.className} text-xs px-2 py-0.5 rounded font-semibold`}
+                                  >
+                                    {t(statusDisplay.labelKey)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 hidden md:table-cell text-text-secondary">
+                                  {formatDate(order.order_date) || (
+                                    <span className="text-text-muted">—</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 hidden md:table-cell text-right text-text-secondary">
+                                  {order.total_qty || 0}
+                                </td>
+                                <td className="px-4 py-3 hidden lg:table-cell text-right text-text-secondary">
+                                  {formatPrice(order.total_price || 0)}
+                                </td>
+                                <td className="px-4 py-3 hidden lg:table-cell text-right text-text-secondary">
+                                  {order.total_weight || 0} kg
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenModal(order);
+                                      }}
+                                      className="p-1.5 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                      title="Edit"
+                                    >
+                                      <IconEdit size={15} strokeWidth={2} />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOrderToDelete(order);
+                                        setIsDeleteModalOpen(true);
+                                      }}
+                                      className="p-1.5 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
+                                      title="Delete"
+                                    >
+                                      <IconTrash size={15} strokeWidth={2} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </motion.tr>
+                            );
+                          })}
+                        </AnimatePresence>
+                      </tbody>
+                    </table>
+                  </motion.div>
+                )}
               </AnimatePresence>
 
               <AnimatePresence>
