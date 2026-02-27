@@ -6,6 +6,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import {
+  IconCloudUpload,
   IconHardDrive,
   IconSettings,
   IconSun,
@@ -13,6 +14,7 @@ import {
 } from "../components/icons";
 import SettingsToggle from "../components/pages/settings/SettingsToggle";
 import SettingsAccountPanel from "../components/pages/settings/SettingsAccountPanel";
+import SettingsSyncPanel from "../components/pages/settings/SettingsSyncPanel";
 import SettingsDataPanel from "../components/pages/settings/SettingsDataPanel";
 
 const fadeVariants = {
@@ -81,6 +83,11 @@ export default function Settings() {
       id: "data",
       label: t("settings.data"),
       icon: <IconHardDrive size={18} strokeWidth={1.8} />,
+    },
+    {
+      id: "sync",
+      label: t("settings.sync.tab"),
+      icon: <IconCloudUpload size={18} strokeWidth={1.8} />,
     },
   ];
 
@@ -374,6 +381,7 @@ export default function Settings() {
           )}
 
           {activeCategory === "data" && <SettingsDataPanel />}
+          {activeCategory === "sync" && <SettingsSyncPanel />}
         </div>
       </motion.div>
     </motion.div>

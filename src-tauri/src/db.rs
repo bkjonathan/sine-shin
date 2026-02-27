@@ -119,6 +119,103 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         .execute(pool)
         .await?;
 
+    // ── Sync tables ──────────────────────────────────────────────────
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS sync_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supabase_url TEXT NOT NULL,
+            supabase_anon_key TEXT NOT NULL,
+            supabase_service_key TEXT NOT NULL,
+            is_active INTEGER DEFAULT 1,
+            sync_enabled INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )"
+    ).execute(pool).await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS sync_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_name TEXT NOT NULL,
+            operation TEXT NOT NULL CHECK(operation IN ('INSERT','UPDATE','DELETE')),
+            record_id INTEGER NOT NULL,
+            payload TEXT NOT NULL,
+            status TEXT DEFAULT 'pending' CHECK(status IN ('pending','syncing','synced','failed')),
+            retry_count INTEGER DEFAULT 0,
+            error_message TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            synced_at DATETIME
+        )"
+    ).execute(pool).await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS sync_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            finished_at DATETIME,
+            total_queued INTEGER DEFAULT 0,
+            total_synced INTEGER DEFAULT 0,
+            total_failed INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'running' CHECK(status IN ('running','completed','failed'))
+        )"
+    ).execute(pool).await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)")
+        .execute(pool).await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_sync_queue_table ON sync_queue(table_name)")
+        .execute(pool).await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_sync_queue_created ON sync_queue(created_at)")
+        .execute(pool).await?;
+
+    // ── Add updated_at, deleted_at, synced columns to existing tables ──
+    // NOTE: SQLite does not allow non-constant defaults (like CURRENT_TIMESTAMP)
+    // in ALTER TABLE ADD COLUMN, so we add columns without defaults and backfill.
+    let alter_columns: Vec<(&str, &str, &str)> = vec![
+        ("customers", "updated_at", "DATETIME"),
+        ("customers", "deleted_at", "DATETIME"),
+        ("customers", "synced", "INTEGER DEFAULT 0"),
+        ("orders", "updated_at", "DATETIME"),
+        ("orders", "deleted_at", "DATETIME"),
+        ("orders", "synced", "INTEGER DEFAULT 0"),
+        ("order_items", "updated_at", "DATETIME"),
+        ("order_items", "deleted_at", "DATETIME"),
+        ("order_items", "synced", "INTEGER DEFAULT 0"),
+        ("expenses", "updated_at", "DATETIME"),
+        ("expenses", "deleted_at", "DATETIME"),
+        ("expenses", "synced", "INTEGER DEFAULT 0"),
+        ("shop_settings", "updated_at", "DATETIME"),
+        ("shop_settings", "synced", "INTEGER DEFAULT 0"),
+        ("users", "master_password_hash", "TEXT"),
+    ];
+
+    for (table, col, col_type) in alter_columns {
+        let exists: Option<i64> = sqlx::query_scalar(&format!(
+            "SELECT 1 FROM pragma_table_info('{}') WHERE name = '{}' LIMIT 1",
+            table, col
+        ))
+        .fetch_optional(pool)
+        .await?;
+
+        if exists.is_none() {
+            sqlx::query(&format!(
+                "ALTER TABLE {} ADD COLUMN {} {}",
+                table, col, col_type
+            ))
+            .execute(pool)
+            .await?;
+        }
+    }
+
+    // Backfill updated_at for existing rows where it's NULL
+    for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
+        sqlx::query(&format!(
+            "UPDATE {} SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL",
+            table
+        ))
+        .execute(pool)
+        .await?;
+    }
+
     Ok(())
 }
 

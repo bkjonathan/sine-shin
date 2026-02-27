@@ -3,6 +3,7 @@ use tauri::{AppHandle, Manager};
 use crate::db::DEFAULT_CUSTOMER_ID_PREFIX;
 use crate::models::{Customer, PaginatedCustomers};
 use crate::state::AppDb;
+use crate::sync::enqueue_sync;
 
 const DEFAULT_CUSTOMERS_PAGE_SIZE: i64 = 5;
 const MIN_CUSTOMERS_PAGE_SIZE: i64 = 5;
@@ -85,6 +86,15 @@ pub async fn create_customer(
             .bind(inserted_id)
             .execute(&*pool)
             .await;
+    }
+
+    // Enqueue sync: fetch the full record
+    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
+        .bind(inserted_id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "customers", "INSERT", inserted_id, serde_json::json!(record)).await;
     }
 
     Ok(inserted_id)
@@ -267,18 +277,27 @@ pub async fn update_customer(
     let pool = db.0.lock().await;
 
     sqlx::query(
-        "UPDATE customers SET name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ? WHERE id = ?",
+        "UPDATE customers SET name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, updated_at = datetime('now') WHERE id = ?",
     )
-    .bind(name)
-    .bind(phone)
-    .bind(address)
-    .bind(city)
-    .bind(social_media_url)
-    .bind(platform)
+    .bind(&name)
+    .bind(&phone)
+    .bind(&address)
+    .bind(&city)
+    .bind(&social_media_url)
+    .bind(&platform)
     .bind(id)
     .execute(&*pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    // Enqueue sync
+    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
+        .bind(id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "customers", "UPDATE", id, serde_json::json!(record)).await;
+    }
 
     Ok(())
 }
@@ -288,11 +307,21 @@ pub async fn delete_customer(app: AppHandle, id: i64) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    sqlx::query("DELETE FROM customers WHERE id = ?")
+    // Soft delete: set deleted_at instead of hard delete
+    sqlx::query("UPDATE customers SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
         .bind(id)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Enqueue sync as DELETE
+    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
+        .bind(id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "customers", "DELETE", id, serde_json::json!(record)).await;
+    }
 
     Ok(())
 }

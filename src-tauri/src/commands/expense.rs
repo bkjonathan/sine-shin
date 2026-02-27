@@ -4,6 +4,7 @@ use tauri::{AppHandle, Manager};
 use crate::db::DEFAULT_EXPENSE_ID_PREFIX;
 use crate::models::{Expense, PaginatedExpenses};
 use crate::state::AppDb;
+use crate::sync::enqueue_sync;
 
 const DEFAULT_EXPENSES_PAGE_SIZE: i64 = 10;
 const MIN_EXPENSES_PAGE_SIZE: i64 = 5;
@@ -84,6 +85,15 @@ pub async fn create_expense(
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Enqueue sync
+    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
+        .bind(inserted_id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "expenses", "INSERT", inserted_id, serde_json::json!(record)).await;
+    }
 
     Ok(inserted_id)
 }
@@ -303,7 +313,7 @@ pub async fn update_expense(
     let pool = db.0.lock().await;
 
     sqlx::query(
-        "UPDATE expenses SET title = ?, amount = ?, category = ?, expense_date = ?, payment_method = ?, notes = ? WHERE id = ?",
+        "UPDATE expenses SET title = ?, amount = ?, category = ?, expense_date = ?, payment_method = ?, notes = ?, updated_at = datetime('now') WHERE id = ?",
     )
     .bind(trimmed_title)
     .bind(amount)
@@ -316,6 +326,15 @@ pub async fn update_expense(
     .await
     .map_err(|e| e.to_string())?;
 
+    // Enqueue sync
+    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
+        .bind(id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "expenses", "UPDATE", id, serde_json::json!(record)).await;
+    }
+
     Ok(())
 }
 
@@ -324,11 +343,21 @@ pub async fn delete_expense(app: AppHandle, id: i64) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    sqlx::query("DELETE FROM expenses WHERE id = ?")
+    // Soft delete
+    sqlx::query("UPDATE expenses SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
         .bind(id)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Enqueue sync
+    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
+        .bind(id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "expenses", "DELETE", id, serde_json::json!(record)).await;
+    }
 
     Ok(())
 }

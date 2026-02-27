@@ -12,6 +12,7 @@ import CustomerDetail from "./pages/CustomerDetail";
 import OrderDetail from "./pages/OrderDetail";
 import Settings from "./pages/Settings.tsx";
 import Reports from "./pages/Reports";
+import Help from "./pages/Help";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
 import { AppSettingsProvider } from "./context/AppSettingsContext";
@@ -136,6 +137,7 @@ function AppRoutes() {
         <Route path="/customers/:id" element={<CustomerDetail />} />
         <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/help" element={<Help />} />
       </Route>
 
       {/* Fallback */}

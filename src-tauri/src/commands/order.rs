@@ -9,6 +9,7 @@ use crate::models::{
     PaginatedOrders,
 };
 use crate::state::AppDb;
+use crate::sync::enqueue_sync;
 
 const DEFAULT_ORDERS_PAGE_SIZE: i64 = 5;
 const MIN_ORDERS_PAGE_SIZE: i64 = 5;
@@ -176,6 +177,25 @@ pub async fn create_order(
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
+
+    // Enqueue sync for order
+    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+        .bind(inserted_id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "orders", "INSERT", inserted_id, serde_json::json!(order)).await;
+    }
+    // Enqueue sync for order items
+    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+        .bind(inserted_id)
+        .fetch_all(&*pool)
+        .await
+    {
+        for item in items_db {
+            enqueue_sync(&pool, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
+        }
+    }
 
     Ok(inserted_id)
 }
@@ -469,6 +489,25 @@ pub async fn update_order(
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
+    // Enqueue sync for order
+    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+        .bind(id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "orders", "UPDATE", id, serde_json::json!(order)).await;
+    }
+    // Enqueue sync for order items
+    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+        .bind(id)
+        .fetch_all(&*pool)
+        .await
+    {
+        for item in items_db {
+            enqueue_sync(&pool, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
+        }
+    }
+
     Ok(())
 }
 
@@ -477,11 +516,37 @@ pub async fn delete_order(app: AppHandle, id: i64) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    sqlx::query("DELETE FROM orders WHERE id = ?")
+    // Soft delete
+    sqlx::query("UPDATE orders SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
         .bind(id)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Also soft delete order items
+    sqlx::query("UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ?")
+        .bind(id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Enqueue sync
+    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+        .bind(id)
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "orders", "DELETE", id, serde_json::json!(order)).await;
+    }
+    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+        .bind(id)
+        .fetch_all(&*pool)
+        .await
+    {
+        for item in items_db {
+            enqueue_sync(&pool, "order_items", "DELETE", item.id, serde_json::json!(item)).await;
+        }
+    }
 
     Ok(())
 }

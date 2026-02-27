@@ -3,6 +3,7 @@ use tauri::{AppHandle, Manager};
 use crate::db::copy_logo_to_app_data;
 use crate::models::ShopSettings;
 use crate::state::AppDb;
+use crate::sync::enqueue_sync;
 
 #[tauri::command]
 pub async fn save_shop_setup(
@@ -27,6 +28,14 @@ pub async fn save_shop_setup(
     .execute(&*pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    // Enqueue sync for shop settings
+    if let Ok(record) = sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "shop_settings", "INSERT", record.id, serde_json::json!(record)).await;
+    }
 
     Ok(())
 }
@@ -96,6 +105,14 @@ pub async fn update_shop_settings(
         }
     } else {
         return Err("No shop settings found to update".to_string());
+    }
+
+    // Enqueue sync
+    if let Ok(record) = sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+        .fetch_one(&*pool)
+        .await
+    {
+        enqueue_sync(&pool, "shop_settings", "UPDATE", record.id, serde_json::json!(record)).await;
     }
 
     Ok(())

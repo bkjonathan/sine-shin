@@ -15,6 +15,7 @@ import {
 } from "../../icons";
 import { useAppSettings } from "../../../context/AppSettingsContext";
 import SettingsToggle from "./SettingsToggle";
+import { cleanSyncData } from "../../../api/syncApi";
 
 function SettingsDbStatus() {
   const [status, setStatus] = useState<{
@@ -23,7 +24,10 @@ function SettingsDbStatus() {
     size_bytes: number | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanMsg, setCleanMsg] = useState<string | null>(null);
   const { t } = useTranslation();
+  const { playSound } = useSound();
 
   useEffect(() => {
     fetchStatus();
@@ -44,6 +48,23 @@ function SettingsDbStatus() {
     }
   };
 
+  const handleCleanSync = async () => {
+    try {
+      setCleaning(true);
+      setCleanMsg(null);
+      const count = await cleanSyncData();
+      playSound("success");
+      setCleanMsg(t("settings.data_mgmt.cleaned_count", { count }));
+      setTimeout(() => setCleanMsg(null), 3000);
+      await fetchStatus();
+    } catch (err) {
+      console.error("Failed to clean sync data:", err);
+      playSound("error");
+    } finally {
+      setCleaning(false);
+    }
+  };
+
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return "0 B";
     const k = 1024;
@@ -55,6 +76,11 @@ function SettingsDbStatus() {
   if (loading) {
     return null;
   }
+
+  const syncTables = ["sync_sessions", "sync_queue"];
+  const hasSyncData = status?.tables.some(
+    (t) => syncTables.includes(t.name) && t.row_count > 0,
+  );
 
   return (
     <div className="mb-6 p-4 rounded-xl border border-glass-border bg-glass-white">
@@ -75,14 +101,36 @@ function SettingsDbStatus() {
             )}
           </div>
         </div>
-        <button
-          onClick={fetchStatus}
-          className="p-1.5 hover:bg-glass-white-hover rounded-lg text-text-secondary transition-colors"
-          title={t("settings.data_mgmt.refresh_status")}
-        >
-          <IconRefresh size={14} strokeWidth={2} />
-        </button>
+        <div className="flex items-center gap-1">
+          {hasSyncData && (
+            <button
+              onClick={handleCleanSync}
+              disabled={cleaning}
+              className="p-1.5 hover:bg-red-500/10 hover:text-red-500 rounded-lg text-text-secondary transition-colors disabled:opacity-50"
+              title={t("settings.data_mgmt.clean_sync")}
+            >
+              {cleaning ? (
+                <IconRefresh
+                  size={14}
+                  strokeWidth={2}
+                  className="animate-spin"
+                />
+              ) : (
+                <IconTrash size={14} strokeWidth={2} />
+              )}
+            </button>
+          )}
+          <button
+            onClick={fetchStatus}
+            className="p-1.5 hover:bg-glass-white-hover rounded-lg text-text-secondary transition-colors"
+            title={t("settings.data_mgmt.refresh_status")}
+          >
+            <IconRefresh size={14} strokeWidth={2} />
+          </button>
+        </div>
       </div>
+
+      {cleanMsg && <p className="text-xs text-green-500 mb-3">{cleanMsg}</p>}
 
       <div className="space-y-2">
         {status?.tables.map((table) => (
@@ -91,7 +139,13 @@ function SettingsDbStatus() {
             className="flex items-center justify-between text-xs py-2 border-b border-glass-border last:border-0 last:pb-0"
           >
             <span className="font-mono text-text-secondary">{table.name}</span>
-            <span className="font-medium text-text-primary bg-glass-white-hover px-2 py-0.5 rounded-md">
+            <span
+              className={`font-medium px-2 py-0.5 rounded-md ${
+                syncTables.includes(table.name) && table.row_count > 100
+                  ? "text-amber-600 bg-amber-500/10"
+                  : "text-text-primary bg-glass-white-hover"
+              }`}
+            >
               {table.row_count} {t("settings.data_mgmt.rows")}
             </span>
           </div>

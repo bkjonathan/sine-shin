@@ -5,6 +5,7 @@ import {
   IconBookOpen,
   IconChartColumn,
   IconHome,
+  IconHelpCircle,
   IconList,
   IconSettings,
   IconUsers,
@@ -19,6 +20,7 @@ const navItems = [
   { to: "/account-book", label: "nav.account_book", icon: IconBookOpen },
   { to: "/reports", label: "nav.reports", icon: IconChartColumn },
   { to: "/settings", label: "nav.settings", icon: IconSettings },
+  { to: "/help", label: "nav.help", icon: IconHelpCircle },
 ];
 
 export default function AppNavigation() {
@@ -32,7 +34,9 @@ export default function AppNavigation() {
           key={to}
           to={to}
           onClick={() => playSound("click")}
-          className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""}`}
+          className={({ isActive }) =>
+            `nav-item ${isActive ? "nav-item-active" : ""}`
+          }
         >
           <Icon size={20} strokeWidth={1.8} />
           <span>{t(label)}</span>

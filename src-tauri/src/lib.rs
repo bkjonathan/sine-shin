@@ -3,6 +3,7 @@ mod db;
 mod models;
 mod state;
 pub mod scheduler;
+pub mod sync;
 
 use std::fs;
 use std::process::Command;
@@ -34,6 +35,12 @@ use crate::commands::drive::{disconnect_google_drive, get_drive_connection_statu
 use crate::db::init_db;
 use crate::state::AppDb;
 use crate::scheduler::{setup_scheduler, reload_scheduler};
+use crate::sync::{
+    save_sync_config, get_sync_config, test_sync_connection, trigger_sync_now,
+    get_sync_queue_stats, get_sync_sessions, get_sync_queue_items, retry_failed_items,
+    clear_synced_items, clean_sync_data, set_master_password, verify_master_password, migrate_to_new_database,
+    get_migration_sql, trigger_full_sync, start_sync_loop,
+};
 
 #[tauri::command]
 fn print_window(window: tauri::WebviewWindow) -> tauri::Result<()> {
@@ -163,6 +170,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -201,6 +209,9 @@ pub fn run() {
                 setup_scheduler(app_handle).await
             });
             app.manage(scheduler_state);
+
+            // Start the sync background loop
+            start_sync_loop(app.handle().clone());
 
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
@@ -249,7 +260,22 @@ pub fn run() {
             get_drive_connection_status,
             disconnect_google_drive,
             trigger_drive_backup,
-            reload_scheduler
+            reload_scheduler,
+            save_sync_config,
+            get_sync_config,
+            test_sync_connection,
+            trigger_sync_now,
+            get_sync_queue_stats,
+            get_sync_sessions,
+            get_sync_queue_items,
+            retry_failed_items,
+            clear_synced_items,
+            set_master_password,
+            verify_master_password,
+            migrate_to_new_database,
+            get_migration_sql,
+            trigger_full_sync,
+            clean_sync_data
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
