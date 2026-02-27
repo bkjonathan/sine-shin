@@ -94,6 +94,13 @@
     "six_months": "6 Months",
     "this_year": "This Year",
     "custom": "Custom",
+    "order_status": "Order Status",
+    "status_all": "All",
+    "status_pending": "Pending",
+    "status_confirmed": "Confirmed",
+    "status_shipping": "Shipping",
+    "status_completed": "Completed",
+    "status_cancelled": "Cancelled",
     "date_from": "From",
     "date_to": "To",
     "actions": {

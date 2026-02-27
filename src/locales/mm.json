@@ -94,6 +94,13 @@
     "six_months": "၆ လ",
     "this_year": "ဤနှစ်",
     "custom": "စိတ်ကြိုက်",
+    "order_status": "အမှာစာ အခြေအနေ",
+    "status_all": "အားလုံး",
+    "status_pending": "ဆိုင်းငံ့",
+    "status_confirmed": "အတည်ပြုပြီး",
+    "status_shipping": "ပို့ဆောင်နေဆဲ",
+    "status_completed": "ပြီးစီး",
+    "status_cancelled": "ပယ်ဖျက်ပြီး",
     "date_from": "မှ",
     "date_to": "ထိ",
     "actions": {

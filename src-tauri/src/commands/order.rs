@@ -557,6 +557,7 @@ pub async fn get_dashboard_stats(
     date_from: Option<String>,
     date_to: Option<String>,
     date_field: Option<String>,
+    status: Option<String>,
 ) -> Result<DashboardStats, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -570,29 +571,43 @@ pub async fn get_dashboard_stats(
     let has_range = date_from.is_some() && date_to.is_some();
     let df = date_from.unwrap_or_default();
     let dt = date_to.unwrap_or_default();
+    let normalized_status = normalize_order_status_filter(status)?;
 
-    // Helper: build a WHERE clause fragment for the orders table (alias optional)
+    // Helper: build a WHERE clause fragment for the orders table
     let orders_where = |alias: &str| -> String {
-        if !has_range {
-            return String::new();
+        let mut conditions = Vec::new();
+
+        if has_range {
+            let prefix = if alias.is_empty() {
+                col.to_string()
+            } else {
+                format!("{}.{}", alias, col)
+            };
+            conditions.push(format!("{} >= '{}' AND {} <= '{}'", prefix, df, prefix, dt));
         }
-        let prefix = if alias.is_empty() {
-            col.to_string()
+
+        if let Some(s) = &normalized_status {
+            let prefix = if alias.is_empty() {
+                "status".to_string()
+            } else {
+                format!("{}.status", alias)
+            };
+            conditions.push(format!("{} = '{}'", prefix, s));
+        }
+
+        if conditions.is_empty() {
+            String::new()
         } else {
-            format!("{}.{}", alias, col)
-        };
-        format!(" WHERE {} >= '{}' AND {} <= '{}'", prefix, df, prefix, dt)
+            format!(" WHERE {}", conditions.join(" AND "))
+        }
     };
 
-    // 1) Total revenue — join order_items through orders for date filter
-    let revenue_sql = if has_range {
-        format!(
-            "SELECT COALESCE(SUM(oi.price * oi.product_qty), 0.0) FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id WHERE o.{} >= '{}' AND o.{} <= '{}'",
-            col, df, col, dt
-        )
-    } else {
-        "SELECT COALESCE(SUM(price * product_qty), 0.0) FROM order_items".to_string()
-    };
+    // 1) Total revenue
+    let revenue_where = orders_where("o");
+    let revenue_sql = format!(
+        "SELECT COALESCE(SUM(oi.price * oi.product_qty), 0.0) FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id{}",
+        revenue_where
+    );
     let total_revenue: (f64,) = sqlx::query_as(&revenue_sql)
         .fetch_one(&*pool)
         .await
@@ -630,40 +645,25 @@ pub async fn get_dashboard_stats(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 4) Total customers (distinct customers from filtered orders)
-    let customers_sql = if has_range {
-        format!(
-            "SELECT COUNT(DISTINCT customer_id) FROM orders WHERE {} >= '{}' AND {} <= '{}'",
-            col, df, col, dt
-        )
-    } else {
-        "SELECT COUNT(*) FROM customers".to_string()
-    };
+    // 4) Total customers
+    let customers_sql = format!("SELECT COUNT(DISTINCT customer_id) FROM orders{}", orders_where(""));
     let total_customers: (i64,) = sqlx::query_as(&customers_sql)
         .fetch_one(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
     // 5) Total cargo fee
-    let cargo_sql = if has_range {
-        format!(
-            "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 THEN cargo_fee ELSE 0 END), 0.0) FROM orders WHERE {} >= '{}' AND {} <= '{}'",
-            col, df, col, dt
-        )
-    } else {
-        "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 THEN cargo_fee ELSE 0 END), 0.0) FROM orders".to_string()
-    };
+    let cargo_sql = format!(
+        "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 THEN cargo_fee ELSE 0 END), 0.0) FROM orders{}", 
+        orders_where("")
+    );
     let total_cargo_fee: (f64,) = sqlx::query_as(&cargo_sql)
         .fetch_one(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
     // 6) Recent orders
-    let recent_where = if has_range {
-        format!(" WHERE o.{} >= '{}' AND o.{} <= '{}'", col, df, col, dt)
-    } else {
-        String::new()
-    };
+    let recent_where = orders_where("o");
     let query = format!(
         "{}{} {} ORDER BY o.created_at DESC LIMIT 5",
         ORDER_WITH_CUSTOMER_SELECT, recent_where, ORDER_WITH_CUSTOMER_GROUP_BY

@@ -13,6 +13,9 @@ import DashboardDateFilter, {
   computeRange,
   type DateFilterValue,
 } from "../components/pages/dashobard/DashboardDateFilter";
+import DashboardStatusFilter, {
+  DashboardStatus,
+} from "../components/pages/dashobard/DashboardStatusFilter";
 import { DashboardStats, ShopData } from "../types/dashboard";
 
 // ── Animation variants ──
@@ -51,32 +54,39 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<DateFilterValue>(DEFAULT_FILTER);
+  const [statusFilter, setStatusFilter] = useState<DashboardStatus>("all");
 
-  const loadData = useCallback(async (f: DateFilterValue) => {
-    try {
-      setLoading(true);
-      const [shopData, dashboardStats] = await Promise.all([
-        invoke<ShopData>("get_shop_settings"),
-        invoke<DashboardStats>("get_dashboard_stats", {
-          dateFrom: f.dateFrom || null,
-          dateTo: f.dateTo || null,
-          dateField: f.dateField,
-        }),
-      ]);
+  const loadData = useCallback(
+    async (f: DateFilterValue, s: DashboardStatus) => {
+      try {
+        setLoading(true);
+        const [shopData, dashboardStats] = await Promise.all([
+          invoke<ShopData>("get_shop_settings"),
+          invoke<DashboardStats>("get_dashboard_stats", {
+            dateFrom: f.dateFrom || null,
+            dateTo: f.dateTo || null,
+            dateField: f.dateField,
+            status: s === "all" ? null : s,
+          }),
+        ]);
 
-      setShop(shopData);
-      setStats(dashboardStats);
-      setLogoSrc(shopData.logo_path ? convertFileSrc(shopData.logo_path) : "");
-    } catch (err) {
-      console.error("Failed to load dashboard data:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        setShop(shopData);
+        setStats(dashboardStats);
+        setLogoSrc(
+          shopData.logo_path ? convertFileSrc(shopData.logo_path) : "",
+        );
+      } catch (err) {
+        console.error("Failed to load dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    void loadData(filter);
-  }, [loadData, filter]);
+    void loadData(filter, statusFilter);
+  }, [loadData, filter, statusFilter]);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -114,6 +124,13 @@ export default function Dashboard() {
 
       <motion.div variants={itemVariants}>
         <DashboardDateFilter value={filter} onChange={handleFilterChange} />
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <DashboardStatusFilter
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
       </motion.div>
 
       <motion.div variants={itemVariants}>
