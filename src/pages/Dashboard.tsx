@@ -23,16 +23,16 @@ const containerVariants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.08 },
+    transition: { staggerChildren: 0.06 },
   },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 16 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
+    transition: { type: "spring" as const, stiffness: 400, damping: 28 },
   },
 };
 
@@ -44,6 +44,88 @@ const DEFAULT_FILTER: DateFilterValue = {
   dateField: "order_date",
   preset: "this_month",
 };
+
+// ── Shimmer Loading Skeleton ──
+function DashboardSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto animate-pulse">
+      {/* Header skeleton */}
+      <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-glass-white" />
+          <div>
+            <div className="h-6 w-56 bg-glass-white rounded-lg mb-1.5" />
+          </div>
+        </div>
+        <div className="w-9 h-9 rounded-xl bg-glass-white" />
+      </div>
+
+      {/* Toolbar skeleton */}
+      <div className="glass-panel p-3.5 mb-4">
+        <div className="flex items-center gap-2">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-6 w-16 bg-glass-white rounded-lg" />
+          ))}
+          <div className="w-px h-5 bg-glass-border mx-1" />
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-6 w-14 bg-glass-white rounded-lg" />
+          ))}
+        </div>
+      </div>
+
+      {/* Stats skeleton */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+        {[...Array(5)].map((_, i) => (
+          <div
+            key={i}
+            className="rounded-2xl p-4 bg-glass-white border border-glass-border"
+          >
+            <div className="flex items-center gap-2.5 mb-2.5">
+              <div className="w-8 h-8 rounded-xl bg-glass-white-hover" />
+              <div className="h-3 w-16 bg-glass-white-hover rounded" />
+            </div>
+            <div className="h-6 w-24 bg-glass-white-hover rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom section skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-2 glass-panel p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="h-4 w-28 bg-glass-white-hover rounded" />
+            <div className="h-3 w-14 bg-glass-white-hover rounded" />
+          </div>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-2.5 mb-1">
+              <div className="w-8 h-8 rounded-lg bg-glass-white-hover shrink-0" />
+              <div className="flex-1">
+                <div className="h-3.5 w-28 bg-glass-white-hover rounded mb-1" />
+                <div className="h-2.5 w-16 bg-glass-white-hover rounded" />
+              </div>
+              <div className="h-3.5 w-20 bg-glass-white-hover rounded" />
+              <div className="h-3 w-14 bg-glass-white-hover rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="glass-panel p-5">
+          <div className="h-4 w-24 bg-glass-white-hover rounded mb-4" />
+          <div className="grid grid-cols-2 gap-2.5">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="flex flex-col items-center gap-2 p-4 rounded-xl bg-glass-white border border-glass-border"
+              >
+                <div className="w-10 h-10 rounded-xl bg-glass-white-hover" />
+                <div className="h-3 w-14 bg-glass-white-hover rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { formatPrice } = useAppSettings();
@@ -98,11 +180,7 @@ export default function Dashboard() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="p-8 text-center text-text-muted">
-        Loading dashboard...
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const recentOrders = stats?.recent_orders ?? [];
@@ -122,15 +200,21 @@ export default function Dashboard() {
         />
       </motion.div>
 
+      {/* ── Merged Toolbar: Date Filter + Status Filter ── */}
       <motion.div variants={itemVariants}>
-        <DashboardDateFilter value={filter} onChange={handleFilterChange} />
-      </motion.div>
-
-      <motion.div variants={itemVariants}>
-        <DashboardStatusFilter
-          value={statusFilter}
-          onChange={setStatusFilter}
-        />
+        <div className="glass-panel p-3.5 mb-4 space-y-2.5">
+          <DashboardDateFilter value={filter} onChange={handleFilterChange} />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider shrink-0">
+              Status
+            </span>
+            <div className="w-px h-4 bg-glass-border" />
+            <DashboardStatusFilter
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+          </div>
+        </div>
       </motion.div>
 
       <motion.div variants={itemVariants}>
@@ -138,7 +222,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* ── Two-column bottom section ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <motion.div variants={itemVariants} className="lg:col-span-2">
           <DashboardRecentActivity
             orders={recentOrders}

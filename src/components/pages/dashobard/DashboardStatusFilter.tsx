@@ -8,6 +8,15 @@ interface DashboardStatusFilterProps {
   onChange: (value: DashboardStatus) => void;
 }
 
+const STATUS_COLORS: Record<DashboardStatus, string> = {
+  all: "bg-accent-blue",
+  pending: "bg-amber-400",
+  confirmed: "bg-emerald-400",
+  shipping: "bg-sky-400",
+  completed: "bg-green-500",
+  cancelled: "bg-red-400",
+};
+
 const STATUSES: DashboardStatus[] = [
   "all",
   "pending",
@@ -24,34 +33,29 @@ export default function DashboardStatusFilter({
   const { t } = useTranslation();
 
   return (
-    <div className="mb-6 glass-panel p-4">
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-text-muted font-medium min-w-max">
-          {t("dashboard.order_status", "Order Status")}:
-        </span>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {STATUSES.map((status) => (
-            <button
-              key={status}
-              type="button"
-              onClick={() => onChange(status)}
-              className={`
-                px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border capitalize
-                ${
-                  value === status
-                    ? "bg-accent-blue/20 text-accent-blue border-accent-blue/40 shadow-[0_0_12px_rgba(91,127,255,0.15)]"
-                    : "bg-glass-white border-glass-border text-text-secondary hover:bg-glass-white-hover hover:text-text-primary"
-                }
-              `}
-            >
-              {t(
-                `dashboard.status_${status}`,
-                status === "all" ? "All" : status,
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="flex items-center gap-1 flex-wrap">
+      {STATUSES.map((status) => (
+        <button
+          key={status}
+          type="button"
+          onClick={() => onChange(status)}
+          className={`
+            flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 border capitalize
+            ${
+              value === status
+                ? "bg-accent-blue/15 text-accent-blue border-accent-blue/30 shadow-[0_0_8px_rgba(91,127,255,0.1)]"
+                : "bg-glass-white border-glass-border text-text-muted hover:bg-glass-white-hover hover:text-text-primary"
+            }
+          `}
+        >
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${STATUS_COLORS[status]} ${
+              value === status ? "opacity-100" : "opacity-50"
+            }`}
+          />
+          {t(`dashboard.status_${status}`, status === "all" ? "All" : status)}
+        </button>
+      ))}
     </div>
   );
 }

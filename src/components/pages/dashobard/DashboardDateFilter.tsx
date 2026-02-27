@@ -42,7 +42,7 @@ function computeRange(preset: DatePreset): {
   switch (preset) {
     case "this_week": {
       const day = today.getDay();
-      const diff = day === 0 ? 6 : day - 1; // Monday = 0
+      const diff = day === 0 ? 6 : day - 1;
       const monday = new Date(today);
       monday.setDate(today.getDate() - diff);
       return { dateFrom: formatDate(monday), dateTo };
@@ -152,121 +152,114 @@ export default function DashboardDateFilter({
   );
 
   return (
-    <div className="mb-6 glass-panel p-4 relative z-50">
-      <div className="flex flex-col gap-3">
-        {/* Row 1: Presets + Date field selector */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          {/* Preset pills */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => handlePreset(preset)}
-                className={`
-                  px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border
-                  ${
-                    value.preset === preset
-                      ? "bg-accent-blue/20 text-accent-blue border-accent-blue/40 shadow-[0_0_12px_rgba(91,127,255,0.15)]"
-                      : "bg-glass-white border-glass-border text-text-secondary hover:bg-glass-white-hover hover:text-text-primary"
-                  }
-                `}
-              >
-                {t(PRESET_KEYS[preset])}
-              </button>
-            ))}
-          </div>
-
-          {/* Date field selector */}
-          <div className="relative">
+    <div className="relative z-50">
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Preset chips */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {PRESETS.map((preset) => (
             <button
+              key={preset}
               type="button"
-              onClick={() => setFieldOpen(!fieldOpen)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-glass-white border border-glass-border text-text-secondary hover:bg-glass-white-hover hover:text-text-primary transition-all duration-200"
+              onClick={() => handlePreset(preset)}
+              className={`
+                px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 border
+                ${
+                  value.preset === preset
+                    ? "bg-accent-blue/15 text-accent-blue border-accent-blue/30 shadow-[0_0_8px_rgba(91,127,255,0.1)]"
+                    : "bg-glass-white border-glass-border text-text-muted hover:bg-glass-white-hover hover:text-text-primary"
+                }
+              `}
             >
-              <Calendar size={13} className="opacity-60" />
-              <span>
-                {t("dashboard.filter_by")}:{" "}
-                {value.dateField === "order_date"
-                  ? t("dashboard.order_date_field")
-                  : t("dashboard.created_date_field")}
-              </span>
-              <ChevronDown
-                size={13}
-                className={`opacity-60 transition-transform duration-200 ${fieldOpen ? "rotate-180" : ""}`}
-              />
+              {t(PRESET_KEYS[preset])}
             </button>
-
-            {fieldOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setFieldOpen(false)}
-                />
-                <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] glass-panel border border-glass-border-light shadow-xl overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => handleFieldChange("order_date")}
-                    className={`w-full text-left px-4 py-2.5 text-xs transition-colors ${
-                      value.dateField === "order_date"
-                        ? "bg-accent-blue/10 text-accent-blue font-medium"
-                        : "text-text-secondary hover:bg-glass-white-hover hover:text-text-primary"
-                    }`}
-                  >
-                    {t("dashboard.order_date_field")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleFieldChange("created_at")}
-                    className={`w-full text-left px-4 py-2.5 text-xs transition-colors ${
-                      value.dateField === "created_at"
-                        ? "bg-accent-blue/10 text-accent-blue font-medium"
-                        : "text-text-secondary hover:bg-glass-white-hover hover:text-text-primary"
-                    }`}
-                  >
-                    {t("dashboard.created_date_field")}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          ))}
         </div>
 
-        {/* Row 2: Custom date pickers (only when custom is selected) */}
+        {/* Separator */}
+        <div className="w-px h-5 bg-glass-border mx-1" />
+
+        {/* Date field selector */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setFieldOpen(!fieldOpen)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-glass-white border border-glass-border text-text-muted hover:bg-glass-white-hover hover:text-text-primary transition-all duration-200"
+          >
+            <Calendar size={12} className="opacity-60" />
+            <span>
+              {value.dateField === "order_date"
+                ? t("dashboard.order_date_field")
+                : t("dashboard.created_date_field")}
+            </span>
+            <ChevronDown
+              size={12}
+              className={`opacity-60 transition-transform duration-200 ${fieldOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {fieldOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setFieldOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-1 z-50 min-w-[150px] glass-panel border border-glass-border-light shadow-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => handleFieldChange("order_date")}
+                  className={`w-full text-left px-3.5 py-2 text-xs transition-colors ${
+                    value.dateField === "order_date"
+                      ? "bg-accent-blue/10 text-accent-blue font-medium"
+                      : "text-text-secondary hover:bg-glass-white-hover hover:text-text-primary"
+                  }`}
+                >
+                  {t("dashboard.order_date_field")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFieldChange("created_at")}
+                  className={`w-full text-left px-3.5 py-2 text-xs transition-colors ${
+                    value.dateField === "created_at"
+                      ? "bg-accent-blue/10 text-accent-blue font-medium"
+                      : "text-text-secondary hover:bg-glass-white-hover hover:text-text-primary"
+                  }`}
+                >
+                  {t("dashboard.created_date_field")}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Custom date pickers inline */}
         {value.preset === "custom" && (
-          <div className="flex items-center gap-3 flex-wrap">
+          <>
+            <div className="w-px h-5 bg-glass-border mx-1" />
             <div className="flex items-center gap-2">
-              <span className="text-xs text-text-muted font-medium">
-                {t("dashboard.date_from")}
-              </span>
-              <div className="w-40">
+              <div className="w-36">
                 <DatePicker
                   selected={customFromDate}
                   onChange={handleCustomFrom}
                   dateFormat="yyyy-MM-dd"
-                  placeholderText="YYYY-MM-DD"
+                  placeholderText="From"
                   maxDate={customToDate || new Date()}
-                  className="py-1.5! px-2.5! text-xs! rounded-lg!"
+                  className="py-1! px-2! text-xs! rounded-lg!"
                 />
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-text-muted font-medium">
-                {t("dashboard.date_to")}
-              </span>
-              <div className="w-40">
+              <span className="text-xs text-text-muted">–</span>
+              <div className="w-36">
                 <DatePicker
                   selected={customToDate}
                   onChange={handleCustomTo}
                   dateFormat="yyyy-MM-dd"
-                  placeholderText="YYYY-MM-DD"
+                  placeholderText="To"
                   minDate={customFromDate || undefined}
                   maxDate={new Date()}
-                  className="py-1.5! px-2.5! text-xs! rounded-lg!"
+                  className="py-1! px-2! text-xs! rounded-lg!"
                 />
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
