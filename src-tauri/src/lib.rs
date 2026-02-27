@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod models;
 mod state;
+pub mod scheduler;
 
 use std::fs;
 use std::process::Command;
@@ -29,8 +30,10 @@ use crate::commands::order::{
 use crate::commands::settings::{get_app_settings, update_app_settings, AppSettings};
 use crate::commands::shop::{get_shop_settings, save_shop_setup, update_shop_settings};
 use crate::commands::system::{backup_database, get_db_status, reset_app_data, restore_database};
+use crate::commands::drive::{disconnect_google_drive, get_drive_connection_status, start_google_oauth, trigger_drive_backup};
 use crate::db::init_db;
 use crate::state::AppDb;
+use crate::scheduler::{setup_scheduler, reload_scheduler};
 
 #[tauri::command]
 fn print_window(window: tauri::WebviewWindow) -> tauri::Result<()> {
@@ -193,6 +196,12 @@ pub fn run() {
 
             app.manage(AppDb(Arc::new(Mutex::new(pool))));
 
+            let app_handle = app.handle().clone();
+            let scheduler_state = tauri::async_runtime::block_on(async {
+                setup_scheduler(app_handle).await
+            });
+            app.manage(scheduler_state);
+
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_decorations(false);
@@ -233,10 +242,14 @@ pub fn run() {
             delete_order,
             get_dashboard_stats,
             get_app_settings,
-            get_app_settings,
             update_app_settings,
             print_window,
-            print_invoice_direct
+            print_invoice_direct,
+            start_google_oauth,
+            get_drive_connection_status,
+            disconnect_google_drive,
+            trigger_drive_backup,
+            reload_scheduler
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

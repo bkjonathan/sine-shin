@@ -12,6 +12,9 @@ export interface AppSettings {
   exchange_currency_symbol: string;
   invoice_printer_name: string;
   silent_invoice_print: boolean;
+  auto_backup: boolean;
+  backup_frequency: string;
+  backup_time: string;
 }
 
 interface AppSettingsContextType extends AppSettings {
@@ -22,6 +25,9 @@ interface AppSettingsContextType extends AppSettings {
   setExchangeCurrencySymbol: (symbol: string) => void;
   setInvoicePrinterName: (name: string) => void;
   setSilentInvoicePrint: (enabled: boolean) => void;
+  setAutoBackup: (enabled: boolean) => void;
+  setBackupFrequency: (frequency: string) => void;
+  setBackupTime: (time: string) => void;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   formatPrice: (amount: number) => string;
 }
@@ -41,6 +47,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   exchange_currency_symbol: "Ks",
   invoice_printer_name: "",
   silent_invoice_print: true,
+  auto_backup: true,
+  backup_frequency: "never",
+  backup_time: "23:00",
 };
 
 export function AppSettingsProvider({
@@ -69,11 +78,11 @@ export function AppSettingsProvider({
   const updateSettings = async (newSettings: Partial<AppSettings>) => {
     try {
       if (window.__TAURI_INTERNALS__) {
-        // Optimistic update
         const updated = { ...settings, ...newSettings };
         setSettings(updated);
 
         await invoke("update_app_settings", { settings: updated });
+        await invoke("reload_scheduler");
       }
     } catch (err) {
       console.error("Failed to update settings:", err);
@@ -94,6 +103,11 @@ export function AppSettingsProvider({
     updateSettings({ invoice_printer_name: name });
   const setSilentInvoicePrint = (enabled: boolean) =>
     updateSettings({ silent_invoice_print: enabled });
+  const setAutoBackup = (enabled: boolean) =>
+    updateSettings({ auto_backup: enabled });
+  const setBackupFrequency = (frequency: string) =>
+    updateSettings({ backup_frequency: frequency });
+  const setBackupTime = (time: string) => updateSettings({ backup_time: time });
 
   const formatPrice = (amount: number) => {
     // If currency symbol is provided, use custom formatting
@@ -125,6 +139,9 @@ export function AppSettingsProvider({
     setExchangeCurrencySymbol,
     setInvoicePrinterName,
     setSilentInvoicePrint,
+    setAutoBackup,
+    setBackupFrequency,
+    setBackupTime,
     updateSettings,
     formatPrice,
   };

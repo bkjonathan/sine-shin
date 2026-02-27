@@ -41,7 +41,6 @@ export default function Settings() {
 
   const [notifications, setNotifications] = useState(true);
   const [orderAlerts, setOrderAlerts] = useState(true);
-  const [autoBackup, setAutoBackup] = useState(true);
 
   const { soundEnabled, toggleSound, playSound } = useSound();
 
@@ -148,12 +147,18 @@ export default function Settings() {
               <h2 className="text-lg font-semibold text-text-primary mb-1">
                 {t("settings.general")}
               </h2>
-              <p className="text-xs text-text-muted mb-5">{t("settings.general_desc")}</p>
+              <p className="text-xs text-text-muted mb-5">
+                {t("settings.general_desc")}
+              </p>
 
               <div className="flex items-center justify-between py-4 border-b border-glass-border">
                 <div className="flex-1 mr-4">
-                  <p className="text-sm font-medium text-text-primary">{t("settings.language")}</p>
-                  <p className="text-xs text-text-muted mt-0.5">{t("settings.language_label")}</p>
+                  <p className="text-sm font-medium text-text-primary">
+                    {t("settings.language")}
+                  </p>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    {t("settings.language_label")}
+                  </p>
                 </div>
                 <div className="w-40">
                   <Select
@@ -187,7 +192,9 @@ export default function Settings() {
                       className="input-liquid w-full uppercase"
                       placeholder={t("settings.currency_code_placeholder")}
                       value={currency}
-                      onChange={(event) => setCurrency(event.target.value.toUpperCase())}
+                      onChange={(event) =>
+                        setCurrency(event.target.value.toUpperCase())
+                      }
                     />
                   </div>
                   <div>
@@ -199,7 +206,9 @@ export default function Settings() {
                       className="input-liquid w-full"
                       placeholder={t("settings.currency_symbol_placeholder")}
                       value={currency_symbol}
-                      onChange={(event) => setCurrencySymbol(event.target.value)}
+                      onChange={(event) =>
+                        setCurrencySymbol(event.target.value)
+                      }
                     />
                   </div>
                   <div>
@@ -209,7 +218,9 @@ export default function Settings() {
                     <Input
                       type="text"
                       className="input-liquid w-full uppercase"
-                      placeholder={t("settings.exchange_currency_code_placeholder")}
+                      placeholder={t(
+                        "settings.exchange_currency_code_placeholder",
+                      )}
                       value={exchange_currency}
                       onChange={(event) =>
                         setExchangeCurrency(event.target.value.toUpperCase())
@@ -223,9 +234,13 @@ export default function Settings() {
                     <Input
                       type="text"
                       className="input-liquid w-full"
-                      placeholder={t("settings.exchange_currency_symbol_placeholder")}
+                      placeholder={t(
+                        "settings.exchange_currency_symbol_placeholder",
+                      )}
                       value={exchange_currency_symbol}
-                      onChange={(event) => setExchangeCurrencySymbol(event.target.value)}
+                      onChange={(event) =>
+                        setExchangeCurrencySymbol(event.target.value)
+                      }
                     />
                   </div>
                 </div>
@@ -242,9 +257,13 @@ export default function Settings() {
                   <Input
                     type="text"
                     className="input-liquid w-full"
-                    placeholder={t("settings.invoice_print.printer_name_placeholder")}
+                    placeholder={t(
+                      "settings.invoice_print.printer_name_placeholder",
+                    )}
                     value={invoice_printer_name}
-                    onChange={(event) => setInvoicePrinterName(event.target.value)}
+                    onChange={(event) =>
+                      setInvoicePrinterName(event.target.value)
+                    }
                   />
                   <p className="text-xs text-text-muted mt-1.5">
                     {t("settings.invoice_print.printer_help")}
@@ -274,12 +293,6 @@ export default function Settings() {
                     playSound("switch");
                   }
                 }}
-              />
-              <SettingsToggle
-                label={t("settings.auto_backup")}
-                description={t("settings.auto_backup_desc")}
-                checked={autoBackup}
-                onChange={setAutoBackup}
               />
               <SettingsToggle
                 label={t("settings.invoice_print.silent_label")}

@@ -21,6 +21,12 @@ pub struct AppSettings {
     pub invoice_printer_name: String,
     #[serde(default = "default_silent_invoice_print")]
     pub silent_invoice_print: bool,
+    #[serde(default = "default_auto_backup")]
+    pub auto_backup: bool,
+    #[serde(default = "default_backup_frequency")]
+    pub backup_frequency: String,
+    #[serde(default = "default_backup_time")]
+    pub backup_time: String,
 }
 
 fn default_accent_color() -> String {
@@ -47,6 +53,18 @@ fn default_silent_invoice_print() -> bool {
     true
 }
 
+fn default_auto_backup() -> bool {
+    true
+}
+
+fn default_backup_frequency() -> String {
+    "never".to_string()
+}
+
+fn default_backup_time() -> String {
+    "23:00".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -60,6 +78,9 @@ impl Default for AppSettings {
             exchange_currency_symbol: "Ks".to_string(),
             invoice_printer_name: String::new(),
             silent_invoice_print: true,
+            auto_backup: true,
+            backup_frequency: "never".to_string(),
+            backup_time: "23:00".to_string(),
         }
     }
 }

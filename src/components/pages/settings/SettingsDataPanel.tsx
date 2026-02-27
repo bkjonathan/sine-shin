@@ -3,15 +3,18 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { AnimatePresence, motion } from "framer-motion";
-import { Button, Input } from "../../ui";
+import { Button, Input, Select } from "../../ui";
 import { useSound } from "../../../context/SoundContext";
 import { RESET_APP_CODE } from "../../../cheapcode";
 import {
+  IconCloud,
   IconDownload,
   IconRefresh,
   IconTrash,
   IconTriangleAlert,
 } from "../../icons";
+import { useAppSettings } from "../../../context/AppSettingsContext";
+import SettingsToggle from "./SettingsToggle";
 
 function SettingsDbStatus() {
   const [status, setStatus] = useState<{
@@ -108,6 +111,86 @@ export default function SettingsDataPanel() {
   const [restoring, setRestoring] = useState(false);
   const { playSound } = useSound();
   const { t } = useTranslation();
+
+  const {
+    auto_backup,
+    setAutoBackup,
+    backup_frequency,
+    setBackupFrequency,
+    backup_time,
+    setBackupTime,
+  } = useAppSettings();
+
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveEmail, setDriveEmail] = useState<string | null>(null);
+  const [checkingDrive, setCheckingDrive] = useState(true);
+  const [driveConnecting, setDriveConnecting] = useState(false);
+  const [triggeringBackup, setTriggeringBackup] = useState(false);
+
+  useEffect(() => {
+    checkDriveStatus();
+  }, []);
+
+  const checkDriveStatus = async () => {
+    try {
+      const status = await invoke<{ connected: boolean; email: string | null }>(
+        "get_drive_connection_status",
+      );
+      setDriveConnected(status.connected);
+      setDriveEmail(status.email);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCheckingDrive(false);
+    }
+  };
+
+  const handleConnectDrive = async () => {
+    try {
+      setDriveConnecting(true);
+      const status = await invoke<{ connected: boolean; email: string | null }>(
+        "start_google_oauth",
+      );
+      setDriveConnected(status.connected);
+      setDriveEmail(status.email);
+      playSound("success");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to connect to Google Drive");
+      playSound("error");
+    } finally {
+      setDriveConnecting(false);
+    }
+  };
+
+  const handleDisconnectDrive = async () => {
+    try {
+      await invoke("disconnect_google_drive");
+      setDriveConnected(false);
+      setDriveEmail(null);
+      playSound("click");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleTriggerCloudBackup = async () => {
+    try {
+      setTriggeringBackup(true);
+      setError(null);
+      setSuccessMsg(null);
+      await invoke("trigger_drive_backup");
+      playSound("success");
+      setSuccessMsg("Backup successfully uploaded to Google Drive");
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      console.error(err);
+      setError(String(err));
+      playSound("error");
+    } finally {
+      setTriggeringBackup(false);
+    }
+  };
 
   const handleReset = async () => {
     if (code !== RESET_APP_CODE) {
@@ -212,7 +295,9 @@ export default function SettingsDataPanel() {
       <h2 className="text-lg font-semibold text-text-primary mb-1">
         {t("settings.data_mgmt.title")}
       </h2>
-      <p className="text-xs text-text-muted mb-5">{t("settings.data_mgmt.subtitle")}</p>
+      <p className="text-xs text-text-muted mb-5">
+        {t("settings.data_mgmt.subtitle")}
+      </p>
 
       <SettingsDbStatus />
 
@@ -226,7 +311,9 @@ export default function SettingsDataPanel() {
               <h3 className="text-sm font-semibold text-text-primary mb-1">
                 {t("settings.data_mgmt.backup_title")}
               </h3>
-              <p className="text-xs text-text-muted mb-4">{t("settings.data_mgmt.backup_desc")}</p>
+              <p className="text-xs text-text-muted mb-4">
+                {t("settings.data_mgmt.backup_desc")}
+              </p>
 
               <div className="flex items-center gap-3">
                 <Button
@@ -245,14 +332,128 @@ export default function SettingsDataPanel() {
                   variant="ghost"
                   className="px-4 py-2 text-xs font-semibold flex items-center gap-2"
                   loading={restoring}
-                  loadingText={t("settings.data_mgmt.restoring", "Restoring...")}
+                  loadingText={t(
+                    "settings.data_mgmt.restoring",
+                    "Restoring...",
+                  )}
                 >
                   {t("settings.data_mgmt.restore_btn", "Restore")}
                 </Button>
 
-                {successMsg && <span className="text-xs text-green-500">{successMsg}</span>}
+                {successMsg && (
+                  <span className="text-xs text-green-500">{successMsg}</span>
+                )}
                 {error && <span className="text-xs text-red-500">{error}</span>}
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500">
+              <IconCloud size={20} strokeWidth={2} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-text-primary mb-1">
+                Cloud Backup (Google Drive)
+              </h3>
+              <p className="text-xs text-text-muted mb-4">
+                Securely back up your database to your Google Drive account.
+              </p>
+
+              {!checkingDrive && (
+                <div className="mb-6 p-4 rounded-lg bg-glass-white-hover border border-glass-border">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-sm font-medium text-text-primary">
+                        {driveConnected ? "Connected" : "Not Connected"}
+                      </p>
+                      {driveEmail && (
+                        <p className="text-xs text-text-muted mt-0.5">
+                          {driveEmail}
+                        </p>
+                      )}
+                    </div>
+                    {driveConnected ? (
+                      <Button
+                        onClick={handleDisconnectDrive}
+                        variant="ghost"
+                        className="text-xs py-1.5 px-3"
+                      >
+                        Disconnect
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleConnectDrive}
+                        variant="primary"
+                        loading={driveConnecting}
+                        className="text-xs py-1.5 px-3"
+                      >
+                        Connect to Drive
+                      </Button>
+                    )}
+                  </div>
+
+                  {driveConnected && (
+                    <Button
+                      onClick={handleTriggerCloudBackup}
+                      variant="primary"
+                      className="w-full py-2 text-xs flex justify-center mt-4"
+                      loading={triggeringBackup}
+                      loadingText={"Backing up to Drive..."}
+                    >
+                      Back up to Google Drive now
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {driveConnected && (
+                <div className="space-y-4">
+                  <SettingsToggle
+                    label={t("settings.auto_backup")}
+                    description={t("settings.auto_backup_desc")}
+                    checked={auto_backup}
+                    onChange={setAutoBackup}
+                  />
+
+                  {auto_backup && (
+                    <div className="pl-4 border-l-2 border-glass-border space-y-4">
+                      <div>
+                        <label className="block text-xs text-text-muted mb-1.5">
+                          Backup Frequency
+                        </label>
+                        <Select
+                          className="w-full md:w-48"
+                          options={[
+                            { value: "daily", label: "Daily" },
+                            { value: "weekly", label: "Weekly" },
+                            { value: "monthly", label: "Monthly" },
+                          ]}
+                          value={backup_frequency}
+                          onChange={(val: string | number) =>
+                            setBackupFrequency(val.toString())
+                          }
+                          placeholder="Select Frequency"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-text-muted mb-1.5">
+                          Backup Time
+                        </label>
+                        <Input
+                          type="time"
+                          value={backup_time}
+                          onChange={(e) => setBackupTime(e.target.value)}
+                          className="w-full md:w-48 input-liquid"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -266,7 +467,9 @@ export default function SettingsDataPanel() {
               <h3 className="text-sm font-semibold text-red-500 mb-1">
                 {t("settings.data_mgmt.danger_zone")}
               </h3>
-              <p className="text-xs text-text-muted mb-4">{t("settings.data_mgmt.reset_warning")}</p>
+              <p className="text-xs text-text-muted mb-4">
+                {t("settings.data_mgmt.reset_warning")}
+              </p>
               <button
                 onClick={() => {
                   setShowConfirm(true);
@@ -307,7 +510,9 @@ export default function SettingsDataPanel() {
                 </h3>
                 <p className="text-sm text-text-muted mb-6">
                   {t("settings.data_mgmt.modal_message_part1")}
-                  <span className="font-mono font-bold text-text-primary mx-1">{RESET_APP_CODE}</span>
+                  <span className="font-mono font-bold text-text-primary mx-1">
+                    {RESET_APP_CODE}
+                  </span>
                   {t("settings.data_mgmt.modal_message_part2")}
                 </p>
 
@@ -323,7 +528,9 @@ export default function SettingsDataPanel() {
                     className="input-liquid text-center tracking-widest font-mono"
                     autoFocus
                   />
-                  {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+                  {error && (
+                    <p className="text-xs text-red-500 mt-2">{error}</p>
+                  )}
                 </div>
 
                 <div className="flex gap-3 w-full">

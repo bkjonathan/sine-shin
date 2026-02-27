@@ -10,6 +10,7 @@ export {
   ChevronRight as IconChevronRight,
   Circle as IconCircle,
   CircleCheckBig as IconCircleCheck,
+  Cloud as IconCloud,
   DollarSign as IconDollarSign,
   Download as IconDownload,
   ExternalLink as IconExternalLink,
