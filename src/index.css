@@ -539,6 +539,14 @@
     margin: 0;
   }
 
+  html,
+  body,
+  #root {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
   body * {
     visibility: hidden;
   }
@@ -549,11 +557,12 @@
   }
 
   #invoice-print-container {
-    position: fixed;
+    position: absolute;
     left: 0;
     top: 0;
     width: 100% !important;
-    height: 100%;
+    height: auto !important;
+    min-height: 100vh;
     margin: 0;
     padding: 15mm !important;
     background: white;
@@ -572,5 +581,7 @@
     left: auto !important;
     top: auto !important;
     display: block !important;
+    visibility: visible !important;
+    overflow: visible !important;
   }
 }

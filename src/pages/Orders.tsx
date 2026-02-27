@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
+import { toPng } from "html-to-image";
+import { MYANMAR_FONT_EMBED_CSS } from "../assets/fonts/myanmar-fonts";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   getOrdersPaginated,
@@ -20,6 +23,7 @@ import {
   OrderFormItemData,
   OrderStatus,
   OrderWithCustomer,
+  OrderDetail,
 } from "../types/order";
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
@@ -36,6 +40,7 @@ import {
   IconLayoutGrid,
   IconPackage,
   IconPlus,
+  IconPrinter,
   IconSearch,
   IconSortAsc,
   IconSortDesc,
@@ -43,6 +48,9 @@ import {
   IconTrash,
   IconUpload,
 } from "../components/icons";
+import ParcelPrintModal from "../components/pages/orders/ParcelPrintModal";
+import ParcelPrintLayout from "../components/pages/orders/ParcelPrintLayout";
+import { ParcelPrintOptions } from "../components/pages/orders/ParcelPrintLayout";
 
 // ── Animation Variants ──
 const fadeVariants: Variants = {
@@ -197,7 +205,8 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const { playSound } = useSound();
   const { t } = useTranslation();
-  const { formatPrice } = useAppSettings();
+  const { formatPrice, invoice_printer_name, silent_invoice_print } =
+    useAppSettings();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -209,6 +218,7 @@ export default function Orders() {
   // Import State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const latestFetchIdRef = useRef(0);
+  const parcelPrintRef = useRef<HTMLDivElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const visiblePages = getVisiblePages(currentPage, totalPages);
   const displayPages = visiblePages.length > 0 ? visiblePages : ["1"];
@@ -235,6 +245,147 @@ export default function Orders() {
   const handleSetViewMode = (mode: "grid" | "table") => {
     setViewMode(mode);
     localStorage.setItem("orders_view_mode", mode);
+  };
+
+  // Parcel Printing State
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printOrders, setPrintOrders] = useState<
+    (OrderDetail & {
+      order: { customer_address?: string; customer_phone?: string };
+    })[]
+  >([]);
+  const [printOptions, setPrintOptions] = useState<ParcelPrintOptions>({
+    showCustomerName: true,
+    showCustomerId: false,
+    showCustomerPhone: true,
+    showCustomerAddress: true,
+    showProductDetails: true,
+    showOrderId: true,
+    showShopName: true,
+  });
+
+  const handleToggleOrderSelection = (id: number) => {
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedOrderIds.size === orders.length) {
+      setSelectedOrderIds(new Set());
+    } else {
+      setSelectedOrderIds(new Set(orders.map((o) => o.id)));
+    }
+  };
+
+  const handleExecutePrint = async (options: ParcelPrintOptions) => {
+    try {
+      // 1. Fetch full order details
+      const detailedOrders = await Promise.all(
+        Array.from(selectedOrderIds).map((id) => getOrderById(id)),
+      );
+
+      const formattedOrders = detailedOrders.map((detail) => {
+        const customer = customers.find(
+          (c) =>
+            c.id === detail.order.customer_id ||
+            c.customer_id === detail.order.customer_id?.toString(),
+        );
+        return {
+          ...detail,
+          order: {
+            ...detail.order,
+            customer_address: customer?.address || undefined,
+            customer_phone:
+              customer?.phone ||
+              (detail.order as any).customer_phone ||
+              undefined,
+          },
+        };
+      });
+
+      // 2. Set state and wait for React to render the layout
+      setPrintOptions(options);
+      setPrintOrders(formattedOrders);
+
+      // Wait for React render + browser paint
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          setTimeout(resolve, 300);
+        });
+      });
+
+      // 3. Capture the rendered layout as PNG using html-to-image
+      if (!parcelPrintRef.current) {
+        throw new Error("Parcel print layout ref not available");
+      }
+
+      await document.fonts.ready;
+      await new Promise((r) => setTimeout(r, 150));
+
+      const dataUrl = await toPng(parcelPrintRef.current, {
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        skipFonts: true,
+        fontEmbedCSS: MYANMAR_FONT_EMBED_CSS,
+      });
+
+      // 4. Convert base64 data URL → Uint8Array
+      const base64 = dataUrl.split(",")[1];
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      // 5. Print via Rust command
+      if (window.__TAURI_INTERNALS__) {
+        if (silent_invoice_print) {
+          await invoke("print_invoice_direct", {
+            bytes: Array.from(bytes),
+            printerName:
+              invoice_printer_name.trim().length > 0
+                ? invoice_printer_name.trim()
+                : null,
+          });
+        } else {
+          // Save to temp, then use print_window as fallback
+          await invoke("print_invoice_direct", {
+            bytes: Array.from(bytes),
+            printerName:
+              invoice_printer_name.trim().length > 0
+                ? invoice_printer_name.trim()
+                : null,
+          });
+        }
+      } else {
+        // Browser fallback: open image in new tab for printing
+        const win = window.open("");
+        if (win) {
+          win.document.write(
+            `<img src="${dataUrl}" onload="window.print();window.close()" />`,
+          );
+        }
+      }
+
+      playSound("success");
+    } catch (err) {
+      console.error("Failed to print parcels:", err);
+      playSound("error");
+    } finally {
+      setPrintOrders([]);
+      setIsPrintModalOpen(false);
+      setSelectedOrderIds(new Set());
+    }
   };
 
   useEffect(() => {
@@ -818,483 +969,330 @@ export default function Orders() {
   };
 
   return (
-    <motion.div
-      initial="hidden"
-      animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: {
-          opacity: 1,
-          transition: { staggerChildren: 0.06 },
-        },
-      }}
-      className="max-w-6xl mx-auto h-full flex flex-col"
-    >
-      {/* ── Header ── */}
+    <>
+      <ParcelPrintLayout
+        ref={parcelPrintRef}
+        orders={printOrders}
+        options={printOptions}
+        shopName={t("app.name", "Thai Htay")}
+      />
       <motion.div
-        variants={fadeVariants}
-        className="flex items-center justify-between mb-6"
+        initial="hidden"
+        animate="show"
+        variants={{
+          hidden: { opacity: 0 },
+          show: {
+            opacity: 1,
+            transition: { staggerChildren: 0.06 },
+          },
+        }}
+        className="max-w-6xl mx-auto h-full flex flex-col"
       >
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary tracking-tight">
-            {t("orders.title")}
-          </h1>
-          <p className="text-sm text-text-muted mt-1">
-            {t("orders.manage_orders")}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="file"
-            accept=".csv"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            variant="ghost"
-            className="px-4 py-2 text-sm flex items-center gap-2"
-          >
-            {isImporting ? (
-              <div className="w-4 h-4 border-2 border-text-secondary border-t-text-primary rounded-full animate-spin" />
-            ) : (
-              <IconUpload size={16} strokeWidth={2} />
-            )}
-            {t("orders.import_csv")}
-          </Button>
-          <Button
-            onClick={handleExport}
-            variant="ghost"
-            className="px-4 py-2 text-sm flex items-center gap-2"
-          >
-            <IconDownload size={16} strokeWidth={2} />
-            {t("orders.export_csv")}
-          </Button>
-          <Button
-            onClick={() => handleOpenModal()}
-            variant="primary"
-            className="px-4 py-2 text-sm flex items-center gap-2"
-          >
-            <IconPlus size={16} strokeWidth={2} />
-            {t("orders.add_order")}
-          </Button>
-        </div>
-      </motion.div>
-      {/* ── Search Bar ── */}
-      <motion.div variants={fadeVariants} className="mb-6">
-        <div className="flex flex-col lg:flex-row gap-3">
-          <div className="flex flex-col md:flex-row gap-3 flex-1">
-            <div className="w-full md:w-48">
-              <Select
-                options={[
-                  {
-                    value: "customerName",
-                    label: t("orders.search_key_customer_name"),
-                  },
-                  { value: "orderId", label: t("orders.search_key_order_id") },
-                  {
-                    value: "customerId",
-                    label: t("orders.search_key_customer_id"),
-                  },
-                  {
-                    value: "customerPhone",
-                    label: t("orders.search_key_customer_phone"),
-                  },
-                ]}
-                value={searchKey}
-                onChange={(value) => {
-                  setSearchKey(
-                    value as
-                      | "customerName"
-                      | "orderId"
-                      | "customerId"
-                      | "customerPhone",
-                  );
-                  setCurrentPage(1);
-                }}
-                placeholder={t("orders.search_by")}
-              />
-            </div>
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <IconSearch
-                  className="h-4 w-4 text-text-muted"
-                  strokeWidth={2}
+        {/* ── Header ── */}
+        <motion.div
+          variants={fadeVariants}
+          className="flex items-center justify-between mb-6"
+        >
+          <div>
+            <h1 className="text-2xl font-bold text-text-primary tracking-tight">
+              {t("orders.title")}
+            </h1>
+            <p className="text-sm text-text-muted mt-1">
+              {t("orders.manage_orders")}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="file"
+              accept=".csv"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              variant="ghost"
+              className="px-4 py-2 text-sm flex items-center gap-2"
+            >
+              {isImporting ? (
+                <div className="w-4 h-4 border-2 border-text-secondary border-t-text-primary rounded-full animate-spin" />
+              ) : (
+                <IconUpload size={16} strokeWidth={2} />
+              )}
+              {t("orders.import_csv")}
+            </Button>
+            <Button
+              onClick={handleExport}
+              variant="ghost"
+              className="px-4 py-2 text-sm flex items-center gap-2"
+            >
+              <IconDownload size={16} strokeWidth={2} />
+              {t("orders.export_csv")}
+            </Button>
+            <Button
+              onClick={() => setIsPrintModalOpen(true)}
+              variant={selectedOrderIds.size > 0 ? "primary" : "default"}
+              disabled={selectedOrderIds.size === 0}
+              className="px-4 py-2 text-sm flex items-center gap-2"
+            >
+              <IconPrinter size={16} strokeWidth={2} />
+              {t("orders.print_parcels", "Print Parcels")}{" "}
+              {selectedOrderIds.size > 0 && `(${selectedOrderIds.size})`}
+            </Button>
+            <Button
+              onClick={() => handleOpenModal()}
+              variant="primary"
+              className="px-4 py-2 text-sm flex items-center gap-2"
+            >
+              <IconPlus size={16} strokeWidth={2} />
+              {t("orders.add_order")}
+            </Button>
+          </div>
+        </motion.div>
+        {/* ── Search Bar ── */}
+        <motion.div variants={fadeVariants} className="mb-6">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="flex flex-col md:flex-row gap-3 flex-1">
+              <div className="w-full md:w-48">
+                <Select
+                  options={[
+                    {
+                      value: "customerName",
+                      label: t("orders.search_key_customer_name"),
+                    },
+                    {
+                      value: "orderId",
+                      label: t("orders.search_key_order_id"),
+                    },
+                    {
+                      value: "customerId",
+                      label: t("orders.search_key_customer_id"),
+                    },
+                    {
+                      value: "customerPhone",
+                      label: t("orders.search_key_customer_phone"),
+                    },
+                  ]}
+                  value={searchKey}
+                  onChange={(value) => {
+                    setSearchKey(
+                      value as
+                        | "customerName"
+                        | "orderId"
+                        | "customerId"
+                        | "customerPhone",
+                    );
+                    setCurrentPage(1);
+                  }}
+                  placeholder={t("orders.search_by")}
                 />
               </div>
-              <Input
-                type="text"
-                className="input-liquid pl-10 w-full"
-                placeholder={t("orders.search_placeholder")}
-                value={searchInput}
-                onChange={(e) => {
-                  setSearchInput(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <IconSearch
+                    className="h-4 w-4 text-text-muted"
+                    strokeWidth={2}
+                  />
+                </div>
+                <Input
+                  type="text"
+                  className="input-liquid pl-10 w-full"
+                  placeholder={t("orders.search_placeholder")}
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Sorting Controls */}
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="w-full md:w-48">
+                <Select
+                  options={[
+                    { value: "order_id", label: "Sort by ID" },
+                    { value: "customer_name", label: "Sort by Name" },
+                    { value: "created_at", label: "Sort by Date" },
+                  ]}
+                  value={sortBy}
+                  onChange={(value) => {
+                    setSortBy(
+                      value as "customer_name" | "order_id" | "created_at",
+                    );
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+              <button
+                onClick={() =>
+                  setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+                }
+                className="p-2.5 rounded-lg bg-glass-white border border-glass-border hover:bg-glass-white-hover transition-colors text-text-secondary shrink-0"
+                title={sortOrder === "asc" ? "Ascending" : "Descending"}
+              >
+                {sortOrder === "asc" ? (
+                  <IconSortAsc size={20} strokeWidth={2} />
+                ) : (
+                  <IconSortDesc size={20} strokeWidth={2} />
+                )}
+              </button>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center rounded-lg border border-glass-border overflow-hidden bg-glass-white shrink-0">
+                <button
+                  onClick={() => handleSetViewMode("grid")}
+                  title="Grid View"
+                  className={`p-2.5 transition-colors ${
+                    viewMode === "grid"
+                      ? "bg-accent-blue text-white"
+                      : "text-text-secondary hover:bg-glass-white-hover"
+                  }`}
+                >
+                  <IconLayoutGrid size={18} strokeWidth={2} />
+                </button>
+                <button
+                  onClick={() => handleSetViewMode("table")}
+                  title="Table View"
+                  className={`p-2.5 transition-colors ${
+                    viewMode === "table"
+                      ? "bg-accent-blue text-white"
+                      : "text-text-secondary hover:bg-glass-white-hover"
+                  }`}
+                >
+                  <IconTable size={18} strokeWidth={2} />
+                </button>
+              </div>
             </div>
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {ORDER_STATUS_FILTER_OPTIONS.map((option) => {
+              const isActive = statusFilter === option.value;
+              const statusDisplay =
+                option.value === "all"
+                  ? null
+                  : getOrderStatusDisplay(option.value);
 
-          {/* Sorting Controls */}
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="w-full md:w-48">
-              <Select
-                options={[
-                  { value: "order_id", label: "Sort by ID" },
-                  { value: "customer_name", label: "Sort by Name" },
-                  { value: "created_at", label: "Sort by Date" },
-                ]}
-                value={sortBy}
-                onChange={(value) => {
-                  setSortBy(
-                    value as "customer_name" | "order_id" | "created_at",
-                  );
-                  setCurrentPage(1);
-                }}
-              />
-            </div>
-            <button
-              onClick={() =>
-                setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
-              }
-              className="p-2.5 rounded-lg bg-glass-white border border-glass-border hover:bg-glass-white-hover transition-colors text-text-secondary shrink-0"
-              title={sortOrder === "asc" ? "Ascending" : "Descending"}
-            >
-              {sortOrder === "asc" ? (
-                <IconSortAsc size={20} strokeWidth={2} />
-              ) : (
-                <IconSortDesc size={20} strokeWidth={2} />
-              )}
-            </button>
-
-            {/* View Mode Toggle */}
-            <div className="flex items-center rounded-lg border border-glass-border overflow-hidden bg-glass-white shrink-0">
-              <button
-                onClick={() => handleSetViewMode("grid")}
-                title="Grid View"
-                className={`p-2.5 transition-colors ${
-                  viewMode === "grid"
-                    ? "bg-accent-blue text-white"
-                    : "text-text-secondary hover:bg-glass-white-hover"
-                }`}
-              >
-                <IconLayoutGrid size={18} strokeWidth={2} />
-              </button>
-              <button
-                onClick={() => handleSetViewMode("table")}
-                title="Table View"
-                className={`p-2.5 transition-colors ${
-                  viewMode === "table"
-                    ? "bg-accent-blue text-white"
-                    : "text-text-secondary hover:bg-glass-white-hover"
-                }`}
-              >
-                <IconTable size={18} strokeWidth={2} />
-              </button>
-            </div>
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    if (statusFilter === option.value) {
+                      return;
+                    }
+                    setStatusFilter(option.value);
+                    setCurrentPage(1);
+                  }}
+                  className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    isActive
+                      ? option.value === "all"
+                        ? "bg-accent-blue text-white border-accent-blue shadow-md shadow-accent-blue/20"
+                        : `${statusDisplay?.className} shadow-md`
+                      : "bg-glass-white text-text-secondary border-glass-border hover:bg-glass-white-hover hover:text-text-primary"
+                  }`}
+                >
+                  {t(option.labelKey)}
+                </button>
+              );
+            })}
           </div>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {ORDER_STATUS_FILTER_OPTIONS.map((option) => {
-            const isActive = statusFilter === option.value;
-            const statusDisplay =
-              option.value === "all"
-                ? null
-                : getOrderStatusDisplay(option.value);
+        </motion.div>
 
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  if (statusFilter === option.value) {
-                    return;
-                  }
-                  setStatusFilter(option.value);
-                  setCurrentPage(1);
-                }}
-                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  isActive
-                    ? option.value === "all"
-                      ? "bg-accent-blue text-white border-accent-blue shadow-md shadow-accent-blue/20"
-                      : `${statusDisplay?.className} shadow-md`
-                    : "bg-glass-white text-text-secondary border-glass-border hover:bg-glass-white-hover hover:text-text-primary"
-                }`}
-              >
-                {t(option.labelKey)}
-              </button>
-            );
-          })}
-        </div>
-      </motion.div>
-
-      {/* ── Order List ── */}
-      <motion.div
-        variants={fadeVariants}
-        className="flex-1 min-h-0 flex flex-col"
-      >
-        <div className="flex-1 overflow-y-auto pr-1">
-          {loading ? (
-            <div className="flex justify-center items-center py-20">
-              <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
-            </div>
-          ) : orders.length === 0 ? (
-            isPageTransitioning ? (
+        {/* ── Order List ── */}
+        <motion.div
+          variants={fadeVariants}
+          className="flex-1 min-h-0 flex flex-col"
+        >
+          <div className="flex-1 overflow-y-auto pr-1">
+            {loading ? (
               <div className="flex justify-center items-center py-20">
                 <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
               </div>
-            ) : (
-              <div className="text-center py-20 bg-glass-white rounded-xl border border-glass-border">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-glass-white-hover flex items-center justify-center text-text-muted">
-                  <IconPackage size={32} strokeWidth={1.5} />
+            ) : orders.length === 0 ? (
+              isPageTransitioning ? (
+                <div className="flex justify-center items-center py-20">
+                  <div className="w-8 h-8 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
                 </div>
-                <h3 className="text-lg font-medium text-text-primary">
-                  {t("orders.no_orders")}
-                </h3>
-                <p className="text-sm text-text-muted mt-1">
-                  {searchInput.trim() || statusFilter !== "all"
-                    ? t("orders.no_orders_search")
-                    : t("orders.no_orders_create")}
-                </p>
-              </div>
-            )
-          ) : (
-            <div className="relative">
-              <AnimatePresence mode="wait" initial={false}>
-                {viewMode === "grid" ? (
-                  <motion.div
-                    key={`grid-${pageTransitionKey}`}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6"
-                  >
-                    <AnimatePresence mode="popLayout">
-                      {orders.map((order) => {
-                        const statusDisplay = getOrderStatusDisplay(
-                          order.status,
-                        );
+              ) : (
+                <div className="text-center py-20 bg-glass-white rounded-xl border border-glass-border">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-glass-white-hover flex items-center justify-center text-text-muted">
+                    <IconPackage size={32} strokeWidth={1.5} />
+                  </div>
+                  <h3 className="text-lg font-medium text-text-primary">
+                    {t("orders.no_orders")}
+                  </h3>
+                  <p className="text-sm text-text-muted mt-1">
+                    {searchInput.trim() || statusFilter !== "all"
+                      ? t("orders.no_orders_search")
+                      : t("orders.no_orders_create")}
+                  </p>
+                </div>
+              )
+            ) : (
+              <div className="relative">
+                <AnimatePresence mode="wait" initial={false}>
+                  {viewMode === "grid" ? (
+                    <motion.div
+                      key={`grid-${pageTransitionKey}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6"
+                    >
+                      <AnimatePresence mode="popLayout">
+                        {orders.map((order) => {
+                          const statusDisplay = getOrderStatusDisplay(
+                            order.status,
+                          );
 
-                        return (
-                          <motion.div
-                            key={order.id}
-                            layout
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
-                            onClick={() =>
-                              navigate(`/orders/${order.id}`, {
-                                state: {
-                                  returnTo: getOrdersListPath(currentPage),
-                                },
-                              })
-                            }
-                          >
-                            <div className="relative z-10">
-                              <div className="flex justify-between items-start mb-3">
-                                <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
-                                  {order.order_id || t("orders.id_pending")}
-                                </div>
-
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenModal(order);
-                                    }}
-                                    className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
-                                  >
-                                    <IconEdit size={16} strokeWidth={2} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setOrderToDelete(order);
-                                      setIsDeleteModalOpen(true);
-                                    }}
-                                    className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
-                                  >
-                                    <IconTrash size={16} strokeWidth={2} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
-                                {order.customer_name}
-                              </h3>
-                              <p className="text-sm text-text-muted mb-4">
-                                {t("orders.from")}{" "}
-                                <span className="text-text-secondary">
-                                  {order.order_from || "-"}
-                                </span>
-                              </p>
-                              {order.first_product_url && (
-                                <a
-                                  href={order.first_product_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-accent-blue hover:underline mb-2 block truncate"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {t("orders.product_link")}
-                                </a>
-                              )}
-
-                              <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
-                                <div>
-                                  <span className="text-text-muted text-xs block">
-                                    {t("orders.date")}
-                                  </span>
-                                  {formatDate(order.order_date)}
-                                </div>
-                                <div>
-                                  <span className="text-text-muted text-xs block">
-                                    {t("orders.qty")}
-                                  </span>
-                                  {order.total_qty || 0}
-                                </div>
-                                <div>
-                                  <span className="text-text-muted text-xs block">
-                                    {t("orders.total")}
-                                  </span>
-                                  {formatPrice(order.total_price || 0)}
-                                </div>
-                                <div>
-                                  <span className="text-text-muted text-xs block">
-                                    {t("orders.weight")}
-                                  </span>
-                                  {order.total_weight || 0} kg
-                                </div>
-                              </div>
-
-                              {/* Status Indicator */}
-                              <div className="flex gap-2 text-xs">
-                                <span
-                                  className={`${statusDisplay.className} px-2 py-0.5 rounded`}
-                                >
-                                  {t(statusDisplay.labelKey)}
-                                </span>
-                              </div>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </AnimatePresence>
-                  </motion.div>
-                ) : (
-                  /* ── Table View ── */
-                  <motion.div
-                    key={`table-${pageTransitionKey}`}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                    className="glass-panel overflow-hidden pb-2"
-                  >
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-glass-border">
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
-                            {t("orders.order_id") || "Order ID"}
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
-                            {t("orders.customer") || "Customer"}
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden sm:table-cell">
-                            {t("orders.status") || "Status"}
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden md:table-cell">
-                            {t("orders.date") || "Date"}
-                          </th>
-                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden md:table-cell">
-                            {t("orders.qty") || "Qty"}
-                          </th>
-                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden lg:table-cell">
-                            {t("orders.total") || "Total"}
-                          </th>
-                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden lg:table-cell">
-                            {t("orders.weight") || "Weight"}
-                          </th>
-                          <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
-                            {t("common.actions") || "Actions"}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <AnimatePresence mode="popLayout">
-                          {orders.map((order) => {
-                            const statusDisplay = getOrderStatusDisplay(
-                              order.status,
-                            );
-                            return (
-                              <motion.tr
-                                key={order.id}
-                                layout
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                onClick={() =>
-                                  navigate(`/orders/${order.id}`, {
-                                    state: {
-                                      returnTo: getOrdersListPath(currentPage),
-                                    },
-                                  })
-                                }
-                                className="group border-b border-glass-border/50 last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
-                              >
-                                <td className="px-4 py-3">
-                                  <span className="font-mono text-xs text-text-secondary bg-glass-white-hover px-2 py-0.5 rounded border border-glass-border">
+                          return (
+                            <motion.div
+                              key={order.id}
+                              layout
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
+                              onClick={() =>
+                                navigate(`/orders/${order.id}`, {
+                                  state: {
+                                    returnTo: getOrdersListPath(currentPage),
+                                  },
+                                })
+                              }
+                            >
+                              <div className="relative z-10">
+                                <div className="flex justify-between items-start mb-3">
+                                  <div className="bg-glass-white px-2 py-1 rounded text-xs font-mono text-text-secondary border border-glass-border">
                                     {order.order_id || t("orders.id_pending")}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-7 h-7 rounded-lg bg-linear-to-br from-glass-white to-glass-white-hover border border-glass-border flex items-center justify-center text-text-primary font-bold text-xs shrink-0">
-                                      {(order.customer_name || "?")
-                                        .charAt(0)
-                                        .toUpperCase()}
-                                    </div>
-                                    <span className="font-medium text-text-primary group-hover:text-accent-blue transition-colors truncate max-w-[140px]">
-                                      {order.customer_name}
-                                    </span>
                                   </div>
-                                </td>
-                                <td className="px-4 py-3 hidden sm:table-cell">
-                                  <span
-                                    className={`${statusDisplay.className} text-xs px-2 py-0.5 rounded font-semibold`}
-                                  >
-                                    {t(statusDisplay.labelKey)}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 hidden md:table-cell text-text-secondary">
-                                  {formatDate(order.order_date) || (
-                                    <span className="text-text-muted">—</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 hidden md:table-cell text-right text-text-secondary">
-                                  {order.total_qty || 0}
-                                </td>
-                                <td className="px-4 py-3 hidden lg:table-cell text-right text-text-secondary">
-                                  {formatPrice(order.total_price || 0)}
-                                </td>
-                                <td className="px-4 py-3 hidden lg:table-cell text-right text-text-secondary">
-                                  {order.total_weight || 0} kg
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                  <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+
+                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
+                                    <label
+                                      className="p-2 cursor-pointer"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedOrderIds.has(order.id)}
+                                        onChange={() =>
+                                          handleToggleOrderSelection(order.id)
+                                        }
+                                        className="w-4 h-4 text-accent-blue bg-glass-surface border-glass-border rounded focus:ring-accent-blue cursor-pointer"
+                                      />
+                                    </label>
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleOpenModal(order);
                                       }}
-                                      className="p-1.5 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
-                                      title="Edit"
+                                      className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
                                     >
-                                      <IconEdit size={15} strokeWidth={2} />
+                                      <IconEdit size={16} strokeWidth={2} />
                                     </button>
                                     <button
                                       onClick={(e) => {
@@ -1302,164 +1300,385 @@ export default function Orders() {
                                         setOrderToDelete(order);
                                         setIsDeleteModalOpen(true);
                                       }}
-                                      className="p-1.5 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
-                                      title="Delete"
+                                      className="p-2 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
                                     >
-                                      <IconTrash size={15} strokeWidth={2} />
+                                      <IconTrash size={16} strokeWidth={2} />
                                     </button>
                                   </div>
-                                </td>
-                              </motion.tr>
-                            );
-                          })}
-                        </AnimatePresence>
-                      </tbody>
-                    </table>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                                </div>
 
-              <AnimatePresence>
-                {isPageTransitioning && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 pointer-events-none rounded-xl bg-glass-white/20 backdrop-blur-[1px] flex items-center justify-center"
-                  >
-                    <div className="w-7 h-7 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
+                                <h3 className="font-semibold text-text-primary text-lg mb-1 truncate">
+                                  {order.customer_name}
+                                </h3>
+                                <p className="text-sm text-text-muted mb-4">
+                                  {t("orders.from")}{" "}
+                                  <span className="text-text-secondary">
+                                    {order.order_from || "-"}
+                                  </span>
+                                </p>
+                                {order.first_product_url && (
+                                  <a
+                                    href={order.first_product_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-accent-blue hover:underline mb-2 block truncate"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {t("orders.product_link")}
+                                  </a>
+                                )}
 
-        {!loading && (
-          <div className="mt-4 rounded-xl border border-glass-border-light bg-glass-white-hover shadow-[0_10px_24px_rgba(0,0,0,0.2)] backdrop-blur-md p-3 md:p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <p className="text-sm font-medium text-text-secondary">
-                {t("orders.total_results", { count: totalOrders })}
-              </p>
-              <div className="flex items-center gap-2 flex-wrap md:justify-end">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-text-secondary">
-                    {t("common.per_page")}
-                  </span>
-                  <Select
-                    className="w-28"
-                    options={pageSizeOptions.map((size) => ({
-                      value: size,
-                      label: size === "all" ? t("common.all") : String(size),
-                    }))}
-                    value={pageSize}
-                    menuPlacement="top"
-                    onChange={(value) => {
-                      const nextPageSize =
-                        value === "all" ? "all" : Number(value);
-                      if (
-                        nextPageSize !== "all" &&
-                        Number.isNaN(nextPageSize)
-                      ) {
-                        return;
-                      }
-                      setPageSize(nextPageSize);
-                      setCurrentPage(1);
-                    }}
-                  />
-                </div>
-                <Button
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.max(1, prev - 1))
-                  }
-                  disabled={
-                    isPageTransitioning || currentPage <= 1 || totalPages === 0
-                  }
-                  variant="ghost"
-                  className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {t("common.previous")}
-                </Button>
-                <div className="flex items-center gap-1 overflow-x-auto max-w-full py-1">
-                  {displayPages.map((item, index) =>
-                    item === "..." ? (
-                      <span
-                        key={`ellipsis-${index}`}
-                        className="px-2 text-sm font-medium text-text-muted"
-                      >
-                        ...
-                      </span>
-                    ) : (
-                      <button
-                        key={item}
-                        onClick={() =>
-                          totalPages > 0 && setCurrentPage(parseInt(item, 10))
-                        }
-                        disabled={isPageTransitioning || totalPages === 0}
-                        className={`min-w-9 px-3 py-2 text-sm rounded-lg transition-colors ${
-                          parseInt(item, 10) === currentPage && totalPages > 0
-                            ? "bg-accent-blue text-white shadow-md"
-                            : "border border-glass-border-light bg-glass-white text-text-primary hover:bg-glass-white-hover"
-                        } disabled:cursor-not-allowed disabled:opacity-50`}
-                      >
-                        {item}
-                      </button>
-                    ),
+                                <div className="grid grid-cols-2 gap-2 text-sm text-text-secondary mb-4 bg-glass-white/50 p-2 rounded-lg border border-glass-border/50">
+                                  <div>
+                                    <span className="text-text-muted text-xs block">
+                                      {t("orders.date")}
+                                    </span>
+                                    {formatDate(order.order_date)}
+                                  </div>
+                                  <div>
+                                    <span className="text-text-muted text-xs block">
+                                      {t("orders.qty")}
+                                    </span>
+                                    {order.total_qty || 0}
+                                  </div>
+                                  <div>
+                                    <span className="text-text-muted text-xs block">
+                                      {t("orders.total")}
+                                    </span>
+                                    {formatPrice(order.total_price || 0)}
+                                  </div>
+                                  <div>
+                                    <span className="text-text-muted text-xs block">
+                                      {t("orders.weight")}
+                                    </span>
+                                    {order.total_weight || 0} kg
+                                  </div>
+                                </div>
+
+                                {/* Status Indicator */}
+                                <div className="flex gap-2 text-xs">
+                                  <span
+                                    className={`${statusDisplay.className} px-2 py-0.5 rounded`}
+                                  >
+                                    {t(statusDisplay.labelKey)}
+                                  </span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </motion.div>
+                  ) : (
+                    /* ── Table View ── */
+                    <motion.div
+                      key={`table-${pageTransitionKey}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="glass-panel overflow-hidden pb-2"
+                    >
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-glass-border">
+                            <th className="px-4 py-3 w-10">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  orders.length > 0 &&
+                                  selectedOrderIds.size === orders.length
+                                }
+                                onChange={handleToggleSelectAll}
+                                className="w-4 h-4 text-accent-blue bg-glass-surface border-glass-border rounded focus:ring-accent-blue cursor-pointer"
+                              />
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                              {t("orders.order_id") || "Order ID"}
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                              {t("orders.customer") || "Customer"}
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden sm:table-cell">
+                              {t("orders.status") || "Status"}
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden md:table-cell">
+                              {t("orders.date") || "Date"}
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden md:table-cell">
+                              {t("orders.qty") || "Qty"}
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                              {t("orders.total") || "Total"}
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider hidden lg:table-cell">
+                              {t("orders.weight") || "Weight"}
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                              {t("common.actions") || "Actions"}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <AnimatePresence mode="popLayout">
+                            {orders.map((order) => {
+                              const statusDisplay = getOrderStatusDisplay(
+                                order.status,
+                              );
+                              return (
+                                <motion.tr
+                                  key={order.id}
+                                  layout
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  onClick={() =>
+                                    navigate(`/orders/${order.id}`, {
+                                      state: {
+                                        returnTo:
+                                          getOrdersListPath(currentPage),
+                                      },
+                                    })
+                                  }
+                                  className="group border-b border-glass-border/50 last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
+                                >
+                                  <td
+                                    className="px-4 py-3"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedOrderIds.has(order.id)}
+                                      onChange={() =>
+                                        handleToggleOrderSelection(order.id)
+                                      }
+                                      className="w-4 h-4 text-accent-blue bg-glass-surface border-glass-border rounded focus:ring-accent-blue cursor-pointer"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className="font-mono text-xs text-text-secondary bg-glass-white-hover px-2 py-0.5 rounded border border-glass-border">
+                                      {order.order_id || t("orders.id_pending")}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2.5">
+                                      <div className="w-7 h-7 rounded-lg bg-linear-to-br from-glass-white to-glass-white-hover border border-glass-border flex items-center justify-center text-text-primary font-bold text-xs shrink-0">
+                                        {(order.customer_name || "?")
+                                          .charAt(0)
+                                          .toUpperCase()}
+                                      </div>
+                                      <span className="font-medium text-text-primary group-hover:text-accent-blue transition-colors truncate max-w-[140px]">
+                                        {order.customer_name}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 hidden sm:table-cell">
+                                    <span
+                                      className={`${statusDisplay.className} text-xs px-2 py-0.5 rounded font-semibold`}
+                                    >
+                                      {t(statusDisplay.labelKey)}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 hidden md:table-cell text-text-secondary">
+                                    {formatDate(order.order_date) || (
+                                      <span className="text-text-muted">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 hidden md:table-cell text-right text-text-secondary">
+                                    {order.total_qty || 0}
+                                  </td>
+                                  <td className="px-4 py-3 hidden lg:table-cell text-right text-text-secondary">
+                                    {formatPrice(order.total_price || 0)}
+                                  </td>
+                                  <td className="px-4 py-3 hidden lg:table-cell text-right text-text-secondary">
+                                    {order.total_weight || 0} kg
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                    <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenModal(order);
+                                        }}
+                                        className="p-1.5 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                        title="Edit"
+                                      >
+                                        <IconEdit size={15} strokeWidth={2} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOrderToDelete(order);
+                                          setIsDeleteModalOpen(true);
+                                        }}
+                                        className="p-1.5 text-text-muted hover:text-error hover:bg-red-500/10 rounded-lg transition-colors"
+                                        title="Delete"
+                                      >
+                                        <IconTrash size={15} strokeWidth={2} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </motion.tr>
+                              );
+                            })}
+                          </AnimatePresence>
+                        </tbody>
+                      </table>
+                    </motion.div>
                   )}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                  {isPageTransitioning && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 pointer-events-none rounded-xl bg-glass-white/20 backdrop-blur-[1px] flex items-center justify-center"
+                    >
+                      <div className="w-7 h-7 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+
+          {!loading && (
+            <div className="mt-4 rounded-xl border border-glass-border-light bg-glass-white-hover shadow-[0_10px_24px_rgba(0,0,0,0.2)] backdrop-blur-md p-3 md:p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <p className="text-sm font-medium text-text-secondary">
+                  {t("orders.total_results", { count: totalOrders })}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap md:justify-end">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-text-secondary">
+                      {t("common.per_page")}
+                    </span>
+                    <Select
+                      className="w-28"
+                      options={pageSizeOptions.map((size) => ({
+                        value: size,
+                        label: size === "all" ? t("common.all") : String(size),
+                      }))}
+                      value={pageSize}
+                      menuPlacement="top"
+                      onChange={(value) => {
+                        const nextPageSize =
+                          value === "all" ? "all" : Number(value);
+                        if (
+                          nextPageSize !== "all" &&
+                          Number.isNaN(nextPageSize)
+                        ) {
+                          return;
+                        }
+                        setPageSize(nextPageSize);
+                        setCurrentPage(1);
+                      }}
+                    />
+                  </div>
+                  <Button
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(1, prev - 1))
+                    }
+                    disabled={
+                      isPageTransitioning ||
+                      currentPage <= 1 ||
+                      totalPages === 0
+                    }
+                    variant="ghost"
+                    className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {t("common.previous")}
+                  </Button>
+                  <div className="flex items-center gap-1 overflow-x-auto max-w-full py-1">
+                    {displayPages.map((item, index) =>
+                      item === "..." ? (
+                        <span
+                          key={`ellipsis-${index}`}
+                          className="px-2 text-sm font-medium text-text-muted"
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={item}
+                          onClick={() =>
+                            totalPages > 0 && setCurrentPage(parseInt(item, 10))
+                          }
+                          disabled={isPageTransitioning || totalPages === 0}
+                          className={`min-w-9 px-3 py-2 text-sm rounded-lg transition-colors ${
+                            parseInt(item, 10) === currentPage && totalPages > 0
+                              ? "bg-accent-blue text-white shadow-md"
+                              : "border border-glass-border-light bg-glass-white text-text-primary hover:bg-glass-white-hover"
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          {item}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                  <span className="text-sm text-text-secondary px-1">
+                    {t("orders.page_status", {
+                      page: totalPages === 0 ? 0 : currentPage,
+                      total: totalPages,
+                    })}
+                  </span>
+                  <Button
+                    onClick={() =>
+                      setCurrentPage((prev) =>
+                        totalPages === 0 ? 1 : Math.min(totalPages, prev + 1),
+                      )
+                    }
+                    disabled={
+                      isPageTransitioning ||
+                      totalPages === 0 ||
+                      currentPage >= totalPages
+                    }
+                    variant="ghost"
+                    className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {t("common.next")}
+                  </Button>
                 </div>
-                <span className="text-sm text-text-secondary px-1">
-                  {t("orders.page_status", {
-                    page: totalPages === 0 ? 0 : currentPage,
-                    total: totalPages,
-                  })}
-                </span>
-                <Button
-                  onClick={() =>
-                    setCurrentPage((prev) =>
-                      totalPages === 0 ? 1 : Math.min(totalPages, prev + 1),
-                    )
-                  }
-                  disabled={
-                    isPageTransitioning ||
-                    totalPages === 0 ||
-                    currentPage >= totalPages
-                  }
-                  variant="ghost"
-                  className="px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {t("common.next")}
-                </Button>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </motion.div>
+
+        <OrderFormModal
+          isOpen={isModalOpen}
+          editingOrder={editingOrder}
+          customers={customers}
+          formData={formData}
+          formErrors={formErrors}
+          isSubmitting={isSubmitting}
+          statusOptions={ORDER_STATUS_OPTIONS}
+          onClose={handleCloseModal}
+          onSubmit={handleSubmit}
+          onFieldChange={handleFormFieldChange}
+          onItemChange={handleOrderItemChange}
+          onAddItem={handleAddOrderItem}
+          onRemoveItem={handleRemoveOrderItem}
+        />
+
+        <OrderDeleteModal
+          isOpen={isDeleteModalOpen}
+          order={orderToDelete}
+          onClose={() => {
+            setIsDeleteModalOpen(false);
+            setOrderToDelete(null);
+          }}
+          onConfirm={handleConfirmDelete}
+        />
+
+        <ParcelPrintModal
+          isOpen={isPrintModalOpen}
+          onClose={() => setIsPrintModalOpen(false)}
+          selectedOrders={orders.filter((o) => selectedOrderIds.has(o.id))}
+          onPrint={handleExecutePrint}
+        />
       </motion.div>
-
-      <OrderFormModal
-        isOpen={isModalOpen}
-        editingOrder={editingOrder}
-        customers={customers}
-        formData={formData}
-        formErrors={formErrors}
-        isSubmitting={isSubmitting}
-        statusOptions={ORDER_STATUS_OPTIONS}
-        onClose={handleCloseModal}
-        onSubmit={handleSubmit}
-        onFieldChange={handleFormFieldChange}
-        onItemChange={handleOrderItemChange}
-        onAddItem={handleAddOrderItem}
-        onRemoveItem={handleRemoveOrderItem}
-      />
-
-      <OrderDeleteModal
-        isOpen={isDeleteModalOpen}
-        order={orderToDelete}
-        onClose={() => {
-          setIsDeleteModalOpen(false);
-          setOrderToDelete(null);
-        }}
-        onConfirm={handleConfirmDelete}
-      />
-    </motion.div>
+    </>
   );
 }
