@@ -9,6 +9,7 @@ interface ThemeSettings {
   accentColor: AccentColor;
   animations: boolean;
   compactMode: boolean;
+  fontSize: string;
 }
 
 interface ThemeContextType extends ThemeSettings {
@@ -16,6 +17,7 @@ interface ThemeContextType extends ThemeSettings {
   setAccentColor: (color: AccentColor) => void;
   setAnimations: (enabled: boolean) => void;
   setCompactMode: (enabled: boolean) => void;
+  setFontSize: (size: string) => void;
   toggleTheme: () => void;
 }
 
@@ -28,6 +30,7 @@ const DEFAULT_SETTINGS: ThemeSettings = {
   accentColor: "blue",
   animations: true,
   compactMode: false,
+  fontSize: "normal",
 };
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -44,6 +47,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             sound_effect: boolean;
             theme: string;
             accent_color: string;
+            font_size: string;
           }>("get_app_settings");
 
           // We only store theme in backend for now, other visual prefs still in local storage or could be moved too.
@@ -54,6 +58,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
               ...prev,
               theme: validTheme,
               accentColor: (appSettings.accent_color as AccentColor) || "blue",
+              fontSize: appSettings.font_size || "normal",
             }));
           }
         } else {
@@ -109,17 +114,35 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove("compact-mode");
     }
+
+    // Font size
+    root.classList.remove(
+      "font-size-small",
+      "font-size-large",
+      "font-size-extra-large",
+    );
+    if (s.fontSize === "small") {
+      root.classList.add("font-size-small");
+    } else if (s.fontSize === "large") {
+      root.classList.add("font-size-large");
+    } else if (s.fontSize === "extra-large") {
+      root.classList.add("font-size-extra-large");
+    }
   };
 
-  const updateBackend = async (newTheme: Theme, newAccent: AccentColor) => {
+  const updateBackend = async (
+    newTheme: Theme,
+    newAccent: AccentColor,
+    newFontSize?: string,
+  ) => {
     if (window.__TAURI_INTERNALS__) {
       try {
-        // We need to fetch current settings first to preserve other values like language/sound
         const currentSettings = await invoke<{
           language: string;
           sound_effect: boolean;
           theme: String;
           accent_color: String;
+          font_size: String;
         }>("get_app_settings");
 
         await invoke("update_app_settings", {
@@ -127,6 +150,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             ...currentSettings,
             theme: newTheme,
             accent_color: newAccent,
+            font_size: newFontSize ?? currentSettings.font_size ?? "normal",
           },
         });
       } catch (err) {
@@ -141,11 +165,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   ) => {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
-      // If updating theme or accent, sync to backend
       if (key === "theme") {
-        updateBackend(value as Theme, next.accentColor);
+        updateBackend(value as Theme, next.accentColor, next.fontSize);
       } else if (key === "accentColor") {
-        updateBackend(next.theme, value as AccentColor);
+        updateBackend(next.theme, value as AccentColor, next.fontSize);
+      } else if (key === "fontSize") {
+        updateBackend(next.theme, next.accentColor, value as string);
       }
       return next;
     });
@@ -157,6 +182,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setAccentColor: (color) => updateSetting("accentColor", color),
     setAnimations: (enabled) => updateSetting("animations", enabled),
     setCompactMode: (enabled) => updateSetting("compactMode", enabled),
+    setFontSize: (size) => updateSetting("fontSize", size),
     toggleTheme: () =>
       updateSetting("theme", settings.theme === "dark" ? "light" : "dark"),
   };

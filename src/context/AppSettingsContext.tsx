@@ -15,6 +15,7 @@ export interface AppSettings {
   auto_backup: boolean;
   backup_frequency: string;
   backup_time: string;
+  font_size: string;
 }
 
 interface AppSettingsContextType extends AppSettings {
@@ -28,6 +29,7 @@ interface AppSettingsContextType extends AppSettings {
   setAutoBackup: (enabled: boolean) => void;
   setBackupFrequency: (frequency: string) => void;
   setBackupTime: (time: string) => void;
+  setFontSize: (size: string) => void;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   formatPrice: (amount: number) => string;
 }
@@ -50,6 +52,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   auto_backup: true,
   backup_frequency: "never",
   backup_time: "23:00",
+  font_size: "normal",
 };
 
 export function AppSettingsProvider({
@@ -108,6 +111,7 @@ export function AppSettingsProvider({
   const setBackupFrequency = (frequency: string) =>
     updateSettings({ backup_frequency: frequency });
   const setBackupTime = (time: string) => updateSettings({ backup_time: time });
+  const setFontSize = (size: string) => updateSettings({ font_size: size });
 
   const formatPrice = (amount: number) => {
     // If currency symbol is provided, use custom formatting
@@ -142,6 +146,7 @@ export function AppSettingsProvider({
     setAutoBackup,
     setBackupFrequency,
     setBackupTime,
+    setFontSize,
     updateSettings,
     formatPrice,
   };

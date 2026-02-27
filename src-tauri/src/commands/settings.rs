@@ -27,6 +27,8 @@ pub struct AppSettings {
     pub backup_frequency: String,
     #[serde(default = "default_backup_time")]
     pub backup_time: String,
+    #[serde(default = "default_font_size")]
+    pub font_size: String,
 }
 
 fn default_accent_color() -> String {
@@ -65,6 +67,10 @@ fn default_backup_time() -> String {
     "23:00".to_string()
 }
 
+fn default_font_size() -> String {
+    "normal".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -81,6 +87,7 @@ impl Default for AppSettings {
             auto_backup: true,
             backup_frequency: "never".to_string(),
             backup_time: "23:00".to_string(),
+            font_size: "normal".to_string(),
         }
     }
 }

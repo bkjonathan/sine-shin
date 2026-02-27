@@ -490,6 +490,14 @@
     "smooth_animations_desc": "Enable fluid transition effects",
     "compact_mode": "Compact Mode",
     "compact_mode_desc": "Reduce spacing for higher density",
+    "font_size": "Font Size",
+    "font_size_desc": "Adjust the application text size",
+    "font_sizes": {
+      "small": "Small",
+      "normal": "Normal",
+      "large": "Large",
+      "extra_large": "Extra Large"
+    },
     "accent_color": "Accent Color",
     "colors": {
       "blue": "Blue",

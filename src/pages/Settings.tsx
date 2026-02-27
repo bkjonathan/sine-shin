@@ -39,6 +39,8 @@ export default function Settings() {
     setAnimations,
     compactMode,
     setCompactMode,
+    fontSize,
+    setFontSize,
   } = useTheme();
 
   const [notifications, setNotifications] = useState(true);
@@ -347,6 +349,63 @@ export default function Settings() {
                 checked={compactMode}
                 onChange={setCompactMode}
               />
+
+              <div className="mt-4 pt-4 border-t border-glass-border">
+                <p className="text-sm font-medium text-text-primary">
+                  {t("settings.font_size")}
+                </p>
+                <p className="text-xs text-text-muted mt-0.5 mb-3">
+                  {t("settings.font_size_desc")}
+                </p>
+                <div className="flex items-center gap-2">
+                  {[
+                    {
+                      id: "small",
+                      label: t("settings.font_sizes.small"),
+                      preview: "text-xs",
+                    },
+                    {
+                      id: "normal",
+                      label: t("settings.font_sizes.normal"),
+                      preview: "text-sm",
+                    },
+                    {
+                      id: "large",
+                      label: t("settings.font_sizes.large"),
+                      preview: "text-base",
+                    },
+                    {
+                      id: "extra-large",
+                      label: t("settings.font_sizes.extra_large"),
+                      preview: "text-lg",
+                    },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => {
+                        setFontSize(option.id);
+                        playSound("click");
+                      }}
+                      className={`
+                        flex-1 px-3 py-2.5 rounded-xl text-xs font-medium
+                        transition-all duration-200 border
+                        ${
+                          fontSize === option.id
+                            ? "bg-glass-white-hover text-text-primary border-glass-border-light shadow-[0_0_12px_rgba(0,0,0,0.1)]"
+                            : "bg-transparent text-text-secondary border-transparent hover:bg-glass-white hover:border-glass-border"
+                        }
+                      `}
+                    >
+                      <span
+                        className={`block ${option.preview} font-semibold mb-0.5`}
+                      >
+                        Aa
+                      </span>
+                      <span className="block">{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="mt-6 pt-4 border-t border-glass-border">
                 <p className="text-sm font-medium text-text-primary mb-3">

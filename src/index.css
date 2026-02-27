@@ -105,6 +105,16 @@
     height: 100%;
   }
 
+  html.font-size-small {
+    font-size: 13px;
+  }
+  html.font-size-large {
+    font-size: 18px;
+  }
+  html.font-size-extra-large {
+    font-size: 20px;
+  }
+
   body {
     font-family: var(--font-family-sans);
     background-color: var(--color-liquid-bg);
