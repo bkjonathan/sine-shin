@@ -23,7 +23,7 @@ pub const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
 "#;
 pub const ORDER_WITH_CUSTOMER_GROUP_BY: &str = " GROUP BY o.id ";
 
-pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn init_sqlite_db(pool: &Pool<Sqlite>) -> Result<bool, Box<dyn std::error::Error>> {
     const INIT_SQL: &str = include_str!("../migrations/001_init.sql");
 
     for statement in INIT_SQL.split(';') {
@@ -38,7 +38,9 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
     .fetch_optional(pool)
     .await?;
 
+    let mut newly_initialized = false;
     if status_column_exists.is_none() {
+        newly_initialized = true;
         sqlx::query("ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'pending'")
             .execute(pool)
             .await?;
@@ -218,7 +220,34 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         .await?;
     }
 
-    Ok(())
+    Ok(newly_initialized)
+}
+
+#[cfg(feature = "postgres")]
+pub async fn init_pg_db(pool: &sqlx::PgPool) -> Result<bool, Box<dyn std::error::Error>> {
+    // Check if shop_settings table exists
+    let table_exists: Option<String> = sqlx::query_scalar(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='shop_settings' LIMIT 1"
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    if table_exists.is_some() {
+        // Already migrated
+        return Ok(false);
+    }
+
+    // Run migrations
+    const INIT_SQL: &str = include_str!("../migrations/002_pg_init.sql");
+
+    for statement in INIT_SQL.split(';') {
+        let trimmed = statement.trim();
+        if !trimmed.is_empty() {
+            sqlx::query(trimmed).execute(pool).await?;
+        }
+    }
+
+    Ok(true)
 }
 
 pub fn copy_logo_to_app_data(app: &AppHandle, logo_file_path: &str) -> AppResult<Option<String>> {

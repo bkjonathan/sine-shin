@@ -10,6 +10,7 @@ import OnboardingStepIndicators from "../components/pages/onboarding/OnboardingS
 import OnboardingStepWelcome from "../components/pages/onboarding/OnboardingStepWelcome";
 import OnboardingStepTheme from "../components/pages/onboarding/OnboardingStepTheme";
 import OnboardingStepDetails from "../components/pages/onboarding/OnboardingStepDetails";
+import OnboardingStepDatabase from "../components/pages/onboarding/OnboardingStepDatabase";
 import OnboardingStepLogo from "../components/pages/onboarding/OnboardingStepLogo";
 import OnboardingStepAccount from "../components/pages/onboarding/OnboardingStepAccount";
 import OnboardingStepActions from "../components/pages/onboarding/OnboardingStepActions";
@@ -19,7 +20,7 @@ import {
 } from "../components/pages/onboarding/animations";
 import { OnboardingAppSettings, OnboardingStep } from "../types/onboarding";
 
-const LAST_STEP: OnboardingStep = 4;
+const LAST_STEP: OnboardingStep = 5;
 const USERNAME_REGEX = /^[A-Za-z0-9_.-]+$/;
 
 export default function OnboardingForm() {
@@ -38,6 +39,9 @@ export default function OnboardingForm() {
   const [logoPath, setLogoPath] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
 
+  const [dbType, setDbType] = useState("sqlite");
+  const [pgUrl, setPgUrl] = useState("");
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -54,7 +58,8 @@ export default function OnboardingForm() {
     if (!window.__TAURI_INTERNALS__) return;
 
     try {
-      const currentSettings = await invoke<OnboardingAppSettings>("get_app_settings");
+      const currentSettings =
+        await invoke<OnboardingAppSettings>("get_app_settings");
       await invoke("update_app_settings", {
         settings: { ...currentSettings, language: newLang },
       });
@@ -81,7 +86,10 @@ export default function OnboardingForm() {
         return;
       }
     } catch (err) {
-      console.warn("Tauri dialog unavailable, falling back to file input:", err);
+      console.warn(
+        "Tauri dialog unavailable, falling back to file input:",
+        err,
+      );
     }
 
     const input = document.createElement("input");
@@ -101,10 +109,53 @@ export default function OnboardingForm() {
     input.click();
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     setError("");
 
-    if (currentStep === 2 && !shopName.trim()) {
+    if (currentStep === 2) {
+      if (dbType === "postgres" && (!pgUrl || !pgUrl.trim())) {
+        setError(
+          t(
+            "auth.onboarding.error_pg_url",
+            "Please enter a valid PostgreSQL connection URL.",
+          ),
+        );
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        if (window.__TAURI_INTERNALS__) {
+          const newlyInitialized = await invoke<boolean>(
+            "switch_database_pool",
+            {
+              dbType,
+              pgUrl: dbType === "postgres" ? pgUrl.trim() : null,
+            },
+          );
+
+          if (!newlyInitialized) {
+            // Check if shop is already fully setup in this existing database
+            const isOnboarded = await invoke<boolean>("check_is_onboarded");
+            if (isOnboarded) {
+              navigate("/dashboard", { replace: true });
+              return;
+            }
+          }
+        }
+        setIsSubmitting(false);
+      } catch (err: unknown) {
+        setIsSubmitting(false);
+        setError(
+          typeof err === "string"
+            ? err
+            : "Failed to connect to database. Please check your URL.",
+        );
+        return;
+      }
+    }
+
+    if (currentStep === 3 && !shopName.trim()) {
       setError(t("auth.onboarding.error_shop_name"));
       return;
     }
@@ -190,13 +241,17 @@ export default function OnboardingForm() {
           password,
         });
 
-        const currentSettings = await invoke<OnboardingAppSettings>("get_app_settings");
+        const currentSettings =
+          await invoke<OnboardingAppSettings>("get_app_settings");
         await invoke("update_app_settings", {
           settings: { ...currentSettings, theme },
         });
       } else {
         localStorage.setItem("browser_onboarded", "true");
-        localStorage.setItem("browser_user", JSON.stringify({ name: username }));
+        localStorage.setItem(
+          "browser_user",
+          JSON.stringify({ name: username }),
+        );
       }
 
       navigate("/dashboard", { replace: true });
@@ -214,7 +269,9 @@ export default function OnboardingForm() {
 
   const renderCurrentStep = () => {
     if (currentStep === 0) {
-      return <OnboardingStepWelcome onNext={handleNext} onRestore={handleRestore} />;
+      return (
+        <OnboardingStepWelcome onNext={handleNext} onRestore={handleRestore} />
+      );
     }
 
     if (currentStep === 1) {
@@ -230,6 +287,17 @@ export default function OnboardingForm() {
 
     if (currentStep === 2) {
       return (
+        <OnboardingStepDatabase
+          dbType={dbType}
+          pgUrl={pgUrl}
+          onDbTypeChange={setDbType}
+          onPgUrlChange={setPgUrl}
+        />
+      );
+    }
+
+    if (currentStep === 3) {
+      return (
         <OnboardingStepDetails
           shopName={shopName}
           phone={phone}
@@ -241,7 +309,7 @@ export default function OnboardingForm() {
       );
     }
 
-    if (currentStep === 3) {
+    if (currentStep === 4) {
       return (
         <OnboardingStepLogo
           logoPath={logoPath}

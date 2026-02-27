@@ -29,6 +29,10 @@ pub struct AppSettings {
     pub backup_time: String,
     #[serde(default = "default_font_size")]
     pub font_size: String,
+    #[serde(default = "default_db_type")]
+    pub db_type: String,
+    #[serde(default)]
+    pub pg_url: Option<String>,
 }
 
 fn default_accent_color() -> String {
@@ -71,6 +75,10 @@ fn default_font_size() -> String {
     "normal".to_string()
 }
 
+fn default_db_type() -> String {
+    "sqlite".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -88,6 +96,8 @@ impl Default for AppSettings {
             backup_frequency: "never".to_string(),
             backup_time: "23:00".to_string(),
             font_size: "normal".to_string(),
+            db_type: "sqlite".to_string(),
+            pg_url: None,
         }
     }
 }

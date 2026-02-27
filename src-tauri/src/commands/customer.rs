@@ -3,6 +3,7 @@ use tauri::{AppHandle, Manager};
 use crate::db::DEFAULT_CUSTOMER_ID_PREFIX;
 use crate::models::{Customer, PaginatedCustomers};
 use crate::state::AppDb;
+use crate::{db_query, db_query_as_one, db_query_as, db_query_scalar_optional, db_query_scalar, db_query_as_optional};
 use crate::sync::enqueue_sync;
 
 const DEFAULT_CUSTOMERS_PAGE_SIZE: i64 = 5;
@@ -24,35 +25,34 @@ pub async fn create_customer(
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let inserted_id = if let Some(provided_id) = id {
-        sqlx::query(
-            "INSERT INTO customers (id, name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(provided_id)
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&city)
-        .bind(&social_media_url)
-        .bind(&platform)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .last_insert_rowid()
-    } else {
-        sqlx::query(
-            "INSERT INTO customers (name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&city)
-        .bind(&social_media_url)
-        .bind(&platform)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .last_insert_rowid()
+    let inserted_id = match &*pool {
+        crate::state::Database::Sqlite(p) => {
+            if let Some(provided_id) = id {
+                sqlx::query("INSERT INTO customers (id, name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                .bind(provided_id).bind(&name).bind(&phone).bind(&address).bind(&city).bind(&social_media_url).bind(&platform)
+                .execute(p).await.map_err(|e| e.to_string())?.last_insert_rowid()
+            } else {
+                sqlx::query("INSERT INTO customers (name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?)")
+                .bind(&name).bind(&phone).bind(&address).bind(&city).bind(&social_media_url).bind(&platform)
+                .execute(p).await.map_err(|e| e.to_string())?.last_insert_rowid()
+            }
+        },
+        #[cfg(feature = "postgres")]
+        crate::state::Database::Postgres(p) => {
+            let q1 = crate::db_macros::adapt_query_for_pg("INSERT INTO customers (id, name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            let q2 = crate::db_macros::adapt_query_for_pg("INSERT INTO customers (name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?) RETURNING id");
+            if let Some(provided_id) = id {
+                sqlx::query_scalar(&q1)
+                .bind(provided_id).bind(&name).bind(&phone).bind(&address).bind(&city).bind(&social_media_url).bind(&platform)
+                .fetch_one(p).await.map_err(|e| e.to_string())?
+            } else {
+                sqlx::query_scalar(&q2)
+                .bind(&name).bind(&phone).bind(&address).bind(&city).bind(&social_media_url).bind(&platform)
+                .fetch_one(p).await.map_err(|e| e.to_string())?
+            }
+        },
+        #[cfg(not(feature = "postgres"))]
+        _ => unreachable!(),
     };
 
     // If a customer_id was provided efficiently, we can use it.
@@ -64,35 +64,23 @@ pub async fn create_customer(
         // or a smarter INSERT query.
         // For simplicity/safety with existing schema, let's just UPDATE it if it was null/different or verify it.
         // Actually, let's just update it to ensure it's set correctly.
-        let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
-            .bind(cid)
-            .bind(inserted_id)
-            .execute(&*pool)
-            .await;
+        let _ = db_query!(&*pool, "UPDATE customers SET customer_id = ? WHERE id = ?", cid, inserted_id);
     } else {
         // Generate new one
-        let prefix: Option<String> = sqlx::query_scalar(
-            "SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1",
-        )
-        .fetch_optional(&*pool)
-        .await
-        .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
+        let prefix: Option<String> = db_query_scalar_optional!(
+            String,
+            &*pool,
+            "SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1"
+        ).unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
 
         let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
         let new_customer_id = format!("{}{:05}", prefix_str, inserted_id);
 
-        let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
-            .bind(new_customer_id)
-            .bind(inserted_id)
-            .execute(&*pool)
-            .await;
+        let _ = db_query!(&*pool, "UPDATE customers SET customer_id = ? WHERE id = ?", new_customer_id, inserted_id);
     }
 
     // Enqueue sync: fetch the full record
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(inserted_id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) = db_query_as_one!(Customer, &*pool, "SELECT * FROM customers WHERE id = ?", inserted_id)
     {
         enqueue_sync(&pool, "customers", "INSERT", inserted_id, serde_json::json!(record)).await;
     }
@@ -106,9 +94,7 @@ pub async fn get_customers(app: AppHandle) -> Result<Vec<Customer>, String> {
     let pool = db.0.lock().await;
 
     let customers =
-        sqlx::query_as::<_, Customer>("SELECT * FROM customers ORDER BY created_at DESC")
-            .fetch_all(&*pool)
-            .await
+        db_query_as!(Customer, &*pool, "SELECT * FROM customers ORDER BY created_at DESC")
             .map_err(|e| e.to_string())?;
 
     Ok(customers)
@@ -172,10 +158,7 @@ pub async fn get_customers_paginated(
             "SELECT COUNT(*) FROM customers WHERE COALESCE({}, '') LIKE ?",
             search_column
         );
-        let total: i64 = sqlx::query_scalar(&count_query)
-            .bind(&search_pattern)
-            .fetch_one(&*pool)
-            .await
+        let total: i64 = db_query_scalar!(i64, &*pool, &count_query, &search_pattern)
             .map_err(|e| e.to_string())?;
 
         let customers = if no_limit {
@@ -183,45 +166,29 @@ pub async fn get_customers_paginated(
                 "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {}",
                 search_column, order_clause
             );
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(&search_pattern)
-                .fetch_all(&*pool)
-                .await
+            db_query_as!(Customer, &*pool, &data_query, &search_pattern)
                 .map_err(|e| e.to_string())?
         } else {
             let data_query = format!(
                 "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {} LIMIT ? OFFSET ?",
                 search_column, order_clause
             );
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(&search_pattern)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await
+            db_query_as!(Customer, &*pool, &data_query, &search_pattern, page_size, offset)
                 .map_err(|e| e.to_string())?
         };
 
         (total, customers)
     } else {
-        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM customers")
-            .fetch_one(&*pool)
-            .await
+        let total: i64 = db_query_scalar!(i64, &*pool, "SELECT COUNT(*) FROM customers")
             .map_err(|e| e.to_string())?;
 
         let customers = if no_limit {
             let data_query = format!("SELECT * FROM customers {}", order_clause);
-            sqlx::query_as::<_, Customer>(&data_query)
-                .fetch_all(&*pool)
-                .await
+            db_query_as!(Customer, &*pool, &data_query)
                 .map_err(|e| e.to_string())?
         } else {
             let data_query = format!("SELECT * FROM customers {} LIMIT ? OFFSET ?", order_clause);
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await
+            db_query_as!(Customer, &*pool, &data_query, page_size, offset)
                 .map_err(|e| e.to_string())?
         };
 
@@ -252,11 +219,8 @@ pub async fn get_customer(app: AppHandle, id: i64) -> Result<Customer, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let customer = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
+    let customer = db_query_as_optional!(Customer, &*pool, "SELECT * FROM customers WHERE id = ?", id)
+        .map_err(|e: sqlx::Error| e.to_string())?
         .ok_or("Customer not found".to_string())?;
 
     Ok(customer)
@@ -276,25 +240,21 @@ pub async fn update_customer(
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    sqlx::query(
+    db_query!(
+        &*pool,
         "UPDATE customers SET name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, updated_at = datetime('now') WHERE id = ?",
+        &name,
+        &phone,
+        &address,
+        &city,
+        &social_media_url,
+        &platform,
+        id
     )
-    .bind(&name)
-    .bind(&phone)
-    .bind(&address)
-    .bind(&city)
-    .bind(&social_media_url)
-    .bind(&platform)
-    .bind(id)
-    .execute(&*pool)
-    .await
     .map_err(|e| e.to_string())?;
 
     // Enqueue sync
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) = db_query_as_one!(Customer, &*pool, "SELECT * FROM customers WHERE id = ?", id)
     {
         enqueue_sync(&pool, "customers", "UPDATE", id, serde_json::json!(record)).await;
     }
@@ -308,17 +268,11 @@ pub async fn delete_customer(app: AppHandle, id: i64) -> Result<(), String> {
     let pool = db.0.lock().await;
 
     // Soft delete: set deleted_at instead of hard delete
-    sqlx::query("UPDATE customers SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
-        .bind(id)
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE customers SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?", id)
         .map_err(|e| e.to_string())?;
 
     // Enqueue sync as DELETE
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) = db_query_as_one!(Customer, &*pool, "SELECT * FROM customers WHERE id = ?", id)
     {
         enqueue_sync(&pool, "customers", "DELETE", id, serde_json::json!(record)).await;
     }

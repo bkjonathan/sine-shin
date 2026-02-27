@@ -1,9 +1,9 @@
-use sqlx::{QueryBuilder, Sqlite};
 use tauri::{AppHandle, Manager};
 
 use crate::db::DEFAULT_EXPENSE_ID_PREFIX;
 use crate::models::{Expense, PaginatedExpenses};
 use crate::state::AppDb;
+use crate::{db_query, db_query_as, db_query_as_one, db_query_as_optional};
 use crate::sync::enqueue_sync;
 
 const DEFAULT_EXPENSES_PAGE_SIZE: i64 = 10;
@@ -45,52 +45,44 @@ pub async fn create_expense(
     let sanitized_notes = sanitize_optional(notes);
     let sanitized_expense_id = sanitize_optional(expense_id);
 
-    let inserted_id = if let Some(provided_id) = id {
-        sqlx::query(
-            "INSERT INTO expenses (id, title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(provided_id)
-        .bind(trimmed_title)
-        .bind(amount)
-        .bind(sanitized_category.clone())
-        .bind(sanitized_expense_date.clone())
-        .bind(sanitized_payment_method.clone())
-        .bind(sanitized_notes.clone())
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .last_insert_rowid()
-    } else {
-        sqlx::query(
-            "INSERT INTO expenses (title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(trimmed_title)
-        .bind(amount)
-        .bind(sanitized_category)
-        .bind(sanitized_expense_date)
-        .bind(sanitized_payment_method)
-        .bind(sanitized_notes)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .last_insert_rowid()
+    let inserted_id = match &*pool {
+        crate::state::Database::Sqlite(p) => {
+            if let Some(provided_id) = id {
+                sqlx::query("INSERT INTO expenses (id, title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                .bind(provided_id).bind(&trimmed_title).bind(amount).bind(&sanitized_category).bind(&sanitized_expense_date).bind(&sanitized_payment_method).bind(&sanitized_notes)
+                .execute(p).await.map_err(|e| e.to_string())?.last_insert_rowid()
+            } else {
+                sqlx::query("INSERT INTO expenses (title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?)")
+                .bind(&trimmed_title).bind(amount).bind(&sanitized_category).bind(&sanitized_expense_date).bind(&sanitized_payment_method).bind(&sanitized_notes)
+                .execute(p).await.map_err(|e| e.to_string())?.last_insert_rowid()
+            }
+        },
+        #[cfg(feature = "postgres")]
+        crate::state::Database::Postgres(p) => {
+            let q1 = crate::db_macros::adapt_query_for_pg("INSERT INTO expenses (id, title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            let q2 = crate::db_macros::adapt_query_for_pg("INSERT INTO expenses (title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?) RETURNING id");
+            if let Some(provided_id) = id {
+                sqlx::query_scalar(&q1)
+                .bind(provided_id).bind(&trimmed_title).bind(amount).bind(&sanitized_category).bind(&sanitized_expense_date).bind(&sanitized_payment_method).bind(&sanitized_notes)
+                .fetch_one(p).await.map_err(|e| e.to_string())?
+            } else {
+                sqlx::query_scalar(&q2)
+                .bind(&trimmed_title).bind(amount).bind(&sanitized_category).bind(&sanitized_expense_date).bind(&sanitized_payment_method).bind(&sanitized_notes)
+                .fetch_one(p).await.map_err(|e| e.to_string())?
+            }
+        },
+        #[cfg(not(feature = "postgres"))]
+        _ => unreachable!(),
     };
 
     let final_expense_id = sanitized_expense_id
         .unwrap_or_else(|| format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, inserted_id));
 
-    sqlx::query("UPDATE expenses SET expense_id = ? WHERE id = ?")
-        .bind(final_expense_id)
-        .bind(inserted_id)
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE expenses SET expense_id = ? WHERE id = ?", final_expense_id, inserted_id)
         .map_err(|e| e.to_string())?;
 
     // Enqueue sync
-    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
-        .bind(inserted_id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) = db_query_as_one!(Expense, &*pool, "SELECT * FROM expenses WHERE id = ?", inserted_id)
     {
         enqueue_sync(&pool, "expenses", "INSERT", inserted_id, serde_json::json!(record)).await;
     }
@@ -104,9 +96,7 @@ pub async fn get_expenses(app: AppHandle) -> Result<Vec<Expense>, String> {
     let pool = db.0.lock().await;
 
     let expenses =
-        sqlx::query_as::<_, Expense>("SELECT * FROM expenses ORDER BY created_at DESC, id DESC")
-            .fetch_all(&*pool)
-            .await
+        db_query_as!(Expense, &*pool, "SELECT * FROM expenses ORDER BY created_at DESC, id DESC")
             .map_err(|e| e.to_string())?;
 
     Ok(expenses)
@@ -178,84 +168,84 @@ pub async fn get_expenses_paginated(
         _ => "DESC",
     };
 
-    let apply_filters = |query: &mut QueryBuilder<Sqlite>| {
-        let mut has_condition = false;
-
-        if has_search {
-            query.push("COALESCE(");
-            query.push(search_column);
-            query.push(", '') LIKE ");
-            query.push_bind(search_pattern.clone());
-            has_condition = true;
-        }
-
-        if let Some(category_value) = normalized_category_filter.as_ref() {
-            if has_condition {
-                query.push(" AND ");
+    macro_rules! apply_filters {
+        ($query:expr) => {
+            let mut has_condition = false;
+            if has_search {
+                $query.push("COALESCE(");
+                $query.push(search_column);
+                $query.push(", '') LIKE ");
+                $query.push_bind(search_pattern.clone());
+                has_condition = true;
             }
-            query.push("LOWER(COALESCE(category, '')) = LOWER(");
-            query.push_bind(category_value.clone());
-            query.push(")");
-            has_condition = true;
-        }
-
-        if let Some(date_from_value) = normalized_date_from.as_ref() {
-            if has_condition {
-                query.push(" AND ");
+            if let Some(category_value) = normalized_category_filter.as_ref() {
+                if has_condition { $query.push(" AND "); }
+                $query.push("LOWER(COALESCE(category, '')) = LOWER(");
+                $query.push_bind(category_value.clone());
+                $query.push(")");
+                has_condition = true;
             }
-            query.push("DATE(COALESCE(expense_date, created_at)) >= DATE(");
-            query.push_bind(date_from_value.clone());
-            query.push(")");
-            has_condition = true;
-        }
-
-        if let Some(date_to_value) = normalized_date_to.as_ref() {
-            if has_condition {
-                query.push(" AND ");
+            if let Some(date_from_value) = normalized_date_from.as_ref() {
+                if has_condition { $query.push(" AND "); }
+                $query.push("DATE(COALESCE(expense_date, created_at)) >= DATE(");
+                $query.push_bind(date_from_value.clone());
+                $query.push(")");
+                has_condition = true;
             }
-            query.push("DATE(COALESCE(expense_date, created_at)) <= DATE(");
-            query.push_bind(date_to_value.clone());
-            query.push(")");
-        }
+            if let Some(date_to_value) = normalized_date_to.as_ref() {
+                if has_condition { $query.push(" AND "); }
+                $query.push("DATE(COALESCE(expense_date, created_at)) <= DATE(");
+                $query.push_bind(date_to_value.clone());
+                $query.push(")");
+            }
+        };
+    }
+
+    let (total, expenses) = match &*pool {
+        crate::state::Database::Sqlite(p) => {
+            let mut count_query = sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT COUNT(*) FROM expenses");
+            if has_search || has_category_filter || has_date_from || has_date_to {
+                count_query.push(" WHERE "); apply_filters!(&mut count_query);
+            }
+            let total: i64 = count_query.build_query_scalar().fetch_one(p).await.map_err(|e| e.to_string())?;
+
+            let mut data_query = sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT * FROM expenses");
+            if has_search || has_category_filter || has_date_from || has_date_to {
+                data_query.push(" WHERE "); apply_filters!(&mut data_query);
+            }
+            data_query.push(" ORDER BY "); data_query.push(sort_column); data_query.push(" "); data_query.push(sort_direction);
+            data_query.push(", id "); data_query.push(sort_direction);
+            if !no_limit {
+                data_query.push(" LIMIT "); data_query.push_bind(page_size);
+                data_query.push(" OFFSET "); data_query.push_bind(offset);
+            }
+            let expenses = data_query.build_query_as::<Expense>().fetch_all(p).await.map_err(|e| e.to_string())?;
+            (total, expenses)
+        },
+        #[cfg(feature = "postgres")]
+        crate::state::Database::Postgres(p) => {
+            let mut count_query = sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM expenses");
+            if has_search || has_category_filter || has_date_from || has_date_to {
+                count_query.push(" WHERE "); apply_filters!(&mut count_query);
+            }
+            let total: i64 = count_query.build_query_scalar().fetch_one(p).await.map_err(|e| e.to_string())?;
+
+            let mut data_query = sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT * FROM expenses");
+            if has_search || has_category_filter || has_date_from || has_date_to {
+                data_query.push(" WHERE "); apply_filters!(&mut data_query);
+            }
+            data_query.push(" ORDER BY "); data_query.push(sort_column); data_query.push(" "); data_query.push(sort_direction);
+            data_query.push(", id "); data_query.push(sort_direction);
+            if !no_limit {
+                data_query.push(" LIMIT "); data_query.push_bind(page_size);
+                data_query.push(" OFFSET "); data_query.push_bind(offset);
+            }
+            let expenses = data_query.build_query_as::<Expense>().fetch_all(p).await.map_err(|e| e.to_string())?;
+            (total, expenses)
+        },
+        #[cfg(not(feature = "postgres"))]
+        _ => unreachable!(),
     };
-
-    let mut count_query = QueryBuilder::<Sqlite>::new("SELECT COUNT(*) FROM expenses");
-    if has_search || has_category_filter || has_date_from || has_date_to {
-        count_query.push(" WHERE ");
-        apply_filters(&mut count_query);
-    }
-
-    let total: i64 = count_query
-        .build_query_scalar()
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let mut data_query = QueryBuilder::<Sqlite>::new("SELECT * FROM expenses");
-    if has_search || has_category_filter || has_date_from || has_date_to {
-        data_query.push(" WHERE ");
-        apply_filters(&mut data_query);
-    }
-
-    data_query.push(" ORDER BY ");
-    data_query.push(sort_column);
-    data_query.push(" ");
-    data_query.push(sort_direction);
-    data_query.push(", id ");
-    data_query.push(sort_direction);
-
-    if !no_limit {
-        data_query.push(" LIMIT ");
-        data_query.push_bind(page_size);
-        data_query.push(" OFFSET ");
-        data_query.push_bind(offset);
-    }
-
-    let expenses = data_query
-        .build_query_as::<Expense>()
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
 
     let response_page_size = if no_limit { total.max(0) } else { page_size };
     let total_pages = if total == 0 {
@@ -280,10 +270,7 @@ pub async fn get_expense(app: AppHandle, id: i64) -> Result<Expense, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let expense = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&*pool)
-        .await
+    let expense = db_query_as_optional!(Expense, &*pool, "SELECT * FROM expenses WHERE id = ?", id)
         .map_err(|e| e.to_string())?
         .ok_or("Expense not found".to_string())?;
 
@@ -312,25 +299,21 @@ pub async fn update_expense(
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    sqlx::query(
+    db_query!(
+        &*pool,
         "UPDATE expenses SET title = ?, amount = ?, category = ?, expense_date = ?, payment_method = ?, notes = ?, updated_at = datetime('now') WHERE id = ?",
+        trimmed_title,
+        amount,
+        sanitize_optional(category),
+        sanitize_optional(expense_date),
+        sanitize_optional(payment_method),
+        sanitize_optional(notes),
+        id
     )
-    .bind(trimmed_title)
-    .bind(amount)
-    .bind(sanitize_optional(category))
-    .bind(sanitize_optional(expense_date))
-    .bind(sanitize_optional(payment_method))
-    .bind(sanitize_optional(notes))
-    .bind(id)
-    .execute(&*pool)
-    .await
     .map_err(|e| e.to_string())?;
 
     // Enqueue sync
-    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) = db_query_as_one!(Expense, &*pool, "SELECT * FROM expenses WHERE id = ?", id)
     {
         enqueue_sync(&pool, "expenses", "UPDATE", id, serde_json::json!(record)).await;
     }
@@ -344,17 +327,11 @@ pub async fn delete_expense(app: AppHandle, id: i64) -> Result<(), String> {
     let pool = db.0.lock().await;
 
     // Soft delete
-    sqlx::query("UPDATE expenses SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
-        .bind(id)
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE expenses SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?", id)
         .map_err(|e| e.to_string())?;
 
     // Enqueue sync
-    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) = db_query_as_one!(Expense, &*pool, "SELECT * FROM expenses WHERE id = ?", id)
     {
         enqueue_sync(&pool, "expenses", "DELETE", id, serde_json::json!(record)).await;
     }

@@ -1,9 +1,9 @@
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::state::AppDb;
+use crate::state::{AppDb, Database};
+use crate::{db_query, db_query_as, db_query_scalar, db_query_scalar_optional, db_query_as_optional};
 
 // ─── Structs ─────────────────────────────────────────────────────
 
@@ -68,49 +68,46 @@ pub struct TestConnectionResult {
 // ─── Core Sync Functions ─────────────────────────────────────────
 
 /// Auto-prune sync_sessions and sync_queue to keep only the latest 100 rows each.
-async fn cleanup_old_sync_data(pool: &Pool<Sqlite>) {
+async fn cleanup_old_sync_data(pool: &Database) {
     // Keep only latest 100 sync_sessions
-    let _ = sqlx::query(
+    let _ = db_query!(
+        pool,
         "DELETE FROM sync_sessions WHERE id NOT IN (SELECT id FROM sync_sessions ORDER BY started_at DESC LIMIT 100)"
-    )
-    .execute(pool)
-    .await;
+    );
 
     // Keep only latest 100 synced queue items (already processed)
-    let _ = sqlx::query(
+    let _ = db_query!(
+        pool,
         "DELETE FROM sync_queue WHERE status = 'synced' AND id NOT IN (SELECT id FROM sync_queue WHERE status = 'synced' ORDER BY synced_at DESC LIMIT 100)"
-    )
-    .execute(pool)
-    .await;
+    );
 }
 
 /// Insert a row into sync_queue. Call this after every write operation.
 pub async fn enqueue_sync(
-    pool: &Pool<Sqlite>,
+    pool: &Database,
     table: &str,
     op: &str,
     record_id: i64,
     payload: serde_json::Value,
 ) {
     let payload_str = payload.to_string();
-    let _ = sqlx::query(
-        "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, ?, ?, ?, 'pending')"
-    )
-    .bind(table)
-    .bind(op)
-    .bind(record_id)
-    .bind(payload_str)
-    .execute(pool)
-    .await;
+    let _ = db_query!(
+        pool,
+        "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, ?, ?, ?, 'pending')",
+        table,
+        op,
+        record_id,
+        payload_str
+    );
 }
 
 /// Load sync config from SQLite
-async fn load_sync_config(pool: &Pool<Sqlite>) -> Option<SyncConfig> {
-    let row: Option<(i64, String, String, String, i64, i64)> = sqlx::query_as(
+async fn load_sync_config(pool: &Database) -> Option<SyncConfig> {
+    let row: Option<(i64, String, String, String, i64, i64)> = db_query_as_optional!(
+        (i64, String, String, String, i64, i64),
+        pool,
         "SELECT id, supabase_url, supabase_anon_key, supabase_service_key, sync_enabled, COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
     )
-    .fetch_optional(pool)
-    .await
     .ok()?;
 
     row.map(|(id, url, anon, service, enabled, interval)| SyncConfig {
@@ -137,27 +134,27 @@ pub async fn process_sync_queue(app: &AppHandle) {
     let _ = app.emit("sync://started", ());
 
     // Create session
-    let session_id: i64 = sqlx::query_scalar(
+    let session_id: i64 = db_query_scalar!(
+        i64,
+        &*pool,
         "INSERT INTO sync_sessions (status) VALUES ('running') RETURNING id"
     )
-    .fetch_one(&*pool)
-    .await
     .unwrap_or(0);
 
     // Fetch items to sync
-    let items: Vec<SyncQueueItem> = sqlx::query_as(
+    let items: Vec<SyncQueueItem> = db_query_as!(
+        SyncQueueItem,
+        &*pool,
         "SELECT * FROM sync_queue WHERE status = 'pending' OR (status = 'failed' AND retry_count < 5) ORDER BY created_at ASC"
     )
-    .fetch_all(&*pool)
-    .await
     .unwrap_or_default();
 
     let total_queued = items.len() as i64;
-    let _ = sqlx::query("UPDATE sync_sessions SET total_queued = ? WHERE id = ?")
-        .bind(total_queued)
-        .bind(session_id)
-        .execute(&*pool)
-        .await;
+    let _ = db_query!(
+        &*pool,
+        "UPDATE sync_sessions SET total_queued = ? WHERE id = ?",
+        total_queued, session_id
+    );
 
     let client = reqwest::Client::new();
     let mut total_synced: i64 = 0;
@@ -165,10 +162,11 @@ pub async fn process_sync_queue(app: &AppHandle) {
 
     for item in &items {
         // Mark as syncing
-        let _ = sqlx::query("UPDATE sync_queue SET status = 'syncing' WHERE id = ?")
-            .bind(item.id)
-            .execute(&*pool)
-            .await;
+        let _ = db_query!(
+            &*pool,
+            "UPDATE sync_queue SET status = 'syncing' WHERE id = ?",
+            item.id
+        );
 
         let result = match item.operation.as_str() {
             "INSERT" => {
@@ -217,33 +215,28 @@ pub async fn process_sync_queue(app: &AppHandle) {
 
         match result {
             Ok(resp) if resp.status().is_success() || resp.status().as_u16() == 201 || resp.status().as_u16() == 204 => {
-                let _ = sqlx::query(
-                    "UPDATE sync_queue SET status = 'synced', synced_at = datetime('now') WHERE id = ?"
-                )
-                .bind(item.id)
-                .execute(&*pool)
-                .await;
+                let _ = db_query!(
+                    &*pool,
+                    "UPDATE sync_queue SET status = 'synced', synced_at = datetime('now') WHERE id = ?",
+                    item.id
+                );
                 total_synced += 1;
             }
             Ok(resp) => {
                 let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                let _ = sqlx::query(
-                    "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, error_message = ? WHERE id = ?"
-                )
-                .bind(&error_text)
-                .bind(item.id)
-                .execute(&*pool)
-                .await;
+                let _ = db_query!(
+                    &*pool,
+                    "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, error_message = ? WHERE id = ?",
+                    &error_text, item.id
+                );
                 total_failed += 1;
             }
             Err(e) => {
-                let _ = sqlx::query(
-                    "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, error_message = ? WHERE id = ?"
-                )
-                .bind(e.to_string())
-                .bind(item.id)
-                .execute(&*pool)
-                .await;
+                let _ = db_query!(
+                    &*pool,
+                    "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, error_message = ? WHERE id = ?",
+                    e.to_string(), item.id
+                );
                 total_failed += 1;
             }
         }
@@ -255,15 +248,11 @@ pub async fn process_sync_queue(app: &AppHandle) {
     } else {
         "completed"
     };
-    let _ = sqlx::query(
-        "UPDATE sync_sessions SET finished_at = datetime('now'), total_synced = ?, total_failed = ?, status = ? WHERE id = ?"
-    )
-    .bind(total_synced)
-    .bind(total_failed)
-    .bind(session_status)
-    .bind(session_id)
-    .execute(&*pool)
-    .await;
+    let _ = db_query!(
+        &*pool,
+        "UPDATE sync_sessions SET finished_at = datetime('now'), total_synced = ?, total_failed = ?, status = ? WHERE id = ?",
+        total_synced, total_failed, session_status, session_id
+    );
 
     // Auto-cleanup old sync data (keep latest 100 rows)
     cleanup_old_sync_data(&pool).await;
@@ -323,28 +312,20 @@ pub async fn save_sync_config(
     let pool = db.0.lock().await;
 
     // Fetch existing interval or default to 30
-    let current_interval: i32 = sqlx::query_scalar("SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1")
-        .fetch_optional(&*pool)
-        .await
+    let current_interval: i32 = db_query_scalar_optional!(i32, &*pool, "SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1")
         .map_err(|e| e.to_string())?
         .unwrap_or(30);
 
     // Deactivate existing configs
-    sqlx::query("UPDATE sync_config SET is_active = 0")
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE sync_config SET is_active = 0")
         .map_err(|e| e.to_string())?;
 
     // Insert new config
-    sqlx::query(
-        "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled, sync_interval) VALUES (?, ?, ?, 1, 1, ?)"
+    db_query!(
+        &*pool,
+        "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled, sync_interval) VALUES (?, ?, ?, 1, 1, ?)",
+        url, anon_key, service_key, current_interval
     )
-    .bind(url)
-    .bind(anon_key)
-    .bind(service_key)
-    .bind(current_interval)
-    .execute(&*pool)
-    .await
     .map_err(|e| e.to_string())?;
 
     Ok(())
@@ -363,10 +344,7 @@ pub async fn update_sync_interval(app: AppHandle, interval: i32) -> Result<(), S
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    sqlx::query("UPDATE sync_config SET sync_interval = ? WHERE is_active = 1")
-        .bind(interval)
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE sync_config SET sync_interval = ? WHERE is_active = 1", interval)
         .map_err(|e| e.to_string())?;
 
     Ok(())
@@ -432,14 +410,14 @@ pub async fn get_sync_queue_stats(app: AppHandle) -> Result<SyncStats, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'")
-        .fetch_one(&*pool).await.map_err(|e| e.to_string())?;
-    let syncing: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'syncing'")
-        .fetch_one(&*pool).await.map_err(|e| e.to_string())?;
-    let synced: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'synced'")
-        .fetch_one(&*pool).await.map_err(|e| e.to_string())?;
-    let failed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'failed'")
-        .fetch_one(&*pool).await.map_err(|e| e.to_string())?;
+    let pending: i64 = db_query_scalar!(i64, &*pool, "SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'")
+        .map_err(|e| e.to_string())?;
+    let syncing: i64 = db_query_scalar!(i64, &*pool, "SELECT COUNT(*) FROM sync_queue WHERE status = 'syncing'")
+        .map_err(|e| e.to_string())?;
+    let synced: i64 = db_query_scalar!(i64, &*pool, "SELECT COUNT(*) FROM sync_queue WHERE status = 'synced'")
+        .map_err(|e| e.to_string())?;
+    let failed: i64 = db_query_scalar!(i64, &*pool, "SELECT COUNT(*) FROM sync_queue WHERE status = 'failed'")
+        .map_err(|e| e.to_string())?;
 
     Ok(SyncStats { pending, syncing, synced, failed })
 }
@@ -449,12 +427,12 @@ pub async fn get_sync_sessions(app: AppHandle, limit: i64) -> Result<Vec<SyncSes
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let sessions = sqlx::query_as::<_, SyncSession>(
-        "SELECT * FROM sync_sessions ORDER BY started_at DESC LIMIT ?"
+    let sessions = db_query_as!(
+        SyncSession,
+        &*pool,
+        "SELECT * FROM sync_sessions ORDER BY started_at DESC LIMIT ?",
+        limit
     )
-    .bind(limit)
-    .fetch_all(&*pool)
-    .await
     .map_err(|e| e.to_string())?;
 
     Ok(sessions)
@@ -470,21 +448,20 @@ pub async fn get_sync_queue_items(
     let pool = db.0.lock().await;
 
     let items = if let Some(s) = status {
-        sqlx::query_as::<_, SyncQueueItem>(
-            "SELECT * FROM sync_queue WHERE status = ? ORDER BY created_at DESC LIMIT ?"
+        db_query_as!(
+            SyncQueueItem,
+            &*pool,
+            "SELECT * FROM sync_queue WHERE status = ? ORDER BY created_at DESC LIMIT ?",
+            s, limit
         )
-        .bind(s)
-        .bind(limit)
-        .fetch_all(&*pool)
-        .await
         .map_err(|e| e.to_string())?
     } else {
-        sqlx::query_as::<_, SyncQueueItem>(
-            "SELECT * FROM sync_queue ORDER BY created_at DESC LIMIT ?"
+        db_query_as!(
+            SyncQueueItem,
+            &*pool,
+            "SELECT * FROM sync_queue ORDER BY created_at DESC LIMIT ?",
+            limit
         )
-        .bind(limit)
-        .fetch_all(&*pool)
-        .await
         .map_err(|e| e.to_string())?
     };
 
@@ -496,14 +473,25 @@ pub async fn retry_failed_items(app: AppHandle) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let result = sqlx::query(
-        "UPDATE sync_queue SET status = 'pending', retry_count = 0, error_message = NULL WHERE status = 'failed'"
-    )
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows_affected = match &*pool {
+        crate::state::Database::Sqlite(p) => sqlx::query(
+            "UPDATE sync_queue SET status = 'pending', retry_count = 0, error_message = NULL WHERE status = 'failed'"
+        )
+        .execute(p)
+        .await
+        .map_err(|e| e.to_string())?
+        .rows_affected(),
+        #[cfg(feature = "postgres")]
+        crate::state::Database::Postgres(p) => sqlx::query(
+            "UPDATE sync_queue SET status = 'pending', retry_count = 0, error_message = NULL WHERE status = 'failed'"
+        )
+        .execute(p)
+        .await
+        .map_err(|e| e.to_string())?
+        .rows_affected(),
+    };
 
-    Ok(result.rows_affected() as i64)
+    Ok(rows_affected as i64)
 }
 
 #[tauri::command]
@@ -511,15 +499,28 @@ pub async fn clear_synced_items(app: AppHandle, older_than_days: i64) -> Result<
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let result = sqlx::query(
-        "DELETE FROM sync_queue WHERE status = 'synced' AND synced_at < datetime('now', ? || ' days')"
-    )
-    .bind(format!("-{}", older_than_days))
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows_affected = match &*pool {
+        crate::state::Database::Sqlite(p) => sqlx::query(
+            "DELETE FROM sync_queue WHERE status = 'synced' AND synced_at < datetime('now', ? || ' days')"
+        )
+        .bind(format!("-{}", older_than_days))
+        .execute(p)
+        .await
+        .map_err(|e| e.to_string())?
+        .rows_affected(),
+        #[cfg(feature = "postgres")]
+        crate::state::Database::Postgres(p) => {
+            let q = crate::db_macros::adapt_query_for_pg("DELETE FROM sync_queue WHERE status = 'synced' AND synced_at < CURRENT_TIMESTAMP - (? || ' days')::INTERVAL");
+            sqlx::query(&q)
+                .bind(format!("{}", older_than_days))
+                .execute(p)
+                .await
+                .map_err(|e| e.to_string())?
+                .rows_affected()
+        }
+    };
 
-    Ok(result.rows_affected() as i64)
+    Ok(rows_affected as i64)
 }
 
 #[tauri::command]
@@ -527,25 +528,25 @@ pub async fn clean_sync_data(app: AppHandle) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    // Delete all completed/failed sessions
-    let sessions_deleted = sqlx::query(
-        "DELETE FROM sync_sessions WHERE status IN ('completed', 'failed')"
-    )
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .rows_affected();
+    let rows_affected = match &*pool {
+        crate::state::Database::Sqlite(p) => {
+            let s = sqlx::query("DELETE FROM sync_sessions WHERE status IN ('completed', 'failed')")
+                .execute(p).await.map_err(|e| e.to_string())?.rows_affected();
+            let q = sqlx::query("DELETE FROM sync_queue WHERE status = 'synced'")
+                .execute(p).await.map_err(|e| e.to_string())?.rows_affected();
+            s + q
+        },
+        #[cfg(feature = "postgres")]
+        crate::state::Database::Postgres(p) => {
+            let s = sqlx::query("DELETE FROM sync_sessions WHERE status IN ('completed', 'failed')")
+                .execute(p).await.map_err(|e| e.to_string())?.rows_affected();
+            let q = sqlx::query("DELETE FROM sync_queue WHERE status = 'synced'")
+                .execute(p).await.map_err(|e| e.to_string())?.rows_affected();
+            s + q
+        }
+    };
 
-    // Delete all synced queue items
-    let queue_deleted = sqlx::query(
-        "DELETE FROM sync_queue WHERE status = 'synced'"
-    )
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .rows_affected();
-
-    Ok((sessions_deleted + queue_deleted) as i64)
+    Ok(rows_affected as i64)
 }
 
 // ─── Master Password Commands ────────────────────────────────────
@@ -563,11 +564,11 @@ pub async fn set_master_password(
     let pool = db.0.lock().await;
 
     // Verify current login password for the owner
-    let user: Option<(i64, String)> = sqlx::query_as(
+    let user: Option<(i64, String)> = db_query_as_optional!(
+        (i64, String),
+        &*pool,
         "SELECT id, password_hash FROM users WHERE role = 'owner' LIMIT 1"
     )
-    .fetch_optional(&*pool)
-    .await
     .map_err(|e| e.to_string())?;
 
     let (user_id, password_hash) = user.ok_or("No owner account found")?;
@@ -584,12 +585,12 @@ pub async fn set_master_password(
         .map_err(|e| format!("Failed to hash master password: {}", e))?
         .to_string();
 
-    sqlx::query("UPDATE users SET master_password_hash = ? WHERE id = ?")
-        .bind(master_hash)
-        .bind(user_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    db_query!(
+        &*pool,
+        "UPDATE users SET master_password_hash = ? WHERE id = ?",
+        master_hash, user_id
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -601,11 +602,11 @@ pub async fn verify_master_password(app: AppHandle, input: String) -> Result<boo
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let hash: Option<String> = sqlx::query_scalar(
+    let hash: Option<String> = db_query_scalar_optional!(
+        String,
+        &*pool,
         "SELECT master_password_hash FROM users WHERE role = 'owner' AND master_password_hash IS NOT NULL LIMIT 1"
     )
-    .fetch_optional(&*pool)
-    .await
     .map_err(|e| e.to_string())?;
 
     match hash {
@@ -631,11 +632,11 @@ pub async fn migrate_to_new_database(
     let pool = db.0.lock().await;
 
     // 1. Verify master password
-    let hash: Option<String> = sqlx::query_scalar(
+    let hash: Option<String> = db_query_scalar_optional!(
+        String,
+        &*pool,
         "SELECT master_password_hash FROM users WHERE role = 'owner' AND master_password_hash IS NOT NULL LIMIT 1"
     )
-    .fetch_optional(&*pool)
-    .await
     .map_err(|e| e.to_string())?;
 
     let h = hash.ok_or("No master password set. Please set one first.")?;
@@ -645,75 +646,55 @@ pub async fn migrate_to_new_database(
     }
 
     // 2. Save new Supabase config
-    sqlx::query("UPDATE sync_config SET is_active = 0")
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE sync_config SET is_active = 0")
         .map_err(|e| e.to_string())?;
 
-    let current_interval: i32 = sqlx::query_scalar("SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1")
-        .fetch_optional(&*pool)
-        .await
+    let current_interval: i32 = db_query_scalar_optional!(i32, &*pool, "SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1")
         .map_err(|e| e.to_string())?
         .unwrap_or(30);
 
-    sqlx::query(
-        "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled, sync_interval) VALUES (?, ?, ?, 1, 1, ?)"
+    db_query!(
+        &*pool,
+        "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled, sync_interval) VALUES (?, ?, ?, 1, 1, ?)",
+        &new_supabase_url, &new_anon_key, &new_service_key, current_interval
     )
-    .bind(&new_supabase_url)
-    .bind(&new_anon_key)
-    .bind(&new_service_key)
-    .bind(current_interval)
-    .execute(&*pool)
-    .await
     .map_err(|e| e.to_string())?;
 
     // 3. Reset all sync_queue to pending (full re-sync)
-    sqlx::query("UPDATE sync_queue SET status = 'pending', retry_count = 0, error_message = NULL")
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE sync_queue SET status = 'pending', retry_count = 0, error_message = NULL")
         .map_err(|e| e.to_string())?;
 
     // 4. Reset synced=0 on all records
     for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
-        let _ = sqlx::query(&format!("UPDATE {} SET synced = 0", table))
-            .execute(&*pool)
-            .await;
+        let _ = db_query!(&*pool, &format!("UPDATE {} SET synced = 0", table));
     }
 
     // 5. Count total records to re-queue
     let mut total: i64 = 0;
     for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
-        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table))
-            .fetch_one(&*pool)
-            .await
+        let count: i64 = db_query_scalar!(i64, &*pool, &format!("SELECT COUNT(*) FROM {}", table))
             .unwrap_or(0);
         total += count;
 
         // Re-enqueue all existing records
-        let ids: Vec<(i64,)> = sqlx::query_as(&format!("SELECT id FROM {}", table))
-            .fetch_all(&*pool)
-            .await
+        let ids: Vec<(i64,)> = db_query_as!((i64,), &*pool, &format!("SELECT id FROM {}", table))
             .unwrap_or_default();
 
         for (id,) in ids {
             // Fetch full record as JSON-like payload
-            let row: Option<(String,)> = sqlx::query_as(&format!(
-                "SELECT json_object('id', id) FROM {} WHERE id = ?", table
-            ))
-            .bind(id)
-            .fetch_optional(&*pool)
-            .await
-            .unwrap_or(None);
+            let query = format!("SELECT json_object('id', id) FROM {} WHERE id = ?", table);
+            let query = if matches!(&*pool, crate::state::Database::Postgres(_)) {
+                query.replace("json_object", "json_build_object")
+            } else { query };
+            let row: Option<(String,)> = db_query_as_optional!((String,), &*pool, &query, id)
+                .unwrap_or(None);
 
             if let Some((payload,)) = row {
-                let _ = sqlx::query(
-                    "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, 'INSERT', ?, ?, 'pending')"
-                )
-                .bind(table)
-                .bind(id)
-                .bind(payload)
-                .execute(&*pool)
-                .await;
+                let _ = db_query!(
+                    &*pool,
+                    "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, 'INSERT', ?, ?, 'pending')",
+                    table, id, payload
+                );
             }
         }
     }
@@ -737,9 +718,7 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
     let _config = load_sync_config(&pool).await.ok_or("No sync configuration found. Please save your Supabase config first.")?;
 
     // Clear any existing pending/failed items to avoid duplicates
-    sqlx::query("DELETE FROM sync_queue WHERE status IN ('pending', 'failed')")
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "DELETE FROM sync_queue WHERE status IN ('pending', 'failed')")
         .map_err(|e| e.to_string())?;
 
     // Table definitions: (table_name, json_object columns SQL)
@@ -755,20 +734,18 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
 
     for (table, json_expr) in &tables {
         let query = format!("SELECT id, {} as payload FROM {}", json_expr, table);
-        let rows: Vec<(i64, String)> = sqlx::query_as(&query)
-            .fetch_all(&*pool)
-            .await
+        let query = if matches!(&*pool, crate::state::Database::Postgres(_)) {
+            query.replace("json_object", "json_build_object")
+        } else { query };
+        let rows: Vec<(i64, String)> = db_query_as!((i64, String), &*pool, &query)
             .unwrap_or_default();
 
         for (id, payload) in &rows {
-            let _ = sqlx::query(
-                "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, 'INSERT', ?, ?, 'pending')"
-            )
-            .bind(table)
-            .bind(id)
-            .bind(payload)
-            .execute(&*pool)
-            .await;
+            let _ = db_query!(
+                &*pool,
+                "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, 'INSERT', ?, ?, 'pending')",
+                table, id, payload
+            );
         }
 
         total += rows.len() as i64;
@@ -776,9 +753,7 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
 
     // Mark all records as unsynced
     for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
-        let _ = sqlx::query(&format!("UPDATE {} SET synced = 0", table))
-            .execute(&*pool)
-            .await;
+        let _ = db_query!(&*pool, &format!("UPDATE {} SET synced = 0", table));
     }
 
     // Drop pool lock and trigger sync immediately

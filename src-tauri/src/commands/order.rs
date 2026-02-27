@@ -1,4 +1,3 @@
-use sqlx::{QueryBuilder, Sqlite};
 use tauri::{AppHandle, Manager};
 
 use crate::db::{
@@ -9,6 +8,7 @@ use crate::models::{
     PaginatedOrders,
 };
 use crate::state::AppDb;
+use crate::{db_query, db_query_as_one, db_query_as, db_query_as_optional, db_query_scalar};
 use crate::sync::enqueue_sync;
 
 const DEFAULT_ORDERS_PAGE_SIZE: i64 = 5;
@@ -73,124 +73,86 @@ pub async fn create_order(
     let normalized_status =
         normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
 
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let inserted_id = match &*pool {
+        crate::state::Database::Sqlite(p) => {
+            let mut tx = p.begin().await.map_err(|e| e.to_string())?;
 
-    let inserted_id = if let Some(provided_id) = id {
-        sqlx::query(
-            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(provided_id)
-        .bind(customer_id)
-        .bind(normalized_status.clone())
-        .bind(order_from.clone())
-        .bind(exchange_rate)
-        .bind(shipping_fee)
-        .bind(delivery_fee)
-        .bind(cargo_fee)
-        .bind(order_date.clone())
-        .bind(arrived_date.clone())
-        .bind(shipment_date.clone())
-        .bind(user_withdraw_date.clone())
-        .bind(service_fee)
-        .bind(product_discount)
-        .bind(service_fee_type.clone())
-        .bind(shipping_fee_paid.unwrap_or(false))
-        .bind(delivery_fee_paid.unwrap_or(false))
-        .bind(cargo_fee_paid.unwrap_or(false))
-        .bind(service_fee_paid.unwrap_or(false))
-        .bind(shipping_fee_by_shop.unwrap_or(false))
-        .bind(delivery_fee_by_shop.unwrap_or(false))
-        .bind(cargo_fee_by_shop.unwrap_or(false))
-        .bind(exclude_cargo_fee.unwrap_or(false))
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?
-        .last_insert_rowid()
-    } else {
-        sqlx::query(
-            "INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(customer_id)
-        .bind(normalized_status)
-        .bind(order_from)
-        .bind(exchange_rate)
-        .bind(shipping_fee)
-        .bind(delivery_fee)
-        .bind(cargo_fee)
-        .bind(order_date)
-        .bind(arrived_date)
-        .bind(shipment_date)
-        .bind(user_withdraw_date)
-        .bind(service_fee)
-        .bind(product_discount)
-        .bind(service_fee_type)
-        .bind(shipping_fee_paid.unwrap_or(false))
-        .bind(delivery_fee_paid.unwrap_or(false))
-        .bind(cargo_fee_paid.unwrap_or(false))
-        .bind(service_fee_paid.unwrap_or(false))
-        .bind(shipping_fee_by_shop.unwrap_or(false))
-        .bind(delivery_fee_by_shop.unwrap_or(false))
-        .bind(cargo_fee_by_shop.unwrap_or(false))
-        .bind(exclude_cargo_fee.unwrap_or(false))
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?
-        .last_insert_rowid()
+            let id_val = if let Some(provided_id) = id {
+                sqlx::query("INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(provided_id).bind(customer_id).bind(&normalized_status).bind(&order_from).bind(exchange_rate).bind(shipping_fee).bind(delivery_fee).bind(cargo_fee).bind(&order_date).bind(&arrived_date).bind(&shipment_date).bind(&user_withdraw_date).bind(service_fee).bind(product_discount).bind(&service_fee_type).bind(shipping_fee_paid.unwrap_or(false)).bind(delivery_fee_paid.unwrap_or(false)).bind(cargo_fee_paid.unwrap_or(false)).bind(service_fee_paid.unwrap_or(false)).bind(shipping_fee_by_shop.unwrap_or(false)).bind(delivery_fee_by_shop.unwrap_or(false)).bind(cargo_fee_by_shop.unwrap_or(false)).bind(exclude_cargo_fee.unwrap_or(false))
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?.last_insert_rowid()
+            } else {
+                sqlx::query("INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(customer_id).bind(&normalized_status).bind(&order_from).bind(exchange_rate).bind(shipping_fee).bind(delivery_fee).bind(cargo_fee).bind(&order_date).bind(&arrived_date).bind(&shipment_date).bind(&user_withdraw_date).bind(service_fee).bind(product_discount).bind(&service_fee_type).bind(shipping_fee_paid.unwrap_or(false)).bind(delivery_fee_paid.unwrap_or(false)).bind(cargo_fee_paid.unwrap_or(false)).bind(service_fee_paid.unwrap_or(false)).bind(shipping_fee_by_shop.unwrap_or(false)).bind(delivery_fee_by_shop.unwrap_or(false)).bind(cargo_fee_by_shop.unwrap_or(false)).bind(exclude_cargo_fee.unwrap_or(false))
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?.last_insert_rowid()
+            };
+
+            for item in &items {
+                sqlx::query("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)")
+                .bind(id_val).bind(&item.product_url).bind(item.product_qty).bind(item.price).bind(item.product_weight)
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            }
+
+            if let Some(ref oid) = order_id {
+                sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?").bind(oid).bind(id_val).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            } else {
+                let prefix: Option<String> = sqlx::query_scalar("SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1").fetch_optional(&mut *tx).await.unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
+                let prefix_str = prefix.filter(|p| !p.is_empty()).unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
+                let new_order_id = format!("{}{:05}", prefix_str, id_val);
+                sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?").bind(new_order_id).bind(id_val).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            }
+
+            tx.commit().await.map_err(|e| e.to_string())?;
+            id_val
+        },
+        #[cfg(feature = "postgres")]
+        crate::state::Database::Postgres(p) => {
+            let mut tx = p.begin().await.map_err(|e| e.to_string())?;
+
+            let q1 = crate::db_macros::adapt_query_for_pg("INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            let q2 = crate::db_macros::adapt_query_for_pg("INSERT INTO orders (customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            let id_val: i64 = if let Some(provided_id) = id {
+                sqlx::query_scalar(&q1)
+                .bind(provided_id).bind(customer_id).bind(&normalized_status).bind(&order_from).bind(exchange_rate).bind(shipping_fee).bind(delivery_fee).bind(cargo_fee).bind(&order_date).bind(&arrived_date).bind(&shipment_date).bind(&user_withdraw_date).bind(service_fee).bind(product_discount).bind(&service_fee_type).bind(shipping_fee_paid.unwrap_or(false)).bind(delivery_fee_paid.unwrap_or(false)).bind(cargo_fee_paid.unwrap_or(false)).bind(service_fee_paid.unwrap_or(false)).bind(shipping_fee_by_shop.unwrap_or(false)).bind(delivery_fee_by_shop.unwrap_or(false)).bind(cargo_fee_by_shop.unwrap_or(false)).bind(exclude_cargo_fee.unwrap_or(false))
+                .fetch_one(&mut *tx).await.map_err(|e| e.to_string())?
+            } else {
+                sqlx::query_scalar(&q2)
+                .bind(customer_id).bind(&normalized_status).bind(&order_from).bind(exchange_rate).bind(shipping_fee).bind(delivery_fee).bind(cargo_fee).bind(&order_date).bind(&arrived_date).bind(&shipment_date).bind(&user_withdraw_date).bind(service_fee).bind(product_discount).bind(&service_fee_type).bind(shipping_fee_paid.unwrap_or(false)).bind(delivery_fee_paid.unwrap_or(false)).bind(cargo_fee_paid.unwrap_or(false)).bind(service_fee_paid.unwrap_or(false)).bind(shipping_fee_by_shop.unwrap_or(false)).bind(delivery_fee_by_shop.unwrap_or(false)).bind(cargo_fee_by_shop.unwrap_or(false)).bind(exclude_cargo_fee.unwrap_or(false))
+                .fetch_one(&mut *tx).await.map_err(|e| e.to_string())?
+            };
+
+            let qi = crate::db_macros::adapt_query_for_pg("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)");
+            for item in &items {
+                sqlx::query(&qi)
+                .bind(id_val).bind(&item.product_url).bind(item.product_qty).bind(item.price).bind(item.product_weight)
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            }
+
+            if let Some(ref oid) = order_id {
+                let qu = crate::db_macros::adapt_query_for_pg("UPDATE orders SET order_id = ? WHERE id = ?");
+                sqlx::query(&qu).bind(oid).bind(id_val).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            } else {
+                let prefix: Option<String> = sqlx::query_scalar(&crate::db_macros::adapt_query_for_pg("SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1")).fetch_optional(&mut *tx).await.unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
+                let prefix_str = prefix.filter(|p| !p.is_empty()).unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
+                let new_order_id = format!("{}{:05}", prefix_str, id_val);
+                let qu = crate::db_macros::adapt_query_for_pg("UPDATE orders SET order_id = ? WHERE id = ?");
+                sqlx::query(&qu).bind(new_order_id).bind(id_val).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            }
+
+            tx.commit().await.map_err(|e| e.to_string())?;
+            id_val
+        },
+        #[cfg(not(feature = "postgres"))]
+        _ => unreachable!(),
     };
 
-    for item in items {
-        sqlx::query("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)")
-            .bind(inserted_id)
-            .bind(item.product_url)
-            .bind(item.product_qty)
-            .bind(item.price)
-            .bind(item.product_weight)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-
-    if let Some(oid) = order_id {
-        let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
-            .bind(oid)
-            .bind(inserted_id)
-            .execute(&mut *tx)
-            .await;
-    } else {
-        let prefix: Option<String> = sqlx::query_scalar(
-            "SELECT order_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1",
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
-
-        let prefix_str = prefix
-            .filter(|p| !p.is_empty())
-            .unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
-        let new_order_id = format!("{}{:05}", prefix_str, inserted_id);
-
-        let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
-            .bind(new_order_id)
-            .bind(inserted_id)
-            .execute(&mut *tx)
-            .await;
-    }
-
-    tx.commit().await.map_err(|e| e.to_string())?;
-
     // Enqueue sync for order
-    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-        .bind(inserted_id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(order) = db_query_as_one!(crate::models::Order, &*pool, "SELECT * FROM orders WHERE id = ?", inserted_id)
     {
         enqueue_sync(&pool, "orders", "INSERT", inserted_id, serde_json::json!(order)).await;
     }
     // Enqueue sync for order items
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-        .bind(inserted_id)
-        .fetch_all(&*pool)
-        .await
+    if let Ok(items_db) = db_query_as!(OrderItem, &*pool, "SELECT * FROM order_items WHERE order_id = ?", inserted_id)
     {
         for item in items_db {
             enqueue_sync(&pool, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
@@ -209,9 +171,7 @@ pub async fn get_orders(app: AppHandle) -> Result<Vec<OrderWithCustomer>, String
         "{} {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .fetch_all(&*pool)
-        .await
+    let orders = db_query_as!(OrderWithCustomer, &*pool, &query)
         .map_err(|e| e.to_string())?;
 
     Ok(orders)
@@ -276,69 +236,50 @@ pub async fn get_orders_paginated(
 
     let order_clause = format!("ORDER BY {} {}", sort_column, sort_direction);
 
-    let mut count_query = QueryBuilder::<Sqlite>::new(
-        "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id",
+    let mut where_clause = String::new();
+    if has_search || has_status_filter {
+        where_clause.push_str(" WHERE ");
+        let mut conditions = Vec::new();
+        if has_search {
+            conditions.push(format!("COALESCE({}, '') LIKE ?", search_column));
+        }
+        if let Some(status) = &normalized_status_filter {
+            conditions.push(format!("o.status = '{}'", status));
+        }
+        where_clause.push_str(&conditions.join(" AND "));
+    }
+
+    let limit_clause = if no_limit {
+        String::new()
+    } else {
+        format!(" LIMIT {} OFFSET {}", page_size, offset)
+    };
+
+    let count_query = format!(
+        "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id {}",
+        where_clause
     );
 
-    if has_search || has_status_filter {
-        count_query.push(" WHERE ");
+    let total: i64 = if has_search {
+        db_query_scalar!(i64, &*pool, &count_query, &search_pattern)
+            .map_err(|e| e.to_string())?
+    } else {
+        db_query_scalar!(i64, &*pool, &count_query)
+            .map_err(|e| e.to_string())?
+    };
 
-        if has_search {
-            count_query.push(format!("COALESCE({}, '') LIKE ", search_column));
-            count_query.push_bind(&search_pattern);
-        }
+    let data_query = format!(
+        "{} {} {} {} {}",
+        ORDER_WITH_CUSTOMER_SELECT, where_clause, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause, limit_clause
+    );
 
-        if let Some(status) = normalized_status_filter.as_deref() {
-            if has_search {
-                count_query.push(" AND ");
-            }
-            count_query.push("o.status = ");
-            count_query.push_bind(status);
-        }
-    }
-
-    let total: i64 = count_query
-        .build_query_scalar()
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let mut data_query = QueryBuilder::<Sqlite>::new(ORDER_WITH_CUSTOMER_SELECT);
-
-    if has_search || has_status_filter {
-        data_query.push(" WHERE ");
-
-        if has_search {
-            data_query.push(format!("COALESCE({}, '') LIKE ", search_column));
-            data_query.push_bind(&search_pattern);
-        }
-
-        if let Some(status) = normalized_status_filter.as_deref() {
-            if has_search {
-                data_query.push(" AND ");
-            }
-            data_query.push("o.status = ");
-            data_query.push_bind(status);
-        }
-    }
-
-    data_query.push(" ");
-    data_query.push(ORDER_WITH_CUSTOMER_GROUP_BY);
-    data_query.push(" ");
-    data_query.push(order_clause);
-
-    if !no_limit {
-        data_query.push(" LIMIT ");
-        data_query.push_bind(page_size);
-        data_query.push(" OFFSET ");
-        data_query.push_bind(offset);
-    }
-
-    let orders = data_query
-        .build_query_as::<OrderWithCustomer>()
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let orders = if has_search {
+        db_query_as!(OrderWithCustomer, &*pool, &data_query, &search_pattern)
+            .map_err(|e| e.to_string())?
+    } else {
+        db_query_as!(OrderWithCustomer, &*pool, &data_query)
+            .map_err(|e| e.to_string())?
+    };
 
     let response_page_size = if no_limit { total.max(0) } else { page_size };
     let total_pages = if total == 0 {
@@ -370,10 +311,7 @@ pub async fn get_customer_orders(
         "{} WHERE o.customer_id = ? {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .bind(customer_id)
-        .fetch_all(&*pool)
-        .await
+    let orders = db_query_as!(OrderWithCustomer, &*pool, &query, customer_id)
         .map_err(|e| e.to_string())?;
 
     Ok(orders)
@@ -388,17 +326,11 @@ pub async fn get_order(app: AppHandle, id: i64) -> Result<OrderDetail, String> {
         "{} WHERE o.id = ? {}",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let order = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .bind(id)
-        .fetch_optional(&*pool)
-        .await
+    let order = db_query_as_optional!(OrderWithCustomer, &*pool, &query, id)
         .map_err(|e| e.to_string())?
         .ok_or("Order not found".to_string())?;
 
-    let items = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-        .bind(id)
-        .fetch_all(&*pool)
-        .await
+    let items = db_query_as!(OrderItem, &*pool, "SELECT * FROM order_items WHERE order_id = ?", id)
         .map_err(|e| e.to_string())?;
 
     Ok(OrderDetail { order, items })
@@ -437,71 +369,52 @@ pub async fn update_order(
     let normalized_status =
         normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
 
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    match &*pool {
+        crate::state::Database::Sqlite(p) => {
+            let mut tx = p.begin().await.map_err(|e| e.to_string())?;
+            sqlx::query("UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?")
+            .bind(customer_id).bind(&normalized_status).bind(&order_from).bind(exchange_rate).bind(shipping_fee).bind(delivery_fee).bind(cargo_fee).bind(&order_date).bind(&arrived_date).bind(&shipment_date).bind(&user_withdraw_date).bind(service_fee).bind(product_discount).bind(&service_fee_type).bind(shipping_fee_paid.unwrap_or(false)).bind(delivery_fee_paid.unwrap_or(false)).bind(cargo_fee_paid.unwrap_or(false)).bind(service_fee_paid.unwrap_or(false)).bind(shipping_fee_by_shop.unwrap_or(false)).bind(delivery_fee_by_shop.unwrap_or(false)).bind(cargo_fee_by_shop.unwrap_or(false)).bind(exclude_cargo_fee.unwrap_or(false)).bind(id)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-    sqlx::query(
-        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?",
-    )
-    .bind(customer_id)
-    .bind(normalized_status)
-    .bind(order_from)
-    .bind(exchange_rate)
-    .bind(shipping_fee)
-    .bind(delivery_fee)
-    .bind(cargo_fee)
-    .bind(order_date)
-    .bind(arrived_date)
-    .bind(shipment_date)
-    .bind(user_withdraw_date)
-    .bind(service_fee)
-    .bind(product_discount)
-    .bind(service_fee_type)
-    .bind(shipping_fee_paid.unwrap_or(false))
-    .bind(delivery_fee_paid.unwrap_or(false))
-    .bind(cargo_fee_paid.unwrap_or(false))
-    .bind(service_fee_paid.unwrap_or(false))
-    .bind(shipping_fee_by_shop.unwrap_or(false))
-    .bind(delivery_fee_by_shop.unwrap_or(false))
-    .bind(cargo_fee_by_shop.unwrap_or(false))
-    .bind(exclude_cargo_fee.unwrap_or(false))
-    .bind(id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+            sqlx::query("DELETE FROM order_items WHERE order_id = ?").bind(id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-    sqlx::query("DELETE FROM order_items WHERE order_id = ?")
-        .bind(id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+            for item in &items {
+                sqlx::query("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)")
+                .bind(id).bind(&item.product_url).bind(item.product_qty).bind(item.price).bind(item.product_weight)
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            }
+            tx.commit().await.map_err(|e| e.to_string())?;
+        },
+        #[cfg(feature = "postgres")]
+        crate::state::Database::Postgres(p) => {
+            let mut tx = p.begin().await.map_err(|e| e.to_string())?;
+            let q1 = crate::db_macros::adapt_query_for_pg("UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?");
+            sqlx::query(&q1)
+            .bind(customer_id).bind(&normalized_status).bind(&order_from).bind(exchange_rate).bind(shipping_fee).bind(delivery_fee).bind(cargo_fee).bind(&order_date).bind(&arrived_date).bind(&shipment_date).bind(&user_withdraw_date).bind(service_fee).bind(product_discount).bind(&service_fee_type).bind(shipping_fee_paid.unwrap_or(false)).bind(delivery_fee_paid.unwrap_or(false)).bind(cargo_fee_paid.unwrap_or(false)).bind(service_fee_paid.unwrap_or(false)).bind(shipping_fee_by_shop.unwrap_or(false)).bind(delivery_fee_by_shop.unwrap_or(false)).bind(cargo_fee_by_shop.unwrap_or(false)).bind(exclude_cargo_fee.unwrap_or(false)).bind(id)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-    for item in items {
-        sqlx::query("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)")
-            .bind(id)
-            .bind(item.product_url)
-            .bind(item.product_qty)
-            .bind(item.price)
-            .bind(item.product_weight)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+            let q2 = crate::db_macros::adapt_query_for_pg("DELETE FROM order_items WHERE order_id = ?");
+            sqlx::query(&q2).bind(id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+            let q3 = crate::db_macros::adapt_query_for_pg("INSERT INTO order_items (order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?)");
+            for item in &items {
+                sqlx::query(&q3)
+                .bind(id).bind(&item.product_url).bind(item.product_qty).bind(item.price).bind(item.product_weight)
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            }
+            tx.commit().await.map_err(|e| e.to_string())?;
+        },
+        #[cfg(not(feature = "postgres"))]
+        _ => unreachable!(),
     }
 
-    tx.commit().await.map_err(|e| e.to_string())?;
-
     // Enqueue sync for order
-    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(order) = db_query_as_one!(crate::models::Order, &*pool, "SELECT * FROM orders WHERE id = ?", id)
     {
         enqueue_sync(&pool, "orders", "UPDATE", id, serde_json::json!(order)).await;
     }
     // Enqueue sync for order items
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-        .bind(id)
-        .fetch_all(&*pool)
-        .await
+    if let Ok(items_db) = db_query_as!(OrderItem, &*pool, "SELECT * FROM order_items WHERE order_id = ?", id)
     {
         for item in items_db {
             enqueue_sync(&pool, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
@@ -517,31 +430,19 @@ pub async fn delete_order(app: AppHandle, id: i64) -> Result<(), String> {
     let pool = db.0.lock().await;
 
     // Soft delete
-    sqlx::query("UPDATE orders SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
-        .bind(id)
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE orders SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?", id)
         .map_err(|e| e.to_string())?;
 
     // Also soft delete order items
-    sqlx::query("UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ?")
-        .bind(id)
-        .execute(&*pool)
-        .await
+    db_query!(&*pool, "UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ?", id)
         .map_err(|e| e.to_string())?;
 
     // Enqueue sync
-    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(order) = db_query_as_one!(crate::models::Order, &*pool, "SELECT * FROM orders WHERE id = ?", id)
     {
         enqueue_sync(&pool, "orders", "DELETE", id, serde_json::json!(order)).await;
     }
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-        .bind(id)
-        .fetch_all(&*pool)
-        .await
+    if let Ok(items_db) = db_query_as!(OrderItem, &*pool, "SELECT * FROM order_items WHERE order_id = ?", id)
     {
         for item in items_db {
             enqueue_sync(&pool, "order_items", "DELETE", item.id, serde_json::json!(item)).await;
@@ -608,9 +509,7 @@ pub async fn get_dashboard_stats(
         "SELECT COALESCE(SUM(oi.price * oi.product_qty), 0.0) FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id{}",
         revenue_where
     );
-    let total_revenue: (f64,) = sqlx::query_as(&revenue_sql)
-        .fetch_one(&*pool)
-        .await
+    let total_revenue: (f64,) = db_query_as_one!((f64,), &*pool, &revenue_sql)
         .map_err(|e| e.to_string())?;
 
     // 2) Total profit
@@ -633,23 +532,17 @@ pub async fn get_dashboard_stats(
         "#,
         profit_where
     );
-    let total_profit: (f64,) = sqlx::query_as(&profit_sql)
-        .fetch_one(&*pool)
-        .await
+    let total_profit: (f64,) = db_query_as_one!((f64,), &*pool, &profit_sql)
         .map_err(|e| e.to_string())?;
 
     // 3) Total orders
     let orders_count_sql = format!("SELECT COUNT(*) FROM orders{}", orders_where(""));
-    let total_orders: (i64,) = sqlx::query_as(&orders_count_sql)
-        .fetch_one(&*pool)
-        .await
+    let total_orders: (i64,) = db_query_as_one!((i64,), &*pool, &orders_count_sql)
         .map_err(|e| e.to_string())?;
 
     // 4) Total customers
     let customers_sql = format!("SELECT COUNT(DISTINCT customer_id) FROM orders{}", orders_where(""));
-    let total_customers: (i64,) = sqlx::query_as(&customers_sql)
-        .fetch_one(&*pool)
-        .await
+    let total_customers: (i64,) = db_query_as_one!((i64,), &*pool, &customers_sql)
         .map_err(|e| e.to_string())?;
 
     // 5) Total cargo fee
@@ -657,9 +550,7 @@ pub async fn get_dashboard_stats(
         "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 THEN cargo_fee ELSE 0 END), 0.0) FROM orders{}", 
         orders_where("")
     );
-    let total_cargo_fee: (f64,) = sqlx::query_as(&cargo_sql)
-        .fetch_one(&*pool)
-        .await
+    let total_cargo_fee: (f64,) = db_query_as_one!((f64,), &*pool, &cargo_sql)
         .map_err(|e| e.to_string())?;
 
     // 6) Recent orders
@@ -668,9 +559,7 @@ pub async fn get_dashboard_stats(
         "{}{} {} ORDER BY o.created_at DESC LIMIT 5",
         ORDER_WITH_CUSTOMER_SELECT, recent_where, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let recent_orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .fetch_all(&*pool)
-        .await
+    let recent_orders = db_query_as!(OrderWithCustomer, &*pool, &query)
         .map_err(|e| e.to_string())?;
 
     Ok(DashboardStats {
@@ -719,9 +608,7 @@ pub async fn get_orders_for_export(app: AppHandle) -> Result<Vec<OrderExportRow>
         ORDER BY o.id ASC
     "#;
 
-    let rows = sqlx::query_as::<_, OrderExportRow>(query)
-        .fetch_all(&*pool)
-        .await
+    let rows = db_query_as!(OrderExportRow, &*pool, query)
         .map_err(|e| e.to_string())?;
 
     Ok(rows)

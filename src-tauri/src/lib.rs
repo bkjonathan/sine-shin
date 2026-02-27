@@ -5,15 +5,15 @@ mod state;
 pub mod scheduler;
 pub mod sync;
 
+#[macro_use]
+pub mod db_macros;
+
 use std::fs;
 use std::process::Command;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use sqlx::sqlite::SqlitePoolOptions;
 use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
-use tokio::sync::Mutex;
 
 use crate::commands::auth::{check_is_onboarded, login_user, register_user};
 use crate::commands::customer::{
@@ -30,9 +30,9 @@ use crate::commands::order::{
 };
 use crate::commands::settings::{get_app_settings, update_app_settings, AppSettings};
 use crate::commands::shop::{get_shop_settings, save_shop_setup, update_shop_settings};
-use crate::commands::system::{backup_database, get_db_status, reset_app_data, restore_database};
+use crate::commands::system::{backup_database, get_db_status, reset_app_data, restore_database, switch_database_pool};
 use crate::commands::drive::{disconnect_google_drive, get_drive_connection_status, start_google_oauth, trigger_drive_backup};
-use crate::db::init_db;
+use crate::db::init_sqlite_db;
 use crate::state::AppDb;
 use crate::scheduler::{setup_scheduler, reload_scheduler};
 use crate::sync::{
@@ -187,22 +187,52 @@ pub fn run() {
                 fs::write(&settings_path, settings_json).expect("Failed to write settings.json");
             }
 
-            let db_path = app_data_dir.join("shop.db");
-            let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
+            let settings_content = fs::read_to_string(&settings_path).expect("Failed to read settings.json");
+            let settings: AppSettings = serde_json::from_str(&settings_content).unwrap_or_else(|_| AppSettings::default());
 
-            let pool = tauri::async_runtime::block_on(async {
-                let pool = SqlitePoolOptions::new()
-                    .max_connections(5)
-                    .connect(&db_url)
-                    .await
-                    .expect("Failed to create database pool");
+            if settings.db_type == "postgres" {
+                if let Some(url) = settings.pg_url {
+                    #[cfg(feature = "postgres")]
+                    {
+                        let pool = tauri::async_runtime::block_on(async {
+                            let pool = sqlx::postgres::PgPoolOptions::new()
+                                .max_connections(5)
+                                .connect(&url)
+                                .await
+                                .expect("Failed to create postgres database pool");
 
-                init_db(&pool).await.expect("Failed to initialize database");
+                            crate::db::init_pg_db(&pool).await.expect("Failed to initialize postgres database");
 
-                pool
-            });
+                            pool
+                        });
 
-            app.manage(AppDb(Arc::new(Mutex::new(pool))));
+                        app.manage(AppDb(std::sync::Arc::new(tokio::sync::Mutex::new(crate::state::Database::Postgres(pool)))));
+                    }
+                    #[cfg(not(feature = "postgres"))]
+                    {
+                        panic!("PostgreSQL database type selected but postgres feature is not enabled at compile time");
+                    }
+                } else {
+                    panic!("PostgreSQL database type selected but no Connection URL was provided in settings");
+                }
+            } else {
+                let db_path = app_data_dir.join("shop.db");
+                let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
+
+                let pool = tauri::async_runtime::block_on(async {
+                    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                        .max_connections(5)
+                        .connect(&db_url)
+                        .await
+                        .expect("Failed to create sqlite database pool");
+
+                    init_sqlite_db(&pool).await.expect("Failed to initialize sqlite database");
+
+                    pool
+                });
+
+                app.manage(AppDb(std::sync::Arc::new(tokio::sync::Mutex::new(crate::state::Database::Sqlite(pool)))));
+            }
 
             let app_handle = app.handle().clone();
             let scheduler_state = tauri::async_runtime::block_on(async {
@@ -226,6 +256,7 @@ pub fn run() {
             get_shop_settings,
             update_shop_settings,
             reset_app_data,
+            switch_database_pool,
             backup_database,
             restore_database,
             register_user,

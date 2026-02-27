@@ -2,6 +2,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::models::User;
 use crate::state::AppDb;
+use crate::{db_query, db_query_as_optional, db_query_as_one};
 
 #[tauri::command]
 pub async fn register_user(app: AppHandle, name: String, password: String) -> Result<(), String> {
@@ -10,12 +11,13 @@ pub async fn register_user(app: AppHandle, name: String, password: String) -> Re
 
     let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST).map_err(|e| e.to_string())?;
 
-    sqlx::query("INSERT INTO users (name, password_hash) VALUES (?, ?)")
-        .bind(name)
-        .bind(password_hash)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    db_query!(
+        &*pool,
+        "INSERT INTO users (name, password_hash) VALUES (?, ?)",
+        name,
+        password_hash
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -25,10 +27,7 @@ pub async fn login_user(app: AppHandle, name: String, password: String) -> Resul
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let user: Option<User> = sqlx::query_as("SELECT * FROM users WHERE name = ?")
-        .bind(&name)
-        .fetch_optional(&*pool)
-        .await
+    let user: Option<User> = db_query_as_optional!(User, &*pool, "SELECT * FROM users WHERE name = ?", &name)
         .map_err(|e| e.to_string())?;
 
     if let Some(user) = user {
@@ -48,14 +47,10 @@ pub async fn check_is_onboarded(app: AppHandle) -> Result<bool, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let shop_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM shop_settings")
-        .fetch_one(&*pool)
-        .await
+    let shop_count: (i64,) = db_query_as_one!((i64,), &*pool, "SELECT COUNT(*) FROM shop_settings")
         .map_err(|e| e.to_string())?;
 
-    let user_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-        .fetch_one(&*pool)
-        .await
+    let user_count: (i64,) = db_query_as_one!((i64,), &*pool, "SELECT COUNT(*) FROM users")
         .map_err(|e| e.to_string())?;
 
     Ok(shop_count.0 > 0 && user_count.0 > 0)
