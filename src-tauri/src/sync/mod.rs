@@ -14,6 +14,7 @@ pub struct SyncConfig {
     pub supabase_anon_key: String,
     pub supabase_service_key: String,
     pub sync_enabled: bool,
+    pub sync_interval: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
@@ -105,19 +106,20 @@ pub async fn enqueue_sync(
 
 /// Load sync config from SQLite
 async fn load_sync_config(pool: &Pool<Sqlite>) -> Option<SyncConfig> {
-    let row: Option<(i64, String, String, String, i64)> = sqlx::query_as(
-        "SELECT id, supabase_url, supabase_anon_key, supabase_service_key, sync_enabled FROM sync_config WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+    let row: Option<(i64, String, String, String, i64, i64)> = sqlx::query_as(
+        "SELECT id, supabase_url, supabase_anon_key, supabase_service_key, sync_enabled, COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
     )
     .fetch_optional(pool)
     .await
     .ok()?;
 
-    row.map(|(id, url, anon, service, enabled)| SyncConfig {
+    row.map(|(id, url, anon, service, enabled, interval)| SyncConfig {
         id: Some(id),
         supabase_url: url,
         supabase_anon_key: anon,
         supabase_service_key: service,
         sync_enabled: enabled == 1,
+        sync_interval: interval as i32,
     })
 }
 
@@ -275,12 +277,35 @@ pub async fn process_sync_queue(app: &AppHandle) {
     });
 }
 
-/// Start the background sync loop (every 30 seconds)
+/// Start the background sync loop
 pub fn start_sync_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
+        // We wake up every 5 seconds to check if it's time to sync
+        let mut last_sync: Option<tokio::time::Instant> = None;
+
         loop {
-            tokio::time::sleep(Duration::from_secs(30)).await;
-            process_sync_queue(&app).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            let db = app.state::<AppDb>();
+            let pool = db.0.lock().await;
+            
+            if let Some(config) = load_sync_config(&pool).await {
+                if config.sync_enabled {
+                    let interval_secs = config.sync_interval as u64;
+                    
+                    let should_sync = match last_sync {
+                        Some(last) => last.elapsed() >= Duration::from_secs(interval_secs),
+                        None => true,
+                    };
+
+                    if should_sync {
+                        // Drop the lock before running process_sync_queue which takes its own lock
+                        drop(pool);
+                        process_sync_queue(&app).await;
+                        last_sync = Some(tokio::time::Instant::now());
+                    }
+                }
+            }
         }
     });
 }
@@ -297,6 +322,13 @@ pub async fn save_sync_config(
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
+    // Fetch existing interval or default to 30
+    let current_interval: i32 = sqlx::query_scalar("SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1")
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or(30);
+
     // Deactivate existing configs
     sqlx::query("UPDATE sync_config SET is_active = 0")
         .execute(&*pool)
@@ -305,11 +337,12 @@ pub async fn save_sync_config(
 
     // Insert new config
     sqlx::query(
-        "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled) VALUES (?, ?, ?, 1, 1)"
+        "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled, sync_interval) VALUES (?, ?, ?, 1, 1, ?)"
     )
     .bind(url)
     .bind(anon_key)
     .bind(service_key)
+    .bind(current_interval)
     .execute(&*pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -323,6 +356,20 @@ pub async fn get_sync_config(app: AppHandle) -> Result<Option<SyncConfig>, Strin
     let pool = db.0.lock().await;
     let config = load_sync_config(&pool).await;
     Ok(config)
+}
+
+#[tauri::command]
+pub async fn update_sync_interval(app: AppHandle, interval: i32) -> Result<(), String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    sqlx::query("UPDATE sync_config SET sync_interval = ? WHERE is_active = 1")
+        .bind(interval)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -603,12 +650,19 @@ pub async fn migrate_to_new_database(
         .await
         .map_err(|e| e.to_string())?;
 
+    let current_interval: i32 = sqlx::query_scalar("SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1")
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or(30);
+
     sqlx::query(
-        "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled) VALUES (?, ?, ?, 1, 1)"
+        "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled, sync_interval) VALUES (?, ?, ?, 1, 1, ?)"
     )
     .bind(&new_supabase_url)
     .bind(&new_anon_key)
     .bind(&new_service_key)
+    .bind(current_interval)
     .execute(&*pool)
     .await
     .map_err(|e| e.to_string())?;

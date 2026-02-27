@@ -128,6 +128,7 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
             supabase_service_key TEXT NOT NULL,
             is_active INTEGER DEFAULT 1,
             sync_enabled INTEGER DEFAULT 1,
+            sync_interval INTEGER DEFAULT 30,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )"
@@ -186,6 +187,7 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         ("shop_settings", "updated_at", "DATETIME"),
         ("shop_settings", "synced", "INTEGER DEFAULT 0"),
         ("users", "master_password_hash", "TEXT"),
+        ("sync_config", "sync_interval", "INTEGER DEFAULT 30"),
     ];
 
     for (table, col, col_type) in alter_columns {

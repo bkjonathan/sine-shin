@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
-import { Button, Input } from "../../ui";
+import { Button, Input, Select } from "../../ui";
 import { useSound } from "../../../context/SoundContext";
 import {
   IconCircleCheck,
@@ -33,6 +33,7 @@ import {
   migrateToNewDatabase,
   getMigrationSql,
   triggerFullSync,
+  updateSyncInterval,
   type SyncStats,
   type SyncSession,
   type SyncQueueItem,
@@ -106,6 +107,7 @@ export default function SettingsSyncPanel() {
   const [anonKey, setAnonKey] = useState("");
   const [serviceKey, setServiceKey] = useState("");
   const [syncEnabled, setSyncEnabled] = useState(false);
+  const [syncInterval, setSyncInterval] = useState<number>(30);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -167,6 +169,7 @@ export default function SettingsSyncPanel() {
         setAnonKey(config.supabase_anon_key);
         setServiceKey(config.supabase_service_key);
         setSyncEnabled(config.sync_enabled);
+        setSyncInterval(config.sync_interval || 30);
       }
     } catch (err) {
       console.error(err);
@@ -204,11 +207,23 @@ export default function SettingsSyncPanel() {
     try {
       setSaving(true);
       await saveSyncConfig(url, anonKey, serviceKey);
+      await updateSyncInterval(syncInterval);
       showSuccess(t("settings.sync.config_saved"));
     } catch (err) {
       showError(String(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpdateInterval = async (val: string | number) => {
+    const min = parseInt(val.toString(), 10);
+    setSyncInterval(min);
+    try {
+      await updateSyncInterval(min);
+      showSuccess("Sync schedule updated successfully");
+    } catch (err) {
+      showError(String(err));
     }
   };
 
@@ -522,35 +537,70 @@ export default function SettingsSyncPanel() {
                 {t("settings.sync.controls_desc")}
               </p>
 
-              <SettingsToggle
-                label={t("settings.sync.enable_sync")}
-                description={t("settings.sync.enable_sync_desc")}
-                checked={syncEnabled}
-                onChange={(v) => setSyncEnabled(v)}
-              />
+              <div className="space-y-4 mb-6">
+                <SettingsToggle
+                  label={t("settings.sync.enable_sync")}
+                  description={t("settings.sync.enable_sync_desc")}
+                  checked={syncEnabled}
+                  onChange={(v) => setSyncEnabled(v)}
+                />
 
-              <Button
-                onClick={handleSyncNow}
-                variant="primary"
-                className="mt-4 px-4 py-2 text-xs font-semibold flex items-center gap-1.5"
-                loading={syncing}
-                loadingText={t("settings.sync.syncing")}
-                disabled={!url}
-              >
-                <IconPlay size={13} />
-                {t("settings.sync.sync_now")}
-              </Button>
-              <Button
-                onClick={handleFullSync}
-                variant="ghost"
-                className="mt-2 px-4 py-2 text-xs font-semibold flex items-center gap-1.5"
-                loading={fullSyncing}
-                loadingText={t("settings.sync.full_syncing")}
-                disabled={!url}
-              >
-                <IconCloudUpload size={13} />
-                {t("settings.sync.full_sync")}
-              </Button>
+                {syncEnabled && (
+                  <div className="pl-4 border-l-2 border-glass-border space-y-4">
+                    <div>
+                      <label className="block text-xs text-text-muted mb-1.5">
+                        Sync Schedule Timer
+                      </label>
+                      <Select
+                        className="w-full md:w-64"
+                        options={[
+                          { value: 30, label: "Every 30 seconds" },
+                          { value: 60, label: "Every 1 minute" },
+                          { value: 600, label: "Every 10 minutes" },
+                          { value: 1800, label: "Every 30 minutes" },
+                          { value: 3600, label: "Every 1 hour" },
+                          { value: 10800, label: "Every 3 hours" },
+                          { value: 21600, label: "Every 6 hours" },
+                          { value: 43200, label: "Every 12 hours" },
+                          { value: 86400, label: "Every 24 hours" },
+                        ]}
+                        value={syncInterval}
+                        onChange={handleUpdateInterval}
+                        placeholder="Select interval"
+                      />
+                      <p className="text-[10px] text-text-muted mt-2">
+                        How often the app will check and sync data to Supabase
+                        while running.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleSyncNow}
+                  variant="primary"
+                  className="px-4 py-2 text-xs font-semibold flex items-center gap-1.5"
+                  loading={syncing}
+                  loadingText={t("settings.sync.syncing")}
+                  disabled={!url}
+                >
+                  <IconPlay size={13} />
+                  {t("settings.sync.sync_now")}
+                </Button>
+                <Button
+                  onClick={handleFullSync}
+                  variant="ghost"
+                  className="px-4 py-2 text-xs font-semibold flex items-center gap-1.5"
+                  loading={fullSyncing}
+                  loadingText={t("settings.sync.full_syncing")}
+                  disabled={!url}
+                >
+                  <IconCloudUpload size={13} />
+                  {t("settings.sync.full_sync")}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

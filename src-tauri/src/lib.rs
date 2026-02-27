@@ -39,7 +39,7 @@ use crate::sync::{
     save_sync_config, get_sync_config, test_sync_connection, trigger_sync_now,
     get_sync_queue_stats, get_sync_sessions, get_sync_queue_items, retry_failed_items,
     clear_synced_items, clean_sync_data, set_master_password, verify_master_password, migrate_to_new_database,
-    get_migration_sql, trigger_full_sync, start_sync_loop,
+    get_migration_sql, trigger_full_sync, start_sync_loop, update_sync_interval,
 };
 
 #[tauri::command]
@@ -275,7 +275,8 @@ pub fn run() {
             migrate_to_new_database,
             get_migration_sql,
             trigger_full_sync,
-            clean_sync_data
+            clean_sync_data,
+            update_sync_interval
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

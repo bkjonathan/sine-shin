@@ -8,6 +8,7 @@ export interface SyncConfig {
   supabase_anon_key: string;
   supabase_service_key: string;
   sync_enabled: boolean;
+  sync_interval: number;
 }
 
 export interface SyncStats {
@@ -56,6 +57,10 @@ export async function saveSyncConfig(
 
 export async function getSyncConfig(): Promise<SyncConfig | null> {
   return invoke("get_sync_config");
+}
+
+export async function updateSyncInterval(interval: number): Promise<void> {
+  return invoke("update_sync_interval", { interval });
 }
 
 export interface TestConnectionResult {
