@@ -173,6 +173,15 @@
    COMPONENT LAYER — Liquid Utilities
    ═══════════════════════════════════════════════ */
 @layer components {
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   /* ── Glass Panel (Primary surface) ── */
   .glass-panel {
     background: var(--color-glass-white);
