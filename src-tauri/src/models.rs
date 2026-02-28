@@ -10,6 +10,8 @@ pub struct ShopSettings {
     pub customer_id_prefix: Option<String>,
     pub order_id_prefix: Option<String>,
     pub created_at: Option<String>,
+    #[sqlx(default)]
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -32,6 +34,10 @@ pub struct Customer {
     pub social_media_url: Option<String>,
     pub platform: Option<String>,
     pub created_at: Option<String>,
+    #[sqlx(default)]
+    pub updated_at: Option<String>,
+    #[sqlx(default)]
+    pub deleted_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -63,6 +69,10 @@ pub struct Expense {
     pub notes: Option<String>,
     pub expense_date: Option<String>,
     pub created_at: Option<String>,
+    #[sqlx(default)]
+    pub updated_at: Option<String>,
+    #[sqlx(default)]
+    pub deleted_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,6 +111,10 @@ pub struct Order {
     pub delivery_fee_by_shop: Option<bool>,
     pub cargo_fee_by_shop: Option<bool>,
     pub exclude_cargo_fee: Option<bool>,
+    #[sqlx(default)]
+    pub updated_at: Option<String>,
+    #[sqlx(default)]
+    pub deleted_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -112,6 +126,10 @@ pub struct OrderItem {
     pub price: Option<f64>,
     pub product_weight: Option<f64>,
     pub created_at: Option<String>,
+    #[sqlx(default)]
+    pub updated_at: Option<String>,
+    #[sqlx(default)]
+    pub deleted_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -154,6 +172,10 @@ pub struct OrderWithCustomer {
     pub delivery_fee_by_shop: Option<bool>,
     pub cargo_fee_by_shop: Option<bool>,
     pub exclude_cargo_fee: Option<bool>,
+    #[sqlx(default)]
+    pub updated_at: Option<String>,
+    #[sqlx(default)]
+    pub deleted_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

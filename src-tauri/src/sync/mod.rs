@@ -812,3 +812,42 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
 pub async fn get_migration_sql() -> Result<String, String> {
     Ok(include_str!("../../supabase_migration.sql").to_string())
 }
+
+#[tauri::command]
+pub async fn truncate_and_sync(app: AppHandle) -> Result<String, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // Verify config exists
+    let config = load_sync_config(&pool).await.ok_or("No sync configuration found. Please save your Supabase config first.")?;
+
+    let client = reqwest::Client::new();
+    let tables = vec!["shop_settings", "customers", "orders", "order_items", "expenses"];
+    
+    // Truncate tables on Supabase
+    for table in &tables {
+        let url = format!("{}/rest/v1/{}?id=not.is.null", config.supabase_url, table);
+        let res = client
+            .delete(&url)
+            .header("apikey", &config.supabase_service_key)
+            .header("Authorization", format!("Bearer {}", config.supabase_service_key))
+            .send()
+            .await;
+            
+        if let Err(e) = res {
+            eprintln!("Failed to truncate table {}: {}", table, e);
+        } else if let Ok(resp) = res {
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                eprintln!("Failed to truncate table {} (Status {}): {}", table, status, error_text);
+            }
+        }
+    }
+
+    // Drop lock before calling trigger_full_sync
+    drop(pool);
+
+    // Call trigger_full_sync which will queue everything up and start the sync
+    trigger_full_sync(app).await
+}

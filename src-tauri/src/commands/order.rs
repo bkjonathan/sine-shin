@@ -439,6 +439,12 @@ pub async fn update_order(
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
+    let old_items = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
     sqlx::query(
         "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?",
     )
@@ -497,6 +503,15 @@ pub async fn update_order(
     {
         enqueue_sync(&pool, &app, "orders", "UPDATE", id, serde_json::json!(order)).await;
     }
+
+    // Enqueue sync for old items (DELETE)
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    for mut old_item in old_items {
+        old_item.deleted_at = Some(now.clone());
+        old_item.updated_at = Some(now.clone());
+        enqueue_sync(&pool, &app, "order_items", "DELETE", old_item.id, serde_json::json!(old_item)).await;
+    }
+
     // Enqueue sync for order items
     if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
         .bind(id)

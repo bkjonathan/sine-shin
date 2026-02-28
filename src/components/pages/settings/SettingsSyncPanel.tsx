@@ -33,6 +33,7 @@ import {
   migrateToNewDatabase,
   getMigrationSql,
   triggerFullSync,
+  truncateAndSync,
   updateSyncInterval,
   type SyncStats,
   type SyncSession,
@@ -113,6 +114,7 @@ export default function SettingsSyncPanel() {
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [fullSyncing, setFullSyncing] = useState(false);
+  const [truncating, setTruncating] = useState(false);
 
   // ─── Stats & data ───
   const [stats, setStats] = useState<SyncStats | null>(null);
@@ -290,6 +292,31 @@ export default function SettingsSyncPanel() {
       showError(String(err));
     } finally {
       setFullSyncing(false);
+    }
+  };
+
+  const handleTruncateAndSync = async () => {
+    if (
+      !window.confirm(
+        t(
+          "settings.sync.confirm_truncate",
+          "Are you sure you want to truncate the remote database and sync everything from local? This cannot be undone.",
+        ),
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setTruncating(true);
+      const msg = await truncateAndSync();
+      showSuccess(msg);
+      loadStats();
+      loadSessions();
+    } catch (err) {
+      showError(String(err));
+    } finally {
+      setTruncating(false);
     }
   };
 
@@ -599,6 +626,20 @@ export default function SettingsSyncPanel() {
                 >
                   <IconCloudUpload size={13} />
                   {t("settings.sync.full_sync")}
+                </Button>
+                <Button
+                  onClick={handleTruncateAndSync}
+                  variant="danger"
+                  className="px-4 py-2 text-xs font-semibold flex items-center gap-1.5"
+                  loading={truncating}
+                  loadingText={t(
+                    "settings.sync.truncating",
+                    "Truncating & Syncing...",
+                  )}
+                  disabled={!url}
+                >
+                  <IconDatabase size={13} />
+                  {t("settings.sync.truncate_sync", "Truncate & Sync")}
                 </Button>
               </div>
             </div>

@@ -81,6 +81,10 @@ export async function triggerFullSync(): Promise<string> {
   return invoke("trigger_full_sync");
 }
 
+export async function truncateAndSync(): Promise<string> {
+  return invoke("truncate_and_sync");
+}
+
 export async function triggerSyncNow(): Promise<string> {
   return invoke("trigger_sync_now");
 }
