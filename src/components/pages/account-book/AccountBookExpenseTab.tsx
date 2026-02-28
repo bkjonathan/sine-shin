@@ -606,14 +606,14 @@ export default function AccountBookExpenseTab({
         className="flex items-center justify-between mb-6"
       >
         <div>
-          <h1 className="text-2xl font-bold text-text-primary tracking-tight">
-            {t("expenses.title")}
-          </h1>
+          <h2 className="text-xl font-bold text-text-primary tracking-tight">
+            {t("expenses.records_title", "Expense Records")}
+          </h2>
           <p className="text-sm text-text-muted mt-1">
-            {t("expenses.manage_expenses")}
+            {t("expenses.records_subtitle", "Manage your business expenses")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="hidden sm:flex bg-glass-white border border-glass-border rounded-lg p-1 gap-1 mr-1">
             <button
               onClick={() => handleSetViewMode("grid")}

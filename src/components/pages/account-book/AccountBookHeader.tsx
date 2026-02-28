@@ -14,12 +14,17 @@ export default function AccountBookHeader({
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
       <div>
-        <h1 className="text-2xl font-bold text-text-primary tracking-tight">
-          {t("account_book.title")}
-        </h1>
-        <p className="text-sm text-text-muted mt-1">{t("account_book.subtitle")}</p>
+        <h2 className="text-xl font-bold text-text-primary tracking-tight">
+          {t("account_book.income_orders_title", "Income Records")}
+        </h2>
+        <p className="text-sm text-text-muted mt-1">
+          {t(
+            "account_book.income_orders_subtitle",
+            "Manage all completed orders and income",
+          )}
+        </p>
       </div>
       <div className="relative w-full md:w-72">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
