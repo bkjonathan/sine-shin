@@ -201,8 +201,8 @@ export default function Dashboard() {
       </motion.div>
 
       {/* ── Merged Toolbar: Date Filter + Status Filter ── */}
-      <motion.div variants={itemVariants}>
-        <div className="glass-panel p-3.5 mb-4 space-y-2.5">
+      <motion.div variants={itemVariants} className="relative z-20">
+        <div className="glass-panel p-3.5 mb-4 space-y-2.5 relative z-20">
           <DashboardDateFilter value={filter} onChange={handleFilterChange} />
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider shrink-0">

@@ -583,7 +583,7 @@ pub async fn get_dashboard_stats(
             } else {
                 format!("{}.{}", alias, col)
             };
-            conditions.push(format!("{} >= '{}' AND {} <= '{}'", prefix, df, prefix, dt));
+            conditions.push(format!("date({}) >= '{}' AND date({}) <= '{}'", prefix, df, prefix, dt));
         }
 
         if let Some(s) = &normalized_status {

@@ -33,11 +33,11 @@ pub async fn get_account_summary(
 
     if has_range {
         orders_date_filter = format!(
-            " AND COALESCE(o.order_date, o.created_at) >= '{}' AND COALESCE(o.order_date, o.created_at) <= '{}'",
+            " AND date(COALESCE(o.order_date, o.created_at)) >= '{}' AND date(COALESCE(o.order_date, o.created_at)) <= '{}'",
             df, dt
         );
         expenses_date_filter = format!(
-            " AND COALESCE(expense_date, created_at) >= '{}' AND COALESCE(expense_date, created_at) <= '{}'",
+            " AND date(COALESCE(expense_date, created_at)) >= '{}' AND date(COALESCE(expense_date, created_at)) <= '{}'",
             df, dt
         );
     }
