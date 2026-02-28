@@ -15,6 +15,7 @@ use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 use tokio::sync::Mutex;
 
+use crate::commands::account::get_account_summary;
 use crate::commands::auth::{check_is_onboarded, login_user, register_user};
 use crate::commands::customer::{
     create_customer, delete_customer, get_customer, get_customers, get_customers_paginated,
@@ -252,6 +253,7 @@ pub fn run() {
             update_order,
             delete_order,
             get_dashboard_stats,
+            get_account_summary,
             get_app_settings,
             update_app_settings,
             print_window,

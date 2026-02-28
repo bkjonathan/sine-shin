@@ -406,6 +406,70 @@ export default function OrderInvoicePrintLayout({
                 {formatPrice(order.total_price || 0)}
               </span>
             </div>
+            {serviceFeeAmount > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "8px",
+                  fontSize: "14px",
+                  color: "#64748b",
+                }}
+              >
+                <span>{t("orders.form.service_fee")}</span>
+                <span style={{ fontWeight: "500", color: "#0f172a" }}>
+                  {formatPrice(serviceFeeAmount)}
+                </span>
+              </div>
+            )}
+            {(order.shipping_fee || 0) > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "8px",
+                  fontSize: "14px",
+                  color: "#64748b",
+                }}
+              >
+                <span>{t("orders.form.shipping_fee")}</span>
+                <span style={{ fontWeight: "500", color: "#0f172a" }}>
+                  {formatPrice(order.shipping_fee || 0)}
+                </span>
+              </div>
+            )}
+            {(order.delivery_fee || 0) > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "8px",
+                  fontSize: "14px",
+                  color: "#64748b",
+                }}
+              >
+                <span>{t("orders.form.delivery_fee")}</span>
+                <span style={{ fontWeight: "500", color: "#0f172a" }}>
+                  {formatPrice(order.delivery_fee || 0)}
+                </span>
+              </div>
+            )}
+            {(order.cargo_fee || 0) > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "8px",
+                  fontSize: "14px",
+                  color: "#64748b",
+                }}
+              >
+                <span>{t("orders.form.cargo_fee")}</span>
+                <span style={{ fontWeight: "500", color: "#0f172a" }}>
+                  {formatPrice(order.cargo_fee || 0)}
+                </span>
+              </div>
+            )}
             <div
               style={{
                 display: "flex",
@@ -413,18 +477,20 @@ export default function OrderInvoicePrintLayout({
                 marginBottom: "16px",
                 fontSize: "14px",
                 color: "#64748b",
+                paddingTop: "8px",
                 paddingBottom: "16px",
+                borderTop: "1px dashed #cbd5e1",
                 borderBottom: "1px solid #e2e8f0",
               }}
             >
               <span>{t("orders.invoice.total_fees")}</span>
               <span style={{ fontWeight: "500", color: "#0f172a" }}>
-                {(
+                {formatPrice(
                   (order.shipping_fee || 0) +
-                  (order.delivery_fee || 0) +
-                  (order.cargo_fee || 0) +
-                  serviceFeeAmount
-                ).toLocaleString()}
+                    (order.delivery_fee || 0) +
+                    (order.cargo_fee || 0) +
+                    serviceFeeAmount,
+                )}
               </span>
             </div>
             <div

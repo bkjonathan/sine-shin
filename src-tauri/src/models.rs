@@ -173,6 +173,17 @@ pub struct DashboardStats {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct AccountSummary {
+    pub total_income: f64,
+    pub total_expenses: f64,
+    pub net_balance: f64,
+    pub total_orders: i64,
+    pub total_expense_records: i64,
+    pub this_month_income: f64,
+    pub this_month_expenses: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TableStatus {
     pub name: String,
     pub row_count: i64,

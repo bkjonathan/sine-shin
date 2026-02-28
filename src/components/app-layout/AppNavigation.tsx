@@ -9,14 +9,12 @@ import {
   IconList,
   IconSettings,
   IconUsers,
-  IconWallet,
 } from "../icons";
 
 const navItems = [
   { to: "/dashboard", label: "nav.dashboard", icon: IconHome },
   { to: "/customers", label: "nav.customers", icon: IconUsers },
   { to: "/orders", label: "nav.orders", icon: IconList },
-  { to: "/expenses", label: "nav.expenses", icon: IconWallet },
   { to: "/account-book", label: "nav.account_book", icon: IconBookOpen },
   { to: "/reports", label: "nav.reports", icon: IconChartColumn },
   { to: "/settings", label: "nav.settings", icon: IconSettings },
