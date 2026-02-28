@@ -13,6 +13,7 @@ import OrderDetail from "./pages/OrderDetail";
 import Settings from "./pages/Settings.tsx";
 import Reports from "./pages/Reports";
 import Help from "./pages/Help";
+import Staff from "./pages/Staff";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
 import { AppSettingsProvider } from "./context/AppSettingsContext";
@@ -132,6 +133,7 @@ function AppRoutes() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/account-book" element={<AccountBook />} />
+        <Route path="/staff" element={<Staff />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />

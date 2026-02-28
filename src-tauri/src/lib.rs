@@ -31,6 +31,7 @@ use crate::commands::order::{
 };
 use crate::commands::settings::{get_app_settings, update_app_settings, AppSettings};
 use crate::commands::shop::{get_shop_settings, save_shop_setup, update_shop_settings};
+use crate::commands::staff::{create_staff_user, delete_staff_user, get_staff_users, update_staff_user};
 use crate::commands::system::{backup_database, get_db_status, reset_app_data, restore_database};
 use crate::commands::drive::{disconnect_google_drive, get_drive_connection_status, start_google_oauth, trigger_drive_backup};
 use crate::db::init_db;
@@ -278,7 +279,11 @@ pub fn run() {
             get_migration_sql,
             trigger_full_sync,
             clean_sync_data,
-            update_sync_interval
+            update_sync_interval,
+            get_staff_users,
+            create_staff_user,
+            update_staff_user,
+            delete_staff_user
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

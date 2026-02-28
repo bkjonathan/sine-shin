@@ -11,6 +11,7 @@
     "account_book": "Account Book",
     "reports": "Reports",
     "customers": "Customers",
+    "staff": "Staff",
     "settings": "Settings",
     "admin": "Admin",
     "owner": "Owner",
@@ -679,7 +680,38 @@
       "paste_instruction": "Now paste in Supabase SQL Editor and run"
     }
   },
+  "staff": {
+    "title": "Staff Members",
+    "manage_staff": "Manage application staff users for Supabase.",
+    "add_staff": "Add Staff",
+    "search_placeholder": "Search staff by name or email...",
+    "no_staff": "No staff found",
+    "unnamed": "Unnamed",
+    "name_email": "Name & Email",
+    "role": "Role",
+    "created_at": "Created At",
+    "actions": "Actions",
+    "edit_staff": "Edit Staff",
+    "name": "Name",
+    "email": "Email",
+    "password": "Password",
+    "password_optional": "Password (leave blank to keep current)",
+    "delete_title": "Delete Staff",
+    "roles": {
+      "pattern": "Pattern",
+      "cutting": "Cutting",
+      "sewing": "Sewing",
+      "admin": "Admin"
+    },
+    "role_desc": "Select the stage role for manufacturing progression.",
+    "delete_desc": "Are you sure you want to delete ",
+    "delete_warning": " This action cannot be undone."
+  },
   "common": {
+    "cancel": "Cancel",
+    "create": "Create",
+    "save": "Save",
+    "delete": "Delete",
     "others": "Others",
     "image": "Image",
     "tel": "Tel",

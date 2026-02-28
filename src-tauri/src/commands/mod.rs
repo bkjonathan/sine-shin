@@ -7,3 +7,5 @@ pub mod settings;
 pub mod shop;
 pub mod system;
 pub mod drive;
+pub mod staff;
+
