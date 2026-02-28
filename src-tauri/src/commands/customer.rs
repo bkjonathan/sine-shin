@@ -94,7 +94,7 @@ pub async fn create_customer(
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "customers", "INSERT", inserted_id, serde_json::json!(record)).await;
+        enqueue_sync(&pool, &app, "customers", "INSERT", inserted_id, serde_json::json!(record)).await;
     }
 
     Ok(inserted_id)
@@ -296,7 +296,7 @@ pub async fn update_customer(
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "customers", "UPDATE", id, serde_json::json!(record)).await;
+        enqueue_sync(&pool, &app, "customers", "UPDATE", id, serde_json::json!(record)).await;
     }
 
     Ok(())
@@ -320,7 +320,7 @@ pub async fn delete_customer(app: AppHandle, id: i64) -> Result<(), String> {
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "customers", "DELETE", id, serde_json::json!(record)).await;
+        enqueue_sync(&pool, &app, "customers", "DELETE", id, serde_json::json!(record)).await;
     }
 
     Ok(())

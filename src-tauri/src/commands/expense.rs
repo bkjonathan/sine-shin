@@ -92,7 +92,7 @@ pub async fn create_expense(
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "expenses", "INSERT", inserted_id, serde_json::json!(record)).await;
+        enqueue_sync(&pool, &app, "expenses", "INSERT", inserted_id, serde_json::json!(record)).await;
     }
 
     Ok(inserted_id)
@@ -332,7 +332,7 @@ pub async fn update_expense(
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "expenses", "UPDATE", id, serde_json::json!(record)).await;
+        enqueue_sync(&pool, &app, "expenses", "UPDATE", id, serde_json::json!(record)).await;
     }
 
     Ok(())
@@ -356,7 +356,7 @@ pub async fn delete_expense(app: AppHandle, id: i64) -> Result<(), String> {
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "expenses", "DELETE", id, serde_json::json!(record)).await;
+        enqueue_sync(&pool, &app, "expenses", "DELETE", id, serde_json::json!(record)).await;
     }
 
     Ok(())

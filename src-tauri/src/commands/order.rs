@@ -184,7 +184,7 @@ pub async fn create_order(
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "orders", "INSERT", inserted_id, serde_json::json!(order)).await;
+        enqueue_sync(&pool, &app, "orders", "INSERT", inserted_id, serde_json::json!(order)).await;
     }
     // Enqueue sync for order items
     if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
@@ -193,7 +193,7 @@ pub async fn create_order(
         .await
     {
         for item in items_db {
-            enqueue_sync(&pool, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
+            enqueue_sync(&pool, &app, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
         }
     }
 
@@ -495,7 +495,7 @@ pub async fn update_order(
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "orders", "UPDATE", id, serde_json::json!(order)).await;
+        enqueue_sync(&pool, &app, "orders", "UPDATE", id, serde_json::json!(order)).await;
     }
     // Enqueue sync for order items
     if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
@@ -504,7 +504,7 @@ pub async fn update_order(
         .await
     {
         for item in items_db {
-            enqueue_sync(&pool, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
+            enqueue_sync(&pool, &app, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
         }
     }
 
@@ -536,7 +536,7 @@ pub async fn delete_order(app: AppHandle, id: i64) -> Result<(), String> {
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "orders", "DELETE", id, serde_json::json!(order)).await;
+        enqueue_sync(&pool, &app, "orders", "DELETE", id, serde_json::json!(order)).await;
     }
     if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
         .bind(id)
@@ -544,7 +544,7 @@ pub async fn delete_order(app: AppHandle, id: i64) -> Result<(), String> {
         .await
     {
         for item in items_db {
-            enqueue_sync(&pool, "order_items", "DELETE", item.id, serde_json::json!(item)).await;
+            enqueue_sync(&pool, &app, "order_items", "DELETE", item.id, serde_json::json!(item)).await;
         }
     }
 

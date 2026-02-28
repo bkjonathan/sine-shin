@@ -84,14 +84,21 @@ async fn cleanup_old_sync_data(pool: &Pool<Sqlite>) {
     .await;
 }
 
-/// Insert a row into sync_queue. Call this after every write operation.
+/// Insert a row into sync_queue if sync is enabled, then trigger sync.
 pub async fn enqueue_sync(
     pool: &Pool<Sqlite>,
+    app: &AppHandle,
     table: &str,
     op: &str,
     record_id: i64,
     payload: serde_json::Value,
 ) {
+    // Check if sync is enabled
+    let _config = match load_sync_config(pool).await {
+        Some(c) if c.sync_enabled => c,
+        _ => return, // sync is not enabled, so we don't enqueue anything
+    };
+
     let payload_str = payload.to_string();
     let _ = sqlx::query(
         "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, ?, ?, ?, 'pending')"
@@ -102,6 +109,12 @@ pub async fn enqueue_sync(
     .bind(payload_str)
     .execute(pool)
     .await;
+
+    // Trigger sync immediately in the background
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        process_sync_queue(&app_clone).await;
+    });
 }
 
 /// Load sync config from SQLite
@@ -133,6 +146,18 @@ pub async fn process_sync_queue(app: &AppHandle) {
         _ => return,
     };
 
+    // Fetch items to sync first
+    let items: Vec<SyncQueueItem> = sqlx::query_as(
+        "SELECT * FROM sync_queue WHERE status = 'pending' OR (status = 'failed' AND retry_count < 5) ORDER BY created_at ASC"
+    )
+    .fetch_all(&*pool)
+    .await
+    .unwrap_or_default();
+
+    if items.is_empty() {
+        return; // Nothing to sync, don't create empty session
+    }
+
     // Emit sync started event
     let _ = app.emit("sync://started", ());
 
@@ -143,14 +168,6 @@ pub async fn process_sync_queue(app: &AppHandle) {
     .fetch_one(&*pool)
     .await
     .unwrap_or(0);
-
-    // Fetch items to sync
-    let items: Vec<SyncQueueItem> = sqlx::query_as(
-        "SELECT * FROM sync_queue WHERE status = 'pending' OR (status = 'failed' AND retry_count < 5) ORDER BY created_at ASC"
-    )
-    .fetch_all(&*pool)
-    .await
-    .unwrap_or_default();
 
     let total_queued = items.len() as i64;
     let _ = sqlx::query("UPDATE sync_sessions SET total_queued = ? WHERE id = ?")

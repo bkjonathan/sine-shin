@@ -34,7 +34,7 @@ pub async fn save_shop_setup(
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "shop_settings", "INSERT", record.id, serde_json::json!(record)).await;
+        enqueue_sync(&pool, &app, "shop_settings", "INSERT", record.id, serde_json::json!(record)).await;
     }
 
     Ok(())
@@ -112,7 +112,7 @@ pub async fn update_shop_settings(
         .fetch_one(&*pool)
         .await
     {
-        enqueue_sync(&pool, "shop_settings", "UPDATE", record.id, serde_json::json!(record)).await;
+        enqueue_sync(&pool, &app, "shop_settings", "UPDATE", record.id, serde_json::json!(record)).await;
     }
 
     Ok(())
