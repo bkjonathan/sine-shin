@@ -183,8 +183,50 @@ async fn push_sync_item(
         return Err(format!("Unsupported sync operation: {}", op));
     }
 
-    let body_value = build_supabase_payload(table, record_id, payload)?;
     let client = reqwest::Client::new();
+
+    // order_items are physically deleted locally during order edits; mirror that remotely
+    // so Supabase row count matches local SQLite for active items.
+    if op == "DELETE" && table == "order_items" {
+        let url = format!(
+            "{}/rest/v1/{}?local_id=eq.{}",
+            config.supabase_url, table, record_id
+        );
+
+        let response = client
+            .delete(&url)
+            .header("apikey", &config.supabase_service_key)
+            .header(
+                "Authorization",
+                format!("Bearer {}", config.supabase_service_key),
+            )
+            .header("Prefer", "return=representation")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let status = response.status();
+        let response_text = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            return Err(format!(
+                "HTTP {} for {} {} ({}): {}",
+                status, table, record_id, op, response_text
+            ));
+        }
+
+        let remote_uuid = serde_json::from_str::<serde_json::Value>(&response_text)
+            .ok()
+            .and_then(|v| v.as_array().cloned())
+            .and_then(|rows| rows.into_iter().next())
+            .and_then(|row| row.get("uuid").cloned())
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .or_else(|| record_uuid.map(|v| v.to_string()));
+
+        return Ok(PushSyncResult { remote_uuid });
+    }
+
+    let body_value = build_supabase_payload(table, record_id, payload)?;
     let url = format!(
         "{}/rest/v1/{}?on_conflict=local_id",
         config.supabase_url, table
