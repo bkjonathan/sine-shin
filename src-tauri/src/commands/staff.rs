@@ -49,7 +49,10 @@ pub async fn get_staff_users(app: AppHandle) -> Result<Value, String> {
     let res = client
         .get(&url)
         .header("apikey", &config.supabase_service_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_service_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_key),
+        )
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -65,7 +68,12 @@ pub async fn get_staff_users(app: AppHandle) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn create_staff_user(app: AppHandle, email: String, password: String, data: Value) -> Result<Value, String> {
+pub async fn create_staff_user(
+    app: AppHandle,
+    email: String,
+    password: String,
+    data: Value,
+) -> Result<Value, String> {
     let config = get_active_sync_config(&app).await?;
     let client = Client::new();
     let url = format!("{}/auth/v1/admin/users", config.supabase_url);
@@ -80,7 +88,10 @@ pub async fn create_staff_user(app: AppHandle, email: String, password: String, 
     let res = client
         .post(&url)
         .header("apikey", &config.supabase_service_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_service_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_key),
+        )
         .header("Content-Type", "application/json")
         .json(&payload)
         .send()
@@ -98,7 +109,13 @@ pub async fn create_staff_user(app: AppHandle, email: String, password: String, 
 }
 
 #[tauri::command]
-pub async fn update_staff_user(app: AppHandle, id: String, email: Option<String>, password: Option<String>, data: Option<Value>) -> Result<Value, String> {
+pub async fn update_staff_user(
+    app: AppHandle,
+    id: String,
+    email: Option<String>,
+    password: Option<String>,
+    data: Option<Value>,
+) -> Result<Value, String> {
     let config = get_active_sync_config(&app).await?;
     let client = Client::new();
     let url = format!("{}/auth/v1/admin/users/{}", config.supabase_url, id);
@@ -109,7 +126,7 @@ pub async fn update_staff_user(app: AppHandle, id: String, email: Option<String>
     }
     if let Some(p) = password {
         if !p.is_empty() {
-             payload["password"] = serde_json::json!(p);
+            payload["password"] = serde_json::json!(p);
         }
     }
     if let Some(d) = data {
@@ -119,7 +136,10 @@ pub async fn update_staff_user(app: AppHandle, id: String, email: Option<String>
     let res = client
         .put(&url)
         .header("apikey", &config.supabase_service_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_service_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_key),
+        )
         .header("Content-Type", "application/json")
         .json(&payload)
         .send()
@@ -145,7 +165,10 @@ pub async fn delete_staff_user(app: AppHandle, id: String) -> Result<(), String>
     let res = client
         .delete(&url)
         .header("apikey", &config.supabase_service_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_service_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_key),
+        )
         .send()
         .await
         .map_err(|e| e.to_string())?;

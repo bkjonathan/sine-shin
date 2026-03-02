@@ -132,7 +132,9 @@ fn normalize_s3_bucket_name(bucket_name: &str) -> String {
         .to_string()
 }
 
-fn validate_s3_connection_input(input: &AwsS3ConnectionInput) -> Result<AwsS3ConnectionInput, String> {
+fn validate_s3_connection_input(
+    input: &AwsS3ConnectionInput,
+) -> Result<AwsS3ConnectionInput, String> {
     let normalized = AwsS3ConnectionInput {
         access_key_id: input.access_key_id.trim().to_string(),
         secret_access_key: input.secret_access_key.trim().to_string(),
@@ -227,7 +229,9 @@ pub async fn test_aws_s3_connection(
 }
 
 #[tauri::command]
-pub async fn get_aws_s3_connection_status(app: tauri::AppHandle) -> Result<AwsS3ConnectionStatus, String> {
+pub async fn get_aws_s3_connection_status(
+    app: tauri::AppHandle,
+) -> Result<AwsS3ConnectionStatus, String> {
     let settings = get_app_settings(app)?;
     if settings.aws_access_key_id.trim().is_empty()
         || settings.aws_secret_access_key.trim().is_empty()

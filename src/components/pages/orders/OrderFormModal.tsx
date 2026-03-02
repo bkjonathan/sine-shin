@@ -40,6 +40,38 @@ interface OrderFormModalProps {
 
 const DATE_PLACEHOLDER = "dd/mm/yyyy";
 
+const normalizeDateInputValue = (value?: string): string => {
+  if (!value) return "";
+
+  const raw = value.trim();
+  if (!raw) return "";
+
+  const dateOnly = raw.split("T")[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+    return dateOnly;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, "0");
+  const d = String(parsed.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const toDatePickerValue = (value?: string): Date | null => {
+  const normalized = normalizeDateInputValue(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = new Date(`${normalized}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 export default function OrderFormModal({
   isOpen,
   editingOrder,
@@ -157,11 +189,7 @@ export default function OrderFormModal({
                   <DatePicker
                     label={t("orders.form.order_date")}
                     required
-                    selected={
-                      formData.order_date
-                        ? new Date(formData.order_date + "T00:00:00")
-                        : null
-                    }
+                    selected={toDatePickerValue(formData.order_date)}
                     onChange={(date: Date | null) => {
                       if (date) {
                         const y = date.getFullYear();
@@ -526,11 +554,15 @@ export default function OrderFormModal({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Input
                       label={t("orders.form.arrived_date")}
-                      type={formData.arrived_date ? "date" : "text"}
+                      type={
+                        normalizeDateInputValue(formData.arrived_date)
+                          ? "date"
+                          : "text"
+                      }
                       className="input-liquid w-full"
                       autoComplete="off"
                       placeholder={DATE_PLACEHOLDER}
-                      value={formData.arrived_date}
+                      value={normalizeDateInputValue(formData.arrived_date)}
                       onFocus={(e) => (e.target.type = "date")}
                       onBlur={(e) => {
                         if (!e.target.value) {
@@ -543,11 +575,15 @@ export default function OrderFormModal({
                     />
                     <Input
                       label={t("orders.form.shipment_date")}
-                      type={formData.shipment_date ? "date" : "text"}
+                      type={
+                        normalizeDateInputValue(formData.shipment_date)
+                          ? "date"
+                          : "text"
+                      }
                       className="input-liquid w-full"
                       autoComplete="off"
                       placeholder={DATE_PLACEHOLDER}
-                      value={formData.shipment_date}
+                      value={normalizeDateInputValue(formData.shipment_date)}
                       onFocus={(e) => (e.target.type = "date")}
                       onBlur={(e) => {
                         if (!e.target.value) {
@@ -560,11 +596,15 @@ export default function OrderFormModal({
                     />
                     <Input
                       label={t("orders.form.user_withdraw_date")}
-                      type={formData.user_withdraw_date ? "date" : "text"}
+                      type={
+                        normalizeDateInputValue(formData.user_withdraw_date)
+                          ? "date"
+                          : "text"
+                      }
                       className="input-liquid w-full"
                       autoComplete="off"
                       placeholder={DATE_PLACEHOLDER}
-                      value={formData.user_withdraw_date}
+                      value={normalizeDateInputValue(formData.user_withdraw_date)}
                       onFocus={(e) => (e.target.type = "date")}
                       onBlur={(e) => {
                         if (!e.target.value) {

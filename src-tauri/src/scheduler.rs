@@ -1,9 +1,9 @@
+use crate::commands::drive::perform_drive_backup;
+use crate::commands::settings::get_app_settings;
 use std::sync::Arc;
+use tauri::AppHandle;
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
-use tauri::AppHandle;
-use crate::commands::settings::get_app_settings;
-use crate::commands::drive::perform_drive_backup;
 
 // The current scheduled job id
 pub struct SchedulerState {
@@ -14,8 +14,11 @@ pub struct SchedulerState {
 pub async fn setup_scheduler(app: AppHandle) -> Arc<Mutex<SchedulerState>> {
     let sched = JobScheduler::new().await.unwrap();
     sched.start().await.unwrap();
-    let state = Arc::new(Mutex::new(SchedulerState { sched, job_id: None }));
-    
+    let state = Arc::new(Mutex::new(SchedulerState {
+        sched,
+        job_id: None,
+    }));
+
     update_scheduler(&app, &state).await;
     state
 }
@@ -29,12 +32,17 @@ pub async fn update_scheduler(app: &AppHandle, state: &Arc<Mutex<SchedulerState>
         state_lock.job_id = None;
     }
 
-    if !settings.auto_backup || settings.backup_frequency == "never" || settings.backup_frequency.is_empty() {
+    if !settings.auto_backup
+        || settings.backup_frequency == "never"
+        || settings.backup_frequency.is_empty()
+    {
         return;
     }
 
     let time_parts: Vec<&str> = settings.backup_time.split(':').collect();
-    if time_parts.len() != 2 { return; }
+    if time_parts.len() != 2 {
+        return;
+    }
     let hour = time_parts[0];
     let minute = time_parts[1];
 
@@ -57,7 +65,7 @@ pub async fn update_scheduler(app: &AppHandle, state: &Arc<Mutex<SchedulerState>
             if let Ok(id) = state_lock.sched.add(job).await {
                 state_lock.job_id = Some(id);
             }
-        },
+        }
         Err(e) => {
             eprintln!("Failed to schedule backup job: {}", e);
         }
@@ -65,7 +73,10 @@ pub async fn update_scheduler(app: &AppHandle, state: &Arc<Mutex<SchedulerState>
 }
 
 #[tauri::command]
-pub async fn reload_scheduler(app: AppHandle, state: tauri::State<'_, Arc<Mutex<SchedulerState>>>) -> Result<(), String> {
+pub async fn reload_scheduler(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<Mutex<SchedulerState>>>,
+) -> Result<(), String> {
     update_scheduler(&app, &*state).await;
     Ok(())
 }

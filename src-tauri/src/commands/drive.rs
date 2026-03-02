@@ -1,13 +1,13 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::time::timeout;
-use chrono::Utc;
-use std::time::Duration;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
@@ -15,7 +15,8 @@ use zip::ZipWriter;
 const REDIRECT_URI: &str = "http://127.0.0.1:3456";
 const AUTH_URI: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URI: &str = "https://oauth2.googleapis.com/token";
-const DRIVE_UPLOAD_URI: &str = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+const DRIVE_UPLOAD_URI: &str =
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
 const USER_INFO_URI: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
 
 fn get_client_id() -> String {
@@ -32,7 +33,7 @@ fn get_client_secret() -> String {
 pub struct DriveTokens {
     pub access_token: String,
     pub refresh_token: String,
-    pub expires_at: i64, 
+    pub expires_at: i64,
     pub email: Option<String>,
 }
 
@@ -43,7 +44,10 @@ pub struct DriveStatus {
 }
 
 fn get_tokens_path(app: &AppHandle) -> PathBuf {
-    let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .expect("Failed to get app data dir");
     app_data_dir.join("drive_auth.json")
 }
 
@@ -82,7 +86,7 @@ pub async fn start_google_oauth(app: AppHandle) -> Result<DriveStatus, String> {
 
     // 3. Wait for the redirect with a timeout of 5 minutes
     let result = timeout(Duration::from_secs(300), listener.accept()).await;
-    
+
     let (mut socket, _) = match result {
         Ok(Ok(cxn)) => cxn,
         Ok(Err(e)) => return Err(format!("Server error: {}", e)),
@@ -96,7 +100,10 @@ pub async fn start_google_oauth(app: AppHandle) -> Result<DriveStatus, String> {
     let mut code = String::new();
     if let Some(code_start) = request.find("code=") {
         let start = code_start + 5;
-        if let Some(code_end) = request[start..].find('&').or_else(|| request[start..].find(' ')) {
+        if let Some(code_end) = request[start..]
+            .find('&')
+            .or_else(|| request[start..].find(' '))
+        {
             code = request[start..start + code_end].to_string();
         }
     }
@@ -126,7 +133,8 @@ pub async fn start_google_oauth(app: AppHandle) -> Result<DriveStatus, String> {
         ("redirect_uri", REDIRECT_URI),
     ];
 
-    let res = client.post(TOKEN_URI)
+    let res = client
+        .post(TOKEN_URI)
         .form(&params)
         .send()
         .await
@@ -138,16 +146,23 @@ pub async fn start_google_oauth(app: AppHandle) -> Result<DriveStatus, String> {
     }
 
     let token_res: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-    let access_token = token_res["access_token"].as_str().ok_or("No access token")?.to_string();
-    let refresh_token = token_res["refresh_token"].as_str().unwrap_or_default().to_string();
+    let access_token = token_res["access_token"]
+        .as_str()
+        .ok_or("No access token")?
+        .to_string();
+    let refresh_token = token_res["refresh_token"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
     let expires_in = token_res["expires_in"].as_i64().unwrap_or(3600);
-    
+
     // Fetch email
-    let user_info_res = client.get(USER_INFO_URI)
+    let user_info_res = client
+        .get(USER_INFO_URI)
         .bearer_auth(&access_token)
         .send()
         .await;
-        
+
     let mut email = None;
     if let Ok(u_res) = user_info_res {
         if let Ok(info) = u_res.json::<serde_json::Value>().await {
@@ -182,7 +197,7 @@ pub async fn get_drive_connection_status(app: AppHandle) -> Result<DriveStatus, 
         Err(_) => Ok(DriveStatus {
             connected: false,
             email: None,
-        })
+        }),
     }
 }
 
@@ -196,7 +211,8 @@ pub async fn disconnect_google_drive(app: AppHandle) -> Result<(), String> {
 }
 
 async fn refresh_token_if_needed(app: &AppHandle, tokens: &mut DriveTokens) -> Result<(), String> {
-    if Utc::now().timestamp() > tokens.expires_at - 300 { // 5 mins buffer
+    if Utc::now().timestamp() > tokens.expires_at - 300 {
+        // 5 mins buffer
         if tokens.refresh_token.is_empty() {
             return Err("Token expired and no refresh token available".into());
         }
@@ -211,7 +227,8 @@ async fn refresh_token_if_needed(app: &AppHandle, tokens: &mut DriveTokens) -> R
             ("grant_type", "refresh_token"),
         ];
 
-        let res = client.post(TOKEN_URI)
+        let res = client
+            .post(TOKEN_URI)
             .form(&params)
             .send()
             .await
@@ -223,7 +240,10 @@ async fn refresh_token_if_needed(app: &AppHandle, tokens: &mut DriveTokens) -> R
         }
 
         let token_res: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-        tokens.access_token = token_res["access_token"].as_str().ok_or("No access token")?.to_string();
+        tokens.access_token = token_res["access_token"]
+            .as_str()
+            .ok_or("No access token")?
+            .to_string();
         if let Some(rt) = token_res["refresh_token"].as_str() {
             tokens.refresh_token = rt.to_string();
         }
@@ -257,13 +277,16 @@ pub async fn perform_drive_backup(app: &AppHandle) -> Result<String, String> {
     {
         let file = File::create(&zip_path).map_err(|e| e.to_string())?;
         let mut zip = ZipWriter::new(file);
-        let options = SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
-        zip.start_file("shop.db", options).map_err(|e| e.to_string())?;
+        zip.start_file("shop.db", options)
+            .map_err(|e| e.to_string())?;
         let mut db_file = File::open(&db_path).map_err(|e| e.to_string())?;
         let mut buffer = Vec::new();
-        db_file.read_to_end(&mut buffer).map_err(|e| e.to_string())?;
+        db_file
+            .read_to_end(&mut buffer)
+            .map_err(|e| e.to_string())?;
         zip.write_all(&buffer).map_err(|e| e.to_string())?;
         zip.finish().map_err(|e| e.to_string())?;
     }
@@ -277,16 +300,19 @@ pub async fn perform_drive_backup(app: &AppHandle) -> Result<String, String> {
     let zip_content = fs::read(&zip_path).map_err(|e| e.to_string())?;
 
     let metadata_part = reqwest::multipart::Part::text(file_metadata.to_string())
-        .mime_str("application/json").unwrap();
+        .mime_str("application/json")
+        .unwrap();
     let file_part = reqwest::multipart::Part::bytes(zip_content)
-        .mime_str("application/zip").unwrap();
+        .mime_str("application/zip")
+        .unwrap();
 
     let form = reqwest::multipart::Form::new()
         .part("metadata", metadata_part)
         .part("file", file_part);
 
     let client = reqwest::Client::new();
-    let res = client.post(DRIVE_UPLOAD_URI)
+    let res = client
+        .post(DRIVE_UPLOAD_URI)
         .bearer_auth(&tokens.access_token)
         .multipart(form)
         .send()
@@ -295,7 +321,7 @@ pub async fn perform_drive_backup(app: &AppHandle) -> Result<String, String> {
 
     let status = res.status();
     let response_text = res.text().await.unwrap_or_default();
-    
+
     // Cleanup local zip
     let _ = fs::remove_file(&zip_path);
 

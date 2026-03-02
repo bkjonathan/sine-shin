@@ -38,11 +38,20 @@ pub async fn save_shop_setup(
     .map_err(|e| e.to_string())?;
 
     // Enqueue sync for shop settings
-    if let Ok(record) = sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) =
+        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+            .fetch_one(&*pool)
+            .await
     {
-        enqueue_sync(&pool, &app, "shop_settings", "INSERT", record.id, serde_json::json!(record)).await;
+        enqueue_sync(
+            &pool,
+            &app,
+            "shop_settings",
+            "INSERT",
+            record.id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(())
@@ -116,11 +125,20 @@ pub async fn update_shop_settings(
     }
 
     // Enqueue sync
-    if let Ok(record) = sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) =
+        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+            .fetch_one(&*pool)
+            .await
     {
-        enqueue_sync(&pool, &app, "shop_settings", "UPDATE", record.id, serde_json::json!(record)).await;
+        enqueue_sync(
+            &pool,
+            &app,
+            "shop_settings",
+            "UPDATE",
+            record.id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(())
@@ -269,11 +287,20 @@ pub async fn upload_shop_logo_to_s3(
             .map_err(|e| e.to_string())?;
     }
 
-    if let Ok(record) = sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
-        .fetch_one(&*pool)
-        .await
+    if let Ok(record) =
+        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+            .fetch_one(&*pool)
+            .await
     {
-        enqueue_sync(&pool, &app, "shop_settings", "UPDATE", record.id, serde_json::json!(record)).await;
+        enqueue_sync(
+            &pool,
+            &app,
+            "shop_settings",
+            "UPDATE",
+            record.id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(cloud_url)

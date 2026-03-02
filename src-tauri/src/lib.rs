@@ -1,8 +1,8 @@
 mod commands;
 mod db;
 mod models;
-mod state;
 pub mod scheduler;
+mod state;
 pub mod sync;
 
 use std::fs;
@@ -21,6 +21,9 @@ use crate::commands::customer::{
     create_customer, delete_customer, get_customer, get_customers, get_customers_paginated,
     update_customer,
 };
+use crate::commands::drive::{
+    disconnect_google_drive, get_drive_connection_status, start_google_oauth, trigger_drive_backup,
+};
 use crate::commands::expense::{
     create_expense, delete_expense, get_expense, get_expenses, get_expenses_paginated,
     update_expense,
@@ -36,20 +39,21 @@ use crate::commands::settings::{
 use crate::commands::shop::{
     get_shop_settings, save_shop_setup, update_shop_settings, upload_shop_logo_to_s3,
 };
-use crate::commands::staff::{create_staff_user, delete_staff_user, get_staff_users, update_staff_user};
+use crate::commands::staff::{
+    create_staff_user, delete_staff_user, get_staff_users, update_staff_user,
+};
 use crate::commands::system::{
     backup_database, get_db_status, reset_app_data, reset_table_sequence, restore_database,
 };
-use crate::commands::drive::{disconnect_google_drive, get_drive_connection_status, start_google_oauth, trigger_drive_backup};
 use crate::db::init_db;
+use crate::scheduler::{reload_scheduler, setup_scheduler};
 use crate::state::AppDb;
-use crate::scheduler::{setup_scheduler, reload_scheduler};
 use crate::sync::{
-    save_sync_config, get_sync_config, test_sync_connection, trigger_sync_now,
-    get_sync_queue_stats, get_sync_sessions, get_sync_queue_items, retry_failed_items,
-    clear_synced_items, clean_sync_data, set_master_password, verify_master_password, migrate_to_new_database,
-    get_migration_sql, trigger_full_sync, start_sync_loop, update_sync_interval, truncate_and_sync,
-    fetch_remote_changes, apply_remote_changes,
+    apply_remote_changes, clean_sync_data, clear_synced_items, fetch_remote_changes,
+    get_migration_sql, get_sync_config, get_sync_queue_items, get_sync_queue_stats,
+    get_sync_sessions, migrate_to_new_database, retry_failed_items, save_sync_config,
+    set_master_password, start_sync_loop, test_sync_connection, trigger_full_sync,
+    trigger_sync_now, truncate_and_sync, update_sync_interval, verify_master_password,
 };
 
 #[tauri::command]
@@ -215,9 +219,8 @@ pub fn run() {
             app.manage(AppDb(Arc::new(Mutex::new(pool))));
 
             let app_handle = app.handle().clone();
-            let scheduler_state = tauri::async_runtime::block_on(async {
-                setup_scheduler(app_handle).await
-            });
+            let scheduler_state =
+                tauri::async_runtime::block_on(async { setup_scheduler(app_handle).await });
             app.manage(scheduler_state);
 
             // Start the sync background loop

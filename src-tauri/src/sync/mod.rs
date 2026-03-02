@@ -1,6 +1,6 @@
-use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::state::AppDb;
@@ -84,36 +84,99 @@ async fn cleanup_old_sync_data(pool: &Pool<Sqlite>) {
     .await;
 }
 
-/// Insert a row into sync_queue if sync is enabled, then trigger sync.
+/// Push one record to Supabase. Returns an error message when the request fails.
+async fn push_sync_item(
+    config: &SyncConfig,
+    table: &str,
+    op: &str,
+    record_id: i64,
+    payload: &str,
+) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let request = match op {
+        "INSERT" => {
+            let url = format!("{}/rest/v1/{}", config.supabase_url, table);
+            client
+                .post(&url)
+                .header("apikey", &config.supabase_service_key)
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", config.supabase_service_key),
+                )
+                .header("Content-Type", "application/json")
+                .header("Prefer", "resolution=merge-duplicates,return=minimal")
+                .body(payload.to_string())
+        }
+        "UPDATE" | "DELETE" => {
+            let url = format!(
+                "{}/rest/v1/{}?id=eq.{}",
+                config.supabase_url, table, record_id
+            );
+            client
+                .patch(&url)
+                .header("apikey", &config.supabase_service_key)
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", config.supabase_service_key),
+                )
+                .header("Content-Type", "application/json")
+                .body(payload.to_string())
+        }
+        _ => return Err(format!("Unsupported sync operation: {}", op)),
+    };
+
+    let response = request.send().await.map_err(|e| e.to_string())?;
+    if response.status().is_success() {
+        return Ok(());
+    }
+
+    let status = response.status();
+    let response_text = response
+        .text()
+        .await
+        .unwrap_or_else(|_| "Unknown error".to_string());
+    Err(format!(
+        "HTTP {} for {} {} ({}): {}",
+        status, table, record_id, op, response_text
+    ))
+}
+
+/// Try immediate sync first. If it fails, store item in queue for retry.
 pub async fn enqueue_sync(
     pool: &Pool<Sqlite>,
-    app: &AppHandle,
+    _app: &AppHandle,
     table: &str,
     op: &str,
     record_id: i64,
     payload: serde_json::Value,
 ) {
-    // Check if sync is enabled
-    let _config = match load_sync_config(pool).await {
-        Some(c) if c.sync_enabled => c,
-        _ => return, // sync is not enabled, so we don't enqueue anything
-    };
-
+    let pool_clone = pool.clone();
+    let table_name = table.to_string();
+    let operation = op.to_string();
     let payload_str = payload.to_string();
-    let _ = sqlx::query(
-        "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, ?, ?, ?, 'pending')"
-    )
-    .bind(table)
-    .bind(op)
-    .bind(record_id)
-    .bind(payload_str)
-    .execute(pool)
-    .await;
 
-    // Trigger sync immediately in the background
-    let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
-        process_sync_queue(&app_clone).await;
+        // Check if sync is enabled
+        let config = match load_sync_config(&pool_clone).await {
+            Some(c) if c.sync_enabled => c,
+            _ => return, // sync is not enabled, so we don't enqueue anything
+        };
+
+        // Online-first behavior: successful direct writes should not enter queue.
+        if let Err(sync_error) =
+            push_sync_item(&config, &table_name, &operation, record_id, &payload_str).await
+        {
+            let _ = sqlx::query(
+                "INSERT INTO sync_queue (table_name, operation, record_id, payload, status, error_message) VALUES (?, ?, ?, ?, 'pending', ?)"
+            )
+            .bind(table_name)
+            .bind(operation)
+            .bind(record_id)
+            .bind(payload_str)
+            .bind(sync_error)
+            .execute(&pool_clone)
+            .await;
+        }
     });
 }
 
@@ -162,12 +225,11 @@ pub async fn process_sync_queue(app: &AppHandle) {
     let _ = app.emit("sync://started", ());
 
     // Create session
-    let session_id: i64 = sqlx::query_scalar(
-        "INSERT INTO sync_sessions (status) VALUES ('running') RETURNING id"
-    )
-    .fetch_one(&*pool)
-    .await
-    .unwrap_or(0);
+    let session_id: i64 =
+        sqlx::query_scalar("INSERT INTO sync_sessions (status) VALUES ('running') RETURNING id")
+            .fetch_one(&*pool)
+            .await
+            .unwrap_or(0);
 
     let total_queued = items.len() as i64;
     let _ = sqlx::query("UPDATE sync_sessions SET total_queued = ? WHERE id = ?")
@@ -176,7 +238,6 @@ pub async fn process_sync_queue(app: &AppHandle) {
         .execute(&*pool)
         .await;
 
-    let client = reqwest::Client::new();
     let mut total_synced: i64 = 0;
     let mut total_failed: i64 = 0;
 
@@ -187,53 +248,16 @@ pub async fn process_sync_queue(app: &AppHandle) {
             .execute(&*pool)
             .await;
 
-        let result = match item.operation.as_str() {
-            "INSERT" => {
-                let url = format!("{}/rest/v1/{}", config.supabase_url, item.table_name);
-                client
-                    .post(&url)
-                    .header("apikey", &config.supabase_service_key)
-                    .header("Authorization", format!("Bearer {}", config.supabase_service_key))
-                    .header("Content-Type", "application/json")
-                    .header("Prefer", "resolution=merge-duplicates")
-                    .body(item.payload.clone())
-                    .send()
-                    .await
-            }
-            "UPDATE" => {
-                let url = format!(
-                    "{}/rest/v1/{}?id=eq.{}",
-                    config.supabase_url, item.table_name, item.record_id
-                );
-                client
-                    .patch(&url)
-                    .header("apikey", &config.supabase_service_key)
-                    .header("Authorization", format!("Bearer {}", config.supabase_service_key))
-                    .header("Content-Type", "application/json")
-                    .body(item.payload.clone())
-                    .send()
-                    .await
-            }
-            "DELETE" => {
-                // Soft delete: PATCH with deleted_at
-                let url = format!(
-                    "{}/rest/v1/{}?id=eq.{}",
-                    config.supabase_url, item.table_name, item.record_id
-                );
-                client
-                    .patch(&url)
-                    .header("apikey", &config.supabase_service_key)
-                    .header("Authorization", format!("Bearer {}", config.supabase_service_key))
-                    .header("Content-Type", "application/json")
-                    .body(item.payload.clone())
-                    .send()
-                    .await
-            }
-            _ => continue,
-        };
-
-        match result {
-            Ok(resp) if resp.status().is_success() || resp.status().as_u16() == 201 || resp.status().as_u16() == 204 => {
+        match push_sync_item(
+            &config,
+            &item.table_name,
+            &item.operation,
+            item.record_id,
+            &item.payload,
+        )
+        .await
+        {
+            Ok(_) => {
                 let _ = sqlx::query(
                     "UPDATE sync_queue SET status = 'synced', synced_at = datetime('now') WHERE id = ?"
                 )
@@ -242,22 +266,11 @@ pub async fn process_sync_queue(app: &AppHandle) {
                 .await;
                 total_synced += 1;
             }
-            Ok(resp) => {
-                let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            Err(error_text) => {
                 let _ = sqlx::query(
                     "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, error_message = ? WHERE id = ?"
                 )
                 .bind(&error_text)
-                .bind(item.id)
-                .execute(&*pool)
-                .await;
-                total_failed += 1;
-            }
-            Err(e) => {
-                let _ = sqlx::query(
-                    "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, error_message = ? WHERE id = ?"
-                )
-                .bind(e.to_string())
                 .bind(item.id)
                 .execute(&*pool)
                 .await;
@@ -286,12 +299,15 @@ pub async fn process_sync_queue(app: &AppHandle) {
     cleanup_old_sync_data(&pool).await;
 
     // Emit sync completed
-    let _ = app.emit("sync://completed", SyncCompletedEvent {
-        session_id,
-        total_queued,
-        total_synced,
-        total_failed,
-    });
+    let _ = app.emit(
+        "sync://completed",
+        SyncCompletedEvent {
+            session_id,
+            total_queued,
+            total_synced,
+            total_failed,
+        },
+    );
 }
 
 /// Start the background sync loop
@@ -305,11 +321,11 @@ pub fn start_sync_loop(app: AppHandle) {
 
             let db = app.state::<AppDb>();
             let pool = db.0.lock().await;
-            
+
             if let Some(config) = load_sync_config(&pool).await {
                 if config.sync_enabled {
                     let interval_secs = config.sync_interval as u64;
-                    
+
                     let should_sync = match last_sync {
                         Some(last) => last.elapsed() >= Duration::from_secs(interval_secs),
                         None => true,
@@ -340,11 +356,13 @@ pub async fn save_sync_config(
     let pool = db.0.lock().await;
 
     // Fetch existing interval or default to 30
-    let current_interval: i32 = sqlx::query_scalar("SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1")
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .unwrap_or(30);
+    let current_interval: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1",
+    )
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .unwrap_or(30);
 
     // Deactivate existing configs
     sqlx::query("UPDATE sync_config SET is_active = 0")
@@ -394,14 +412,19 @@ pub async fn test_sync_connection(app: AppHandle) -> Result<TestConnectionResult
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let config = load_sync_config(&pool).await.ok_or("No sync configuration found")?;
+    let config = load_sync_config(&pool)
+        .await
+        .ok_or("No sync configuration found")?;
 
     let client = reqwest::Client::new();
     let url = format!("{}/rest/v1/", config.supabase_url);
     let resp = client
         .get(&url)
         .header("apikey", &config.supabase_anon_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_anon_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_anon_key),
+        )
         .timeout(Duration::from_secs(10))
         .send()
         .await
@@ -417,7 +440,14 @@ pub async fn test_sync_connection(app: AppHandle) -> Result<TestConnectionResult
 
     // Parse the response body to check for expected tables
     let body = resp.text().await.unwrap_or_default();
-    let required_tables = ["customers", "orders", "order_items", "expenses", "shop_settings", "sync_log"];
+    let required_tables = [
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+        "shop_settings",
+        "sync_log",
+    ];
     let tables_exist = required_tables.iter().all(|table| body.contains(table));
 
     if tables_exist {
@@ -449,16 +479,31 @@ pub async fn get_sync_queue_stats(app: AppHandle) -> Result<SyncStats, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'")
-        .fetch_one(&*pool).await.map_err(|e| e.to_string())?;
-    let syncing: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'syncing'")
-        .fetch_one(&*pool).await.map_err(|e| e.to_string())?;
+    let pending: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'")
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    let syncing: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'syncing'")
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
     let synced: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'synced'")
-        .fetch_one(&*pool).await.map_err(|e| e.to_string())?;
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let failed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'failed'")
-        .fetch_one(&*pool).await.map_err(|e| e.to_string())?;
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    Ok(SyncStats { pending, syncing, synced, failed })
+    Ok(SyncStats {
+        pending,
+        syncing,
+        synced,
+        failed,
+    })
 }
 
 #[tauri::command]
@@ -467,7 +512,7 @@ pub async fn get_sync_sessions(app: AppHandle, limit: i64) -> Result<Vec<SyncSes
     let pool = db.0.lock().await;
 
     let sessions = sqlx::query_as::<_, SyncSession>(
-        "SELECT * FROM sync_sessions ORDER BY started_at DESC LIMIT ?"
+        "SELECT * FROM sync_sessions ORDER BY started_at DESC LIMIT ?",
     )
     .bind(limit)
     .fetch_all(&*pool)
@@ -488,7 +533,7 @@ pub async fn get_sync_queue_items(
 
     let items = if let Some(s) = status {
         sqlx::query_as::<_, SyncQueueItem>(
-            "SELECT * FROM sync_queue WHERE status = ? ORDER BY created_at DESC LIMIT ?"
+            "SELECT * FROM sync_queue WHERE status = ? ORDER BY created_at DESC LIMIT ?",
         )
         .bind(s)
         .bind(limit)
@@ -497,7 +542,7 @@ pub async fn get_sync_queue_items(
         .map_err(|e| e.to_string())?
     } else {
         sqlx::query_as::<_, SyncQueueItem>(
-            "SELECT * FROM sync_queue ORDER BY created_at DESC LIMIT ?"
+            "SELECT * FROM sync_queue ORDER BY created_at DESC LIMIT ?",
         )
         .bind(limit)
         .fetch_all(&*pool)
@@ -545,22 +590,19 @@ pub async fn clean_sync_data(app: AppHandle) -> Result<i64, String> {
     let pool = db.0.lock().await;
 
     // Delete all completed/failed sessions
-    let sessions_deleted = sqlx::query(
-        "DELETE FROM sync_sessions WHERE status IN ('completed', 'failed')"
-    )
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .rows_affected();
+    let sessions_deleted =
+        sqlx::query("DELETE FROM sync_sessions WHERE status IN ('completed', 'failed')")
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?
+            .rows_affected();
 
     // Delete all synced queue items
-    let queue_deleted = sqlx::query(
-        "DELETE FROM sync_queue WHERE status = 'synced'"
-    )
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .rows_affected();
+    let queue_deleted = sqlx::query("DELETE FROM sync_queue WHERE status = 'synced'")
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .rows_affected();
 
     Ok((sessions_deleted + queue_deleted) as i64)
 }
@@ -573,19 +615,18 @@ pub async fn set_master_password(
     current_password: String,
     new_master: String,
 ) -> Result<(), String> {
-    use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+    use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
     use rand_core::OsRng;
 
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
     // Verify current login password for the owner
-    let user: Option<(i64, String)> = sqlx::query_as(
-        "SELECT id, password_hash FROM users WHERE role = 'owner' LIMIT 1"
-    )
-    .fetch_optional(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let user: Option<(i64, String)> =
+        sqlx::query_as("SELECT id, password_hash FROM users WHERE role = 'owner' LIMIT 1")
+            .fetch_optional(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
     let (user_id, password_hash) = user.ok_or("No owner account found")?;
     let valid = bcrypt::verify(&current_password, &password_hash).map_err(|e| e.to_string())?;
@@ -613,7 +654,7 @@ pub async fn set_master_password(
 
 #[tauri::command]
 pub async fn verify_master_password(app: AppHandle, input: String) -> Result<bool, String> {
-    use argon2::{Argon2, PasswordVerifier, PasswordHash};
+    use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -628,7 +669,9 @@ pub async fn verify_master_password(app: AppHandle, input: String) -> Result<boo
     match hash {
         Some(h) => {
             let parsed = PasswordHash::new(&h).map_err(|e| format!("Invalid hash: {}", e))?;
-            Ok(Argon2::default().verify_password(input.as_bytes(), &parsed).is_ok())
+            Ok(Argon2::default()
+                .verify_password(input.as_bytes(), &parsed)
+                .is_ok())
         }
         None => Err("No master password set".to_string()),
     }
@@ -642,7 +685,7 @@ pub async fn migrate_to_new_database(
     new_anon_key: String,
     new_service_key: String,
 ) -> Result<String, String> {
-    use argon2::{Argon2, PasswordVerifier, PasswordHash};
+    use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
@@ -657,7 +700,10 @@ pub async fn migrate_to_new_database(
 
     let h = hash.ok_or("No master password set. Please set one first.")?;
     let parsed = PasswordHash::new(&h).map_err(|e| format!("Invalid hash: {}", e))?;
-    if Argon2::default().verify_password(master_password.as_bytes(), &parsed).is_err() {
+    if Argon2::default()
+        .verify_password(master_password.as_bytes(), &parsed)
+        .is_err()
+    {
         return Err("Invalid master password".to_string());
     }
 
@@ -667,11 +713,13 @@ pub async fn migrate_to_new_database(
         .await
         .map_err(|e| e.to_string())?;
 
-    let current_interval: i32 = sqlx::query_scalar("SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1")
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .unwrap_or(30);
+    let current_interval: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1",
+    )
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .unwrap_or(30);
 
     sqlx::query(
         "INSERT INTO sync_config (supabase_url, supabase_anon_key, supabase_service_key, is_active, sync_enabled, sync_interval) VALUES (?, ?, ?, 1, 1, ?)"
@@ -691,7 +739,13 @@ pub async fn migrate_to_new_database(
         .map_err(|e| e.to_string())?;
 
     // 4. Reset synced=0 on all records
-    for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
+    for table in &[
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+        "shop_settings",
+    ] {
         let _ = sqlx::query(&format!("UPDATE {} SET synced = 0", table))
             .execute(&*pool)
             .await;
@@ -699,7 +753,13 @@ pub async fn migrate_to_new_database(
 
     // 5. Count total records to re-queue
     let mut total: i64 = 0;
-    for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
+    for table in &[
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+        "shop_settings",
+    ] {
         let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {}", table))
             .fetch_one(&*pool)
             .await
@@ -715,7 +775,8 @@ pub async fn migrate_to_new_database(
         for (id,) in ids {
             // Fetch full record as JSON-like payload
             let row: Option<(String,)> = sqlx::query_as(&format!(
-                "SELECT json_object('id', id) FROM {} WHERE id = ?", table
+                "SELECT json_object('id', id) FROM {} WHERE id = ?",
+                table
             ))
             .bind(id)
             .fetch_optional(&*pool)
@@ -742,7 +803,10 @@ pub async fn migrate_to_new_database(
         process_sync_queue(&app_clone).await;
     });
 
-    Ok(format!("Migration started. {} records queued for sync.", total))
+    Ok(format!(
+        "Migration started. {} records queued for sync.",
+        total
+    ))
 }
 
 #[tauri::command]
@@ -751,7 +815,9 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
     let pool = db.0.lock().await;
 
     // Verify config exists
-    let _config = load_sync_config(&pool).await.ok_or("No sync configuration found. Please save your Supabase config first.")?;
+    let _config = load_sync_config(&pool)
+        .await
+        .ok_or("No sync configuration found. Please save your Supabase config first.")?;
 
     // Clear any existing pending/failed items to avoid duplicates
     sqlx::query("DELETE FROM sync_queue WHERE status IN ('pending', 'failed')")
@@ -792,7 +858,13 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
     }
 
     // Mark all records as unsynced
-    for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
+    for table in &[
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+        "shop_settings",
+    ] {
         let _ = sqlx::query(&format!("UPDATE {} SET synced = 0", table))
             .execute(&*pool)
             .await;
@@ -819,28 +891,45 @@ pub async fn truncate_and_sync(app: AppHandle) -> Result<String, String> {
     let pool = db.0.lock().await;
 
     // Verify config exists
-    let config = load_sync_config(&pool).await.ok_or("No sync configuration found. Please save your Supabase config first.")?;
+    let config = load_sync_config(&pool)
+        .await
+        .ok_or("No sync configuration found. Please save your Supabase config first.")?;
 
     let client = reqwest::Client::new();
-    let tables = vec!["shop_settings", "customers", "orders", "order_items", "expenses"];
-    
+    let tables = vec![
+        "shop_settings",
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+    ];
+
     // Truncate tables on Supabase
     for table in &tables {
         let url = format!("{}/rest/v1/{}?id=not.is.null", config.supabase_url, table);
         let res = client
             .delete(&url)
             .header("apikey", &config.supabase_service_key)
-            .header("Authorization", format!("Bearer {}", config.supabase_service_key))
+            .header(
+                "Authorization",
+                format!("Bearer {}", config.supabase_service_key),
+            )
             .send()
             .await;
-            
+
         if let Err(e) = res {
             eprintln!("Failed to truncate table {}: {}", table, e);
         } else if let Ok(resp) = res {
             if !resp.status().is_success() {
                 let status = resp.status();
-                let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                eprintln!("Failed to truncate table {} (Status {}): {}", table, status, error_text);
+                let error_text = resp
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                eprintln!(
+                    "Failed to truncate table {} (Status {}): {}",
+                    table, status, error_text
+                );
             }
         }
     }
@@ -868,11 +957,19 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
     let pool = db.0.lock().await;
 
     // Verify config exists
-    let config = load_sync_config(&pool).await.ok_or("No sync configuration found.")?;
+    let config = load_sync_config(&pool)
+        .await
+        .ok_or("No sync configuration found.")?;
 
     let client = reqwest::Client::new();
-    let tables = vec!["shop_settings", "customers", "orders", "order_items", "expenses"];
-    
+    let tables = vec![
+        "shop_settings",
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+    ];
+
     let table_json_fields: std::collections::HashMap<&str, &str> = [
         ("shop_settings", "json_object('id', id, 'shop_name', shop_name, 'phone', phone, 'address', address, 'logo_path', logo_path, 'logo_cloud_url', logo_cloud_url, 'customer_id_prefix', customer_id_prefix, 'order_id_prefix', order_id_prefix, 'created_at', created_at, 'updated_at', updated_at)"),
         ("customers", "json_object('id', id, 'customer_id', customer_id, 'name', name, 'phone', phone, 'address', address, 'city', city, 'social_media_url', social_media_url, 'platform', platform, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
@@ -888,7 +985,10 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
         let resp = client
             .get(&url)
             .header("apikey", &config.supabase_anon_key)
-            .header("Authorization", format!("Bearer {}", config.supabase_anon_key))
+            .header(
+                "Authorization",
+                format!("Bearer {}", config.supabase_anon_key),
+            )
             .send()
             .await;
 
@@ -898,17 +998,24 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                     for row in rows {
                         let id = row.get("id").and_then(|v| v.as_i64());
                         // try to get updated_at, fallback to current or empty string if not available
-                        let remote_updated_at = row.get("updated_at").and_then(|v| v.as_str()).unwrap_or("");
-                        
+                        let remote_updated_at =
+                            row.get("updated_at").and_then(|v| v.as_str()).unwrap_or("");
+
                         if let Some(id) = id {
                             // Check local DB
-                            let json_expr = table_json_fields.get(table).unwrap_or(&"json_object('id', id)");
-                            let query = format!("SELECT updated_at, {} as payload FROM {} WHERE id = ?", json_expr, table);
-                            let local_row: Option<(Option<String>, String)> = sqlx::query_as(&query)
-                                .bind(id)
-                                .fetch_optional(&*pool)
-                                .await
-                                .unwrap_or(None);
+                            let json_expr = table_json_fields
+                                .get(table)
+                                .unwrap_or(&"json_object('id', id)");
+                            let query = format!(
+                                "SELECT updated_at, {} as payload FROM {} WHERE id = ?",
+                                json_expr, table
+                            );
+                            let local_row: Option<(Option<String>, String)> =
+                                sqlx::query_as(&query)
+                                    .bind(id)
+                                    .fetch_optional(&*pool)
+                                    .await
+                                    .unwrap_or(None);
 
                             match local_row {
                                 None => {
@@ -924,19 +1031,32 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                 Some((local_updated_at, local_payload_str)) => {
                                     // Exists locally. Compare updated_at.
                                     let mut is_newer = false;
-                                    
+
                                     if !remote_updated_at.is_empty() {
-                                        if let Ok(r_time) = chrono::DateTime::parse_from_rfc3339(remote_updated_at) {
+                                        if let Ok(r_time) =
+                                            chrono::DateTime::parse_from_rfc3339(remote_updated_at)
+                                        {
                                             if let Some(l_str) = local_updated_at {
                                                 // Local is likely "YYYY-MM-DD HH:MM:SS" SQLite format
-                                                if let Ok(l_naive) = chrono::NaiveDateTime::parse_from_str(&l_str, "%Y-%m-%d %H:%M:%S") {
+                                                if let Ok(l_naive) =
+                                                    chrono::NaiveDateTime::parse_from_str(
+                                                        &l_str,
+                                                        "%Y-%m-%d %H:%M:%S",
+                                                    )
+                                                {
                                                     let l_time = l_naive.and_utc();
                                                     // Allow 1 second buffer for precision loss
-                                                    if r_time.with_timezone(&chrono::Utc) > l_time + chrono::Duration::seconds(1) {
+                                                    if r_time.with_timezone(&chrono::Utc)
+                                                        > l_time + chrono::Duration::seconds(1)
+                                                    {
                                                         is_newer = true;
                                                     }
-                                                } else if let Ok(l_time2) = chrono::DateTime::parse_from_rfc3339(&l_str) {
-                                                    if r_time > l_time2 + chrono::Duration::seconds(1) {
+                                                } else if let Ok(l_time2) =
+                                                    chrono::DateTime::parse_from_rfc3339(&l_str)
+                                                {
+                                                    if r_time
+                                                        > l_time2 + chrono::Duration::seconds(1)
+                                                    {
                                                         is_newer = true;
                                                     }
                                                 }
@@ -949,25 +1069,40 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
 
                                     if is_newer {
                                         let mut actual_change = true;
-                                        if let Ok(local_json) = serde_json::from_str::<serde_json::Value>(&local_payload_str) {
-                                            if let (Some(local_obj), Some(remote_obj)) = (local_json.as_object(), row.as_object()) {
+                                        if let Ok(local_json) =
+                                            serde_json::from_str::<serde_json::Value>(
+                                                &local_payload_str,
+                                            )
+                                        {
+                                            if let (Some(local_obj), Some(remote_obj)) =
+                                                (local_json.as_object(), row.as_object())
+                                            {
                                                 let mut same = true;
                                                 for (k, v) in remote_obj {
-                                                    if k == "updated_at" || k == "created_at" || k == "deleted_at" || k == "synced" || k == "id" {
+                                                    if k == "updated_at"
+                                                        || k == "created_at"
+                                                        || k == "deleted_at"
+                                                        || k == "synced"
+                                                        || k == "id"
+                                                    {
                                                         continue;
                                                     }
-                                                    
+
                                                     let local_v = local_obj.get(k);
-                                                    
+
                                                     let is_remote_null = v.is_null();
-                                                    let is_local_null = local_v.map_or(true, |lv| lv.is_null());
-                                                    
+                                                    let is_local_null =
+                                                        local_v.map_or(true, |lv| lv.is_null());
+
                                                     if is_remote_null && is_local_null {
                                                         continue;
                                                     }
 
                                                     // For numbers, compare as f64 to avoid float/int mismatches between SQLite and JSON
-                                                    if let (Some(rv_n), Some(lv_n)) = (v.as_f64(), local_v.and_then(|lv| lv.as_f64())) {
+                                                    if let (Some(rv_n), Some(lv_n)) = (
+                                                        v.as_f64(),
+                                                        local_v.and_then(|lv| lv.as_f64()),
+                                                    ) {
                                                         if (rv_n - lv_n).abs() > f64::EPSILON {
                                                             same = false;
                                                             break;
@@ -975,11 +1110,15 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                             continue;
                                                         }
                                                     }
-                                                    
+
                                                     // For bool vs int matching (sqlite uses 0/1 for booleans)
                                                     if let Some(rv_b) = v.as_bool() {
-                                                        if let Some(lv_i) = local_v.and_then(|lv| lv.as_i64()) {
-                                                            if (rv_b && lv_i != 1) || (!rv_b && lv_i != 0) {
+                                                        if let Some(lv_i) =
+                                                            local_v.and_then(|lv| lv.as_i64())
+                                                        {
+                                                            if (rv_b && lv_i != 1)
+                                                                || (!rv_b && lv_i != 0)
+                                                            {
                                                                 same = false;
                                                                 break;
                                                             } else {
@@ -1009,13 +1148,21 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                         } else {
                                             // Silently sync local updated_at to match remote so we skip this check next time
                                             // Convert RFC3339 back to local SQLite format (YYYY-MM-DD HH:MM:SS) roughly
-                                            if let Ok(r_time) = chrono::DateTime::parse_from_rfc3339(remote_updated_at) {
-                                                let sqlite_time = r_time.with_timezone(&chrono::Utc).format("%Y-%m-%d %H:%M:%S").to_string();
-                                                let _ = sqlx::query(&format!("UPDATE {} SET updated_at = ? WHERE id = ?", table))
-                                                    .bind(sqlite_time)
-                                                    .bind(id)
-                                                    .execute(&*pool)
-                                                    .await;
+                                            if let Ok(r_time) = chrono::DateTime::parse_from_rfc3339(
+                                                remote_updated_at,
+                                            ) {
+                                                let sqlite_time = r_time
+                                                    .with_timezone(&chrono::Utc)
+                                                    .format("%Y-%m-%d %H:%M:%S")
+                                                    .to_string();
+                                                let _ = sqlx::query(&format!(
+                                                    "UPDATE {} SET updated_at = ? WHERE id = ?",
+                                                    table
+                                                ))
+                                                .bind(sqlite_time)
+                                                .bind(id)
+                                                .execute(&*pool)
+                                                .await;
                                             }
                                         }
                                     }
@@ -1032,20 +1179,26 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
 }
 
 #[tauri::command]
-pub async fn apply_remote_changes(app: AppHandle, changes: Vec<RemoteChange>) -> Result<String, String> {
+pub async fn apply_remote_changes(
+    app: AppHandle,
+    changes: Vec<RemoteChange>,
+) -> Result<String, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
     // First, cache the local valid columns for each table we are going to touch
-    let mut table_columns: std::collections::HashMap<String, std::collections::HashSet<String>> = std::collections::HashMap::new();
+    let mut table_columns: std::collections::HashMap<String, std::collections::HashSet<String>> =
+        std::collections::HashMap::new();
     for change in &changes {
         let table = change.table_name.clone();
         if !table_columns.contains_key(&table) {
-            let cols: Vec<(String,)> = sqlx::query_as(&format!("SELECT name FROM PRAGMA_TABLE_INFO('{}')", table))
-                .fetch_all(&*pool)
-                .await
-                .unwrap_or_default();
-            let cols_set: std::collections::HashSet<String> = cols.into_iter().map(|(c,)| c).collect();
+            let cols: Vec<(String,)> =
+                sqlx::query_as(&format!("SELECT name FROM PRAGMA_TABLE_INFO('{}')", table))
+                    .fetch_all(&*pool)
+                    .await
+                    .unwrap_or_default();
+            let cols_set: std::collections::HashSet<String> =
+                cols.into_iter().map(|(c,)| c).collect();
             table_columns.insert(table, cols_set);
         }
     }
@@ -1059,30 +1212,35 @@ pub async fn apply_remote_changes(app: AppHandle, changes: Vec<RemoteChange>) ->
 
         if let Some(obj) = payload.as_object() {
             if change.change_type == "new" {
-                // We use QueryBuilder since dynamically binding in SQLite requires knowing exact counts up front, 
+                // We use QueryBuilder since dynamically binding in SQLite requires knowing exact counts up front,
                 // but sqlx query string allows building.
-                
+
                 // Create parallel vecs of keys and values
                 let mut keys = Vec::new();
                 let mut vals = Vec::new();
                 for (k, v) in obj {
                     if let Some(cols) = valid_cols {
-                        if !cols.contains(k) { continue; }
+                        if !cols.contains(k) {
+                            continue;
+                        }
                     }
                     keys.push(k.clone());
                     vals.push(v);
                 }
-                
+
                 if keys.is_empty() {
                     continue;
                 }
 
                 let cols_str = keys.join(", ");
                 let placeholders = vec!["?"; keys.len()].join(", ");
-                let query_str = format!("INSERT INTO {} ({}) VALUES ({})", table, cols_str, placeholders);
-                
+                let query_str = format!(
+                    "INSERT INTO {} ({}) VALUES ({})",
+                    table, cols_str, placeholders
+                );
+
                 let mut q = sqlx::query(&query_str);
-                
+
                 for v in vals {
                     if v.is_null() {
                         // For sqlite, binding Option::<String>::None effectively binds NULL
@@ -1099,7 +1257,7 @@ pub async fn apply_remote_changes(app: AppHandle, changes: Vec<RemoteChange>) ->
                         q = q.bind(v.to_string());
                     }
                 }
-                
+
                 let res = q.execute(&*pool).await;
                 if res.is_ok() {
                     applied_count += 1;
@@ -1112,22 +1270,24 @@ pub async fn apply_remote_changes(app: AppHandle, changes: Vec<RemoteChange>) ->
                 for (k, v) in obj {
                     if k != "id" {
                         if let Some(cols) = valid_cols {
-                            if !cols.contains(k) { continue; }
+                            if !cols.contains(k) {
+                                continue;
+                            }
                         }
                         updates.push(format!("{} = ?", k));
                         vals.push(v);
                     }
                 }
-                
+
                 if updates.is_empty() {
                     continue;
                 }
 
                 let update_str = updates.join(", ");
                 let query_str = format!("UPDATE {} SET {} WHERE id = ?", table, update_str);
-                
+
                 let mut q = sqlx::query(&query_str);
-                
+
                 for v in vals {
                     if v.is_null() {
                         q = q.bind(Option::<String>::None);
@@ -1143,18 +1303,25 @@ pub async fn apply_remote_changes(app: AppHandle, changes: Vec<RemoteChange>) ->
                         q = q.bind(v.to_string());
                     }
                 }
-                
+
                 q = q.bind(change.record_id);
-                
+
                 let res = q.execute(&*pool).await;
                 if res.is_ok() {
                     applied_count += 1;
                 } else {
-                    eprintln!("Failed to apply MODIFIED change for {}: {:?}", table, res.err());
+                    eprintln!(
+                        "Failed to apply MODIFIED change for {}: {:?}",
+                        table,
+                        res.err()
+                    );
                 }
             }
         }
     }
 
-    Ok(format!("Successfully applied {} remote changes locally.", applied_count))
+    Ok(format!(
+        "Successfully applied {} remote changes locally.",
+        applied_count
+    ))
 }

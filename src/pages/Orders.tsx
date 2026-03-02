@@ -164,6 +164,28 @@ const getOrdersListPath = (page: number): string => {
 
 const MAX_SERVICE_FEE_PERCENT = 100;
 
+const toDateInputValue = (value?: string): string => {
+  if (!value) return "";
+
+  const raw = value.trim();
+  if (!raw) return "";
+
+  const dateOnly = raw.split("T")[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+    return dateOnly;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, "0");
+  const d = String(parsed.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 const hasOrderFormErrors = (errors: OrderFormErrors): boolean => {
   if (
     errors.itemErrors?.some((itemError) => Object.keys(itemError).length > 0)
@@ -835,10 +857,10 @@ export default function Orders() {
           shipping_fee: order.shipping_fee?.toString() || "",
           delivery_fee: order.delivery_fee?.toString() || "",
           cargo_fee: order.cargo_fee?.toString() || "",
-          order_date: order.order_date || "",
-          arrived_date: order.arrived_date || "",
-          shipment_date: order.shipment_date || "",
-          user_withdraw_date: order.user_withdraw_date || "",
+          order_date: toDateInputValue(order.order_date),
+          arrived_date: toDateInputValue(order.arrived_date),
+          shipment_date: toDateInputValue(order.shipment_date),
+          user_withdraw_date: toDateInputValue(order.user_withdraw_date),
           service_fee: order.service_fee?.toString() || "",
           product_discount: order.product_discount?.toString() || "",
           service_fee_type: order.service_fee_type || "fixed",

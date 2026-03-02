@@ -179,21 +179,39 @@ pub async fn create_order(
     tx.commit().await.map_err(|e| e.to_string())?;
 
     // Enqueue sync for order
-    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-        .bind(inserted_id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(order) =
+        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+            .bind(inserted_id)
+            .fetch_one(&*pool)
+            .await
     {
-        enqueue_sync(&pool, &app, "orders", "INSERT", inserted_id, serde_json::json!(order)).await;
+        enqueue_sync(
+            &pool,
+            &app,
+            "orders",
+            "INSERT",
+            inserted_id,
+            serde_json::json!(order),
+        )
+        .await;
     }
     // Enqueue sync for order items
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-        .bind(inserted_id)
-        .fetch_all(&*pool)
-        .await
+    if let Ok(items_db) =
+        sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+            .bind(inserted_id)
+            .fetch_all(&*pool)
+            .await
     {
         for item in items_db {
-            enqueue_sync(&pool, &app, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
+            enqueue_sync(
+                &pool,
+                &app,
+                "order_items",
+                "INSERT",
+                item.id,
+                serde_json::json!(item),
+            )
+            .await;
         }
     }
 
@@ -496,12 +514,21 @@ pub async fn update_order(
     tx.commit().await.map_err(|e| e.to_string())?;
 
     // Enqueue sync for order
-    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(order) =
+        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+            .bind(id)
+            .fetch_one(&*pool)
+            .await
     {
-        enqueue_sync(&pool, &app, "orders", "UPDATE", id, serde_json::json!(order)).await;
+        enqueue_sync(
+            &pool,
+            &app,
+            "orders",
+            "UPDATE",
+            id,
+            serde_json::json!(order),
+        )
+        .await;
     }
 
     // Enqueue sync for old items (DELETE)
@@ -509,17 +536,34 @@ pub async fn update_order(
     for mut old_item in old_items {
         old_item.deleted_at = Some(now.clone());
         old_item.updated_at = Some(now.clone());
-        enqueue_sync(&pool, &app, "order_items", "DELETE", old_item.id, serde_json::json!(old_item)).await;
+        enqueue_sync(
+            &pool,
+            &app,
+            "order_items",
+            "DELETE",
+            old_item.id,
+            serde_json::json!(old_item),
+        )
+        .await;
     }
 
     // Enqueue sync for order items
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-        .bind(id)
-        .fetch_all(&*pool)
-        .await
+    if let Ok(items_db) =
+        sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+            .bind(id)
+            .fetch_all(&*pool)
+            .await
     {
         for item in items_db {
-            enqueue_sync(&pool, &app, "order_items", "INSERT", item.id, serde_json::json!(item)).await;
+            enqueue_sync(
+                &pool,
+                &app,
+                "order_items",
+                "INSERT",
+                item.id,
+                serde_json::json!(item),
+            )
+            .await;
         }
     }
 
@@ -532,11 +576,13 @@ pub async fn delete_order(app: AppHandle, id: i64) -> Result<(), String> {
     let pool = db.0.lock().await;
 
     // Soft delete
-    sqlx::query("UPDATE orders SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
-        .bind(id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    sqlx::query(
+        "UPDATE orders SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+    )
+    .bind(id)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     // Also soft delete order items
     sqlx::query("UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ?")
@@ -546,20 +592,38 @@ pub async fn delete_order(app: AppHandle, id: i64) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     // Enqueue sync
-    if let Ok(order) = sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(order) =
+        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+            .bind(id)
+            .fetch_one(&*pool)
+            .await
     {
-        enqueue_sync(&pool, &app, "orders", "DELETE", id, serde_json::json!(order)).await;
+        enqueue_sync(
+            &pool,
+            &app,
+            "orders",
+            "DELETE",
+            id,
+            serde_json::json!(order),
+        )
+        .await;
     }
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-        .bind(id)
-        .fetch_all(&*pool)
-        .await
+    if let Ok(items_db) =
+        sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+            .bind(id)
+            .fetch_all(&*pool)
+            .await
     {
         for item in items_db {
-            enqueue_sync(&pool, &app, "order_items", "DELETE", item.id, serde_json::json!(item)).await;
+            enqueue_sync(
+                &pool,
+                &app,
+                "order_items",
+                "DELETE",
+                item.id,
+                serde_json::json!(item),
+            )
+            .await;
         }
     }
 
@@ -598,7 +662,10 @@ pub async fn get_dashboard_stats(
             } else {
                 format!("{}.{}", alias, col)
             };
-            conditions.push(format!("date({}) >= '{}' AND date({}) <= '{}'", prefix, df, prefix, dt));
+            conditions.push(format!(
+                "date({}) >= '{}' AND date({}) <= '{}'",
+                prefix, df, prefix, dt
+            ));
         }
 
         if let Some(s) = &normalized_status {
@@ -661,7 +728,10 @@ pub async fn get_dashboard_stats(
         .map_err(|e| e.to_string())?;
 
     // 4) Total customers
-    let customers_sql = format!("SELECT COUNT(DISTINCT customer_id) FROM orders{}", orders_where(""));
+    let customers_sql = format!(
+        "SELECT COUNT(DISTINCT customer_id) FROM orders{}",
+        orders_where("")
+    );
     let total_customers: (i64,) = sqlx::query_as(&customers_sql)
         .fetch_one(&*pool)
         .await

@@ -131,8 +131,10 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
             sync_interval INTEGER DEFAULT 30,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )"
-    ).execute(pool).await?;
+        )",
+    )
+    .execute(pool)
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS sync_queue (
@@ -146,8 +148,10 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
             error_message TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             synced_at DATETIME
-        )"
-    ).execute(pool).await?;
+        )",
+    )
+    .execute(pool)
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS sync_sessions (
@@ -158,15 +162,20 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
             total_synced INTEGER DEFAULT 0,
             total_failed INTEGER DEFAULT 0,
             status TEXT DEFAULT 'running' CHECK(status IN ('running','completed','failed'))
-        )"
-    ).execute(pool).await?;
+        )",
+    )
+    .execute(pool)
+    .await?;
 
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)")
-        .execute(pool).await?;
+        .execute(pool)
+        .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_sync_queue_table ON sync_queue(table_name)")
-        .execute(pool).await?;
+        .execute(pool)
+        .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_sync_queue_created ON sync_queue(created_at)")
-        .execute(pool).await?;
+        .execute(pool)
+        .await?;
 
     // ── Add updated_at, deleted_at, synced columns to existing tables ──
     // NOTE: SQLite does not allow non-constant defaults (like CURRENT_TIMESTAMP)
@@ -210,7 +219,13 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
     }
 
     // Backfill updated_at for existing rows where it's NULL
-    for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
+    for table in &[
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+        "shop_settings",
+    ] {
         sqlx::query(&format!(
             "UPDATE {} SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL",
             table
