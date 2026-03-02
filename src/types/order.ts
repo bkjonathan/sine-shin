@@ -7,6 +7,7 @@ export type OrderStatus =
 
 export interface Order {
   id: number;
+  uuid?: string | null;
   order_id?: string;
   customer_id?: number;
   status?: OrderStatus;
@@ -35,6 +36,7 @@ export interface Order {
 
 export interface OrderItem {
   id: number;
+  uuid?: string | null;
   order_id: number;
   product_url?: string;
   product_qty?: number;

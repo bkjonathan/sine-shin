@@ -142,6 +142,7 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
             table_name TEXT NOT NULL,
             operation TEXT NOT NULL CHECK(operation IN ('INSERT','UPDATE','DELETE')),
             record_id INTEGER NOT NULL,
+            record_uuid TEXT,
             payload TEXT NOT NULL,
             status TEXT DEFAULT 'pending' CHECK(status IN ('pending','syncing','synced','failed')),
             retry_count INTEGER DEFAULT 0,
@@ -181,23 +182,30 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
     // NOTE: SQLite does not allow non-constant defaults (like CURRENT_TIMESTAMP)
     // in ALTER TABLE ADD COLUMN, so we add columns without defaults and backfill.
     let alter_columns: Vec<(&str, &str, &str)> = vec![
+        ("shop_settings", "uuid", "TEXT"),
+        ("users", "uuid", "TEXT"),
         ("customers", "updated_at", "DATETIME"),
         ("customers", "deleted_at", "DATETIME"),
         ("customers", "synced", "INTEGER DEFAULT 0"),
+        ("customers", "uuid", "TEXT"),
         ("orders", "updated_at", "DATETIME"),
         ("orders", "deleted_at", "DATETIME"),
         ("orders", "synced", "INTEGER DEFAULT 0"),
+        ("orders", "uuid", "TEXT"),
         ("order_items", "updated_at", "DATETIME"),
         ("order_items", "deleted_at", "DATETIME"),
         ("order_items", "synced", "INTEGER DEFAULT 0"),
+        ("order_items", "uuid", "TEXT"),
         ("expenses", "updated_at", "DATETIME"),
         ("expenses", "deleted_at", "DATETIME"),
         ("expenses", "synced", "INTEGER DEFAULT 0"),
+        ("expenses", "uuid", "TEXT"),
         ("shop_settings", "updated_at", "DATETIME"),
         ("shop_settings", "synced", "INTEGER DEFAULT 0"),
         ("shop_settings", "logo_cloud_url", "TEXT"),
         ("users", "master_password_hash", "TEXT"),
         ("sync_config", "sync_interval", "INTEGER DEFAULT 30"),
+        ("sync_queue", "record_uuid", "TEXT"),
     ];
 
     for (table, col, col_type) in alter_columns {
@@ -229,6 +237,22 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         sqlx::query(&format!(
             "UPDATE {} SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL",
             table
+        ))
+        .execute(pool)
+        .await?;
+    }
+
+    for table in &[
+        "shop_settings",
+        "users",
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+    ] {
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_uuid ON {}(uuid)",
+            table, table
         ))
         .execute(pool)
         .await?;

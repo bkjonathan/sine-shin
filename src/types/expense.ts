@@ -1,5 +1,6 @@
 export interface Expense {
   id: number;
+  uuid?: string | null;
   expense_id?: string | null;
   title: string;
   amount: number;
