@@ -4,6 +4,7 @@ export interface ShopData {
   address: string | null;
   logo_path: string | null;
   customer_id_prefix: string | null;
+  order_id_prefix: string | null;
 }
 
 export interface DashboardOrder {

@@ -142,3 +142,22 @@ export async function migrateToNewDatabase(
     newServiceKey,
   });
 }
+
+// ─── Remote Fetch and Apply ───
+
+export interface RemoteChange {
+  table_name: string;
+  record_id: number;
+  change_type: "new" | "modified";
+  payload: Record<string, any>;
+}
+
+export async function fetchRemoteChanges(): Promise<RemoteChange[]> {
+  return invoke("fetch_remote_changes");
+}
+
+export async function applyRemoteChanges(
+  changes: RemoteChange[],
+): Promise<string> {
+  return invoke("apply_remote_changes", { changes });
+}

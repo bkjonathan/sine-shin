@@ -565,6 +565,8 @@
       "address_placeholder": "ဆိုင်လိပ်စာ ရိုက်ထည့်ပါ",
       "customer_id_prefix": "ဖောက်သည် ID ရှေ့ဆက်",
       "customer_id_desc": "ဖောက်သည်သစ် ID များအတွက် ရှေ့ဆက် (ဥပမာ - SSC-)",
+      "order_id_prefix": "အော်ဒါ ID ရှေ့ဆက်",
+      "order_id_desc": "အော်ဒါသစ် ID များအတွက် ရှေ့ဆက် (ဥပမာ - SSO-)",
       "currency_settings": "ငွေကြေး ဆက်တင်များ",
       "currency_code": "ငွေကြေး ကုဒ်",
       "currency_code_placeholder": "ဥပမာ - USD, MMK",

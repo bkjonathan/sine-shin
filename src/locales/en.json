@@ -567,6 +567,8 @@
       "address_placeholder": "Enter shop address",
       "customer_id_prefix": "Customer ID Prefix",
       "customer_id_desc": "Prefix for new customer IDs (e.g. SSC-)",
+      "order_id_prefix": "Order ID Prefix",
+      "order_id_desc": "Prefix for new order IDs (e.g. SSO-)",
       "currency_settings": "Currency Settings",
       "currency_code": "Currency Code",
       "currency_code_placeholder": "e.g. USD, MMK",

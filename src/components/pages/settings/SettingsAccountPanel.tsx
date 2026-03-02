@@ -33,6 +33,7 @@ export default function SettingsAccountPanel() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [customerIdPrefix, setCustomerIdPrefix] = useState("SSC-");
+  const [orderIdPrefix, setOrderIdPrefix] = useState("SSO-");
   const [newLogoPath, setNewLogoPath] = useState<string | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,11 +59,13 @@ export default function SettingsAccountPanel() {
         address: string | null;
         logo_path: string | null;
         customer_id_prefix: string | null;
+        order_id_prefix: string | null;
       }>("get_shop_settings");
       setShopName(settings.shop_name);
       setPhone(settings.phone || "");
       setAddress(settings.address || "");
       setCustomerIdPrefix(settings.customer_id_prefix || "SSC-");
+      setOrderIdPrefix(settings.order_id_prefix || "SSO-");
 
       if (settings.logo_path) {
         setPreviewSrc(convertFileSrc(settings.logo_path));
@@ -116,6 +119,7 @@ export default function SettingsAccountPanel() {
         address,
         logoPath: newLogoPath,
         customerIdPrefix,
+        orderIdPrefix,
       });
       setMessage({
         type: "success",
@@ -173,7 +177,9 @@ export default function SettingsAccountPanel() {
           </motion.span>
         )}
       </div>
-      <p className="text-xs text-text-muted mb-5">{t("settings.account.subtitle")}</p>
+      <p className="text-xs text-text-muted mb-5">
+        {t("settings.account.subtitle")}
+      </p>
 
       <div className="space-y-5">
         <div className="flex flex-col gap-2">
@@ -184,9 +190,17 @@ export default function SettingsAccountPanel() {
           <div className="flex items-center gap-4">
             <div className="relative group w-20 h-20 rounded-full bg-glass-white border border-glass-border overflow-hidden flex items-center justify-center shrink-0">
               {previewSrc ? (
-                <img src={previewSrc} alt="Shop Logo" className="w-full h-full object-cover" />
+                <img
+                  src={previewSrc}
+                  alt="Shop Logo"
+                  className="w-full h-full object-cover"
+                />
               ) : (
-                <IconImage size={24} strokeWidth={1.5} className="text-text-muted" />
+                <IconImage
+                  size={24}
+                  strokeWidth={1.5}
+                  className="text-text-muted"
+                />
               )}
             </div>
             <Button
@@ -246,9 +260,31 @@ export default function SettingsAccountPanel() {
             className="input-liquid font-mono uppercase"
             placeholder="SSC-"
             value={customerIdPrefix}
-            onChange={(event) => setCustomerIdPrefix(event.target.value.toUpperCase())}
+            onChange={(event) =>
+              setCustomerIdPrefix(event.target.value.toUpperCase())
+            }
           />
-          <p className="text-xs text-text-muted mt-1">{t("settings.account.customer_id_desc")}</p>
+          <p className="text-xs text-text-muted mt-1">
+            {t("settings.account.customer_id_desc")}
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text-secondary mb-2">
+            {t("settings.account.order_id_prefix")}
+          </label>
+          <Input
+            type="text"
+            className="input-liquid font-mono uppercase"
+            placeholder="SSO-"
+            value={orderIdPrefix}
+            onChange={(event) =>
+              setOrderIdPrefix(event.target.value.toUpperCase())
+            }
+          />
+          <p className="text-xs text-text-muted mt-1">
+            {t("settings.account.order_id_desc")}
+          </p>
         </div>
 
         <div className="pt-2">

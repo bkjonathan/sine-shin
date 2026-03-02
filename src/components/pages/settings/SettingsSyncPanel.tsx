@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button, Input, Select } from "../../ui";
 import { useSound } from "../../../context/SoundContext";
 import {
@@ -35,6 +35,9 @@ import {
   triggerFullSync,
   truncateAndSync,
   updateSyncInterval,
+  fetchRemoteChanges,
+  applyRemoteChanges,
+  type RemoteChange,
   type SyncStats,
   type SyncSession,
   type SyncQueueItem,
@@ -123,6 +126,15 @@ export default function SettingsSyncPanel() {
   const [queueFilter, setQueueFilter] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [clearing, setClearing] = useState(false);
+
+  // ─── Remote Fetch ───
+  const [remoteChanges, setRemoteChanges] = useState<RemoteChange[]>([]);
+  const [fetchingRemote, setFetchingRemote] = useState(false);
+  const [applyingRemote, setApplyingRemote] = useState(false);
+  const [selectedChanges, setSelectedChanges] = useState<Set<string>>(
+    new Set(),
+  );
+  const [viewingChange, setViewingChange] = useState<RemoteChange | null>(null);
 
   // ─── Security ───
   const [currentPw, setCurrentPw] = useState("");
@@ -382,6 +394,64 @@ export default function SettingsSyncPanel() {
     } finally {
       setMigrating(false);
     }
+  };
+
+  const handleFetchRemote = async () => {
+    try {
+      setFetchingRemote(true);
+      const changes = await fetchRemoteChanges();
+      setRemoteChanges(changes);
+
+      const allIds = new Set(
+        changes.map((c) => `${c.table_name}-${c.record_id}`),
+      );
+      setSelectedChanges(allIds);
+
+      if (changes.length === 0) {
+        showSuccess("No new online changes found.");
+      } else {
+        showSuccess(`Found ${changes.length} online changes.`);
+      }
+    } catch (err) {
+      showError(String(err));
+    } finally {
+      setFetchingRemote(false);
+    }
+  };
+
+  const handleApplyRemote = async () => {
+    const changesToApply = remoteChanges.filter((c) =>
+      selectedChanges.has(`${c.table_name}-${c.record_id}`),
+    );
+    if (changesToApply.length === 0) return;
+
+    try {
+      setApplyingRemote(true);
+      const msg = await applyRemoteChanges(changesToApply);
+      showSuccess(msg);
+
+      setRemoteChanges(
+        remoteChanges.filter(
+          (c) => !selectedChanges.has(`${c.table_name}-${c.record_id}`),
+        ),
+      );
+      setSelectedChanges(new Set());
+      loadStats();
+    } catch (err) {
+      showError(String(err));
+    } finally {
+      setApplyingRemote(false);
+    }
+  };
+
+  const toggleSelectChange = (idStr: string) => {
+    const next = new Set(selectedChanges);
+    if (next.has(idStr)) {
+      next.delete(idStr);
+    } else {
+      next.add(idStr);
+    }
+    setSelectedChanges(next);
   };
 
   const statusColor = (s: string) => {
@@ -646,7 +716,149 @@ export default function SettingsSyncPanel() {
           </div>
         </div>
 
-        {/* ── 3. Queue Stats ── */}
+        {/* ── 3. Fetch Remote Changes ── */}
+        <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-500">
+              <IconCloudUpload
+                size={20}
+                strokeWidth={2}
+                className="rotate-180"
+              />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-text-primary mb-1">
+                {t("settings.sync.fetch_remote_title", "Fetch Remote Changes")}
+              </h3>
+              <p className="text-xs text-text-muted mb-4">
+                {t(
+                  "settings.sync.fetch_remote_desc",
+                  "Preview and pull changes made directly on Supabase into your local database.",
+                )}
+              </p>
+
+              <div className="flex items-center gap-3 mb-4">
+                <Button
+                  onClick={handleFetchRemote}
+                  variant="primary"
+                  className="px-4 py-2 text-xs font-semibold flex items-center gap-1.5"
+                  loading={fetchingRemote}
+                  loadingText={t("settings.sync.fetching", "Fetching...")}
+                  disabled={!url}
+                >
+                  <IconRefreshCcw size={13} />
+                  {t(
+                    "settings.sync.check_online_changes",
+                    "Check for online changes",
+                  )}
+                </Button>
+                {remoteChanges.length > 0 && (
+                  <Button
+                    onClick={handleApplyRemote}
+                    variant="ghost"
+                    className="px-4 py-2 text-xs font-semibold flex items-center gap-1.5 text-purple-600 dark:text-purple-400"
+                    loading={applyingRemote}
+                    loadingText={t("settings.sync.applying", "Applying...")}
+                    disabled={selectedChanges.size === 0}
+                  >
+                    <IconDatabase size={13} />
+                    {t(
+                      "settings.sync.apply_selected",
+                      "Apply Selected to Local",
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              {remoteChanges.length > 0 && (
+                <div className="overflow-x-auto border border-glass-border rounded-lg bg-glass-white-hover">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-glass-border text-text-muted">
+                        <th className="py-2 pl-3 text-left w-10">
+                          <input
+                            type="checkbox"
+                            className="rounded border-glass-border text-purple-500 focus:ring-purple-500 bg-glass-white"
+                            checked={
+                              selectedChanges.size === remoteChanges.length &&
+                              remoteChanges.length > 0
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedChanges(
+                                  new Set(
+                                    remoteChanges.map(
+                                      (c) => `${c.table_name}-${c.record_id}`,
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                setSelectedChanges(new Set());
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="text-left py-2 pr-3 font-medium">
+                          Table
+                        </th>
+                        <th className="text-left py-2 pr-3 font-medium">
+                          Record ID
+                        </th>
+                        <th className="text-left py-2 pr-3 font-medium">
+                          Change Type
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {remoteChanges.map((c) => {
+                        const idStr = `${c.table_name}-${c.record_id}`;
+                        const isSelected = selectedChanges.has(idStr);
+                        return (
+                          <tr
+                            key={idStr}
+                            onClick={() => setViewingChange(c)}
+                            className="border-b border-glass-border last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
+                          >
+                            <td
+                              className="py-2 pl-3"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                className="rounded border-glass-border text-purple-500 focus:ring-purple-500 bg-glass-white"
+                                checked={isSelected}
+                                onChange={() => toggleSelectChange(idStr)}
+                              />
+                            </td>
+                            <td className="py-2 pr-3 font-medium capitalize text-text-secondary">
+                              {c.table_name}
+                            </td>
+                            <td className="py-2 pr-3 text-text-muted">
+                              {c.record_id}
+                            </td>
+                            <td className="py-2 pr-3">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                                  c.change_type === "new"
+                                    ? "bg-green-500/10 text-green-500"
+                                    : "bg-blue-500/10 text-blue-500"
+                                }`}
+                              >
+                                {c.change_type}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 4. Queue Stats ── */}
         {stats && (
           <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
             <div className="flex items-center justify-between mb-4">
@@ -1018,6 +1230,89 @@ export default function SettingsSyncPanel() {
           </div>
         </div>
       </div>
+
+      {/* ── Remote Change Details Modal ── */}
+      <AnimatePresence>
+        {viewingChange && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingChange(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-lg glass-panel p-6 shadow-2xl border border-glass-border flex flex-col max-h-[80vh]"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
+                  <IconDatabase size={20} className="text-purple-500" />
+                  Remote Change Details
+                </h3>
+                <button
+                  onClick={() => setViewingChange(null)}
+                  className="p-1 hover:bg-glass-white-hover rounded-lg text-text-muted hover:text-text-primary transition-colors"
+                >
+                  <IconX size={20} />
+                </button>
+              </div>
+
+              <div className="mb-4 grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-xs text-text-muted block mb-1">
+                    Table
+                  </span>
+                  <span className="text-sm font-semibold text-text-primary capitalize">
+                    {viewingChange.table_name}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-text-muted block mb-1">
+                    Record ID
+                  </span>
+                  <span className="text-sm font-semibold text-text-primary">
+                    {viewingChange.record_id}
+                  </span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-xs text-text-muted block mb-1">
+                    Change Type
+                  </span>
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                      viewingChange.change_type === "new"
+                        ? "bg-green-500/10 text-green-500"
+                        : "bg-blue-500/10 text-blue-500"
+                    }`}
+                  >
+                    {viewingChange.change_type}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto min-h-0 bg-glass-white-hover rounded-lg border border-glass-border p-3">
+                <pre className="text-xs text-text-secondary whitespace-pre-wrap font-mono break-all">
+                  {JSON.stringify(viewingChange.payload, null, 2)}
+                </pre>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <Button
+                  onClick={() => setViewingChange(null)}
+                  variant="ghost"
+                  className="px-4 py-2"
+                >
+                  Close
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

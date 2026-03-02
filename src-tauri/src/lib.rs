@@ -42,6 +42,7 @@ use crate::sync::{
     get_sync_queue_stats, get_sync_sessions, get_sync_queue_items, retry_failed_items,
     clear_synced_items, clean_sync_data, set_master_password, verify_master_password, migrate_to_new_database,
     get_migration_sql, trigger_full_sync, start_sync_loop, update_sync_interval, truncate_and_sync,
+    fetch_remote_changes, apply_remote_changes,
 };
 
 #[tauri::command]
@@ -284,7 +285,9 @@ pub fn run() {
             get_staff_users,
             create_staff_user,
             update_staff_user,
-            delete_staff_user
+            delete_staff_user,
+            fetch_remote_changes,
+            apply_remote_changes
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

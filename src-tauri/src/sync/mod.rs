@@ -851,3 +851,310 @@ pub async fn truncate_and_sync(app: AppHandle) -> Result<String, String> {
     // Call trigger_full_sync which will queue everything up and start the sync
     trigger_full_sync(app).await
 }
+
+// ─── Remote Fetch & Apply ────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RemoteChange {
+    pub table_name: String,
+    pub record_id: i64,
+    pub change_type: String, // "new" | "modified"
+    pub payload: serde_json::Value,
+}
+
+#[tauri::command]
+pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // Verify config exists
+    let config = load_sync_config(&pool).await.ok_or("No sync configuration found.")?;
+
+    let client = reqwest::Client::new();
+    let tables = vec!["shop_settings", "customers", "orders", "order_items", "expenses"];
+    
+    let table_json_fields: std::collections::HashMap<&str, &str> = [
+        ("shop_settings", "json_object('id', id, 'shop_name', shop_name, 'phone', phone, 'address', address, 'logo_path', logo_path, 'customer_id_prefix', customer_id_prefix, 'order_id_prefix', order_id_prefix, 'created_at', created_at, 'updated_at', updated_at)"),
+        ("customers", "json_object('id', id, 'customer_id', customer_id, 'name', name, 'phone', phone, 'address', address, 'city', city, 'social_media_url', social_media_url, 'platform', platform, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("orders", "json_object('id', id, 'order_id', order_id, 'customer_id', customer_id, 'status', status, 'order_from', order_from, 'exchange_rate', exchange_rate, 'shipping_fee', shipping_fee, 'delivery_fee', delivery_fee, 'cargo_fee', cargo_fee, 'order_date', order_date, 'arrived_date', arrived_date, 'shipment_date', shipment_date, 'user_withdraw_date', user_withdraw_date, 'service_fee', service_fee, 'product_discount', product_discount, 'service_fee_type', service_fee_type, 'shipping_fee_paid', shipping_fee_paid, 'delivery_fee_paid', delivery_fee_paid, 'cargo_fee_paid', cargo_fee_paid, 'service_fee_paid', service_fee_paid, 'shipping_fee_by_shop', shipping_fee_by_shop, 'delivery_fee_by_shop', delivery_fee_by_shop, 'cargo_fee_by_shop', cargo_fee_by_shop, 'exclude_cargo_fee', exclude_cargo_fee, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("order_items", "json_object('id', id, 'order_id', order_id, 'product_url', product_url, 'product_qty', product_qty, 'price', price, 'product_weight', product_weight, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("expenses", "json_object('id', id, 'expense_id', expense_id, 'title', title, 'amount', amount, 'category', category, 'payment_method', payment_method, 'notes', notes, 'expense_date', expense_date, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+    ].into_iter().collect();
+
+    let mut changes = Vec::new();
+
+    for table in tables {
+        let url = format!("{}/rest/v1/{}?select=*", config.supabase_url, table);
+        let resp = client
+            .get(&url)
+            .header("apikey", &config.supabase_anon_key)
+            .header("Authorization", format!("Bearer {}", config.supabase_anon_key))
+            .send()
+            .await;
+
+        if let Ok(res) = resp {
+            if res.status().is_success() {
+                if let Ok(rows) = res.json::<Vec<serde_json::Value>>().await {
+                    for row in rows {
+                        let id = row.get("id").and_then(|v| v.as_i64());
+                        // try to get updated_at, fallback to current or empty string if not available
+                        let remote_updated_at = row.get("updated_at").and_then(|v| v.as_str()).unwrap_or("");
+                        
+                        if let Some(id) = id {
+                            // Check local DB
+                            let json_expr = table_json_fields.get(table).unwrap_or(&"json_object('id', id)");
+                            let query = format!("SELECT updated_at, {} as payload FROM {} WHERE id = ?", json_expr, table);
+                            let local_row: Option<(Option<String>, String)> = sqlx::query_as(&query)
+                                .bind(id)
+                                .fetch_optional(&*pool)
+                                .await
+                                .unwrap_or(None);
+
+                            match local_row {
+                                None => {
+                                    // Local doesn't have it -> "new" (ignoring deleted for now)
+                                    // If column 'deleted_at' is null in remote, it's new
+                                    changes.push(RemoteChange {
+                                        table_name: table.to_string(),
+                                        record_id: id,
+                                        change_type: "new".to_string(),
+                                        payload: row,
+                                    });
+                                }
+                                Some((local_updated_at, local_payload_str)) => {
+                                    // Exists locally. Compare updated_at.
+                                    let mut is_newer = false;
+                                    
+                                    if !remote_updated_at.is_empty() {
+                                        if let Ok(r_time) = chrono::DateTime::parse_from_rfc3339(remote_updated_at) {
+                                            if let Some(l_str) = local_updated_at {
+                                                // Local is likely "YYYY-MM-DD HH:MM:SS" SQLite format
+                                                if let Ok(l_naive) = chrono::NaiveDateTime::parse_from_str(&l_str, "%Y-%m-%d %H:%M:%S") {
+                                                    let l_time = l_naive.and_utc();
+                                                    // Allow 1 second buffer for precision loss
+                                                    if r_time.with_timezone(&chrono::Utc) > l_time + chrono::Duration::seconds(1) {
+                                                        is_newer = true;
+                                                    }
+                                                } else if let Ok(l_time2) = chrono::DateTime::parse_from_rfc3339(&l_str) {
+                                                    if r_time > l_time2 + chrono::Duration::seconds(1) {
+                                                        is_newer = true;
+                                                    }
+                                                }
+                                            } else {
+                                                // Local has no updated_at -> treat remote as newer
+                                                is_newer = true;
+                                            }
+                                        }
+                                    }
+
+                                    if is_newer {
+                                        let mut actual_change = true;
+                                        if let Ok(local_json) = serde_json::from_str::<serde_json::Value>(&local_payload_str) {
+                                            if let (Some(local_obj), Some(remote_obj)) = (local_json.as_object(), row.as_object()) {
+                                                let mut same = true;
+                                                for (k, v) in remote_obj {
+                                                    if k == "updated_at" || k == "created_at" || k == "deleted_at" || k == "synced" || k == "id" {
+                                                        continue;
+                                                    }
+                                                    
+                                                    let local_v = local_obj.get(k);
+                                                    
+                                                    let is_remote_null = v.is_null();
+                                                    let is_local_null = local_v.map_or(true, |lv| lv.is_null());
+                                                    
+                                                    if is_remote_null && is_local_null {
+                                                        continue;
+                                                    }
+
+                                                    // For numbers, compare as f64 to avoid float/int mismatches between SQLite and JSON
+                                                    if let (Some(rv_n), Some(lv_n)) = (v.as_f64(), local_v.and_then(|lv| lv.as_f64())) {
+                                                        if (rv_n - lv_n).abs() > f64::EPSILON {
+                                                            same = false;
+                                                            break;
+                                                        } else {
+                                                            continue;
+                                                        }
+                                                    }
+                                                    
+                                                    // For bool vs int matching (sqlite uses 0/1 for booleans)
+                                                    if let Some(rv_b) = v.as_bool() {
+                                                        if let Some(lv_i) = local_v.and_then(|lv| lv.as_i64()) {
+                                                            if (rv_b && lv_i != 1) || (!rv_b && lv_i != 0) {
+                                                                same = false;
+                                                                break;
+                                                            } else {
+                                                                continue;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    if Some(v) != local_v {
+                                                        same = false;
+                                                        break;
+                                                    }
+                                                }
+                                                if same {
+                                                    actual_change = false;
+                                                }
+                                            }
+                                        }
+
+                                        if actual_change {
+                                            changes.push(RemoteChange {
+                                                table_name: table.to_string(),
+                                                record_id: id,
+                                                change_type: "modified".to_string(),
+                                                payload: row,
+                                            });
+                                        } else {
+                                            // Silently sync local updated_at to match remote so we skip this check next time
+                                            // Convert RFC3339 back to local SQLite format (YYYY-MM-DD HH:MM:SS) roughly
+                                            if let Ok(r_time) = chrono::DateTime::parse_from_rfc3339(remote_updated_at) {
+                                                let sqlite_time = r_time.with_timezone(&chrono::Utc).format("%Y-%m-%d %H:%M:%S").to_string();
+                                                let _ = sqlx::query(&format!("UPDATE {} SET updated_at = ? WHERE id = ?", table))
+                                                    .bind(sqlite_time)
+                                                    .bind(id)
+                                                    .execute(&*pool)
+                                                    .await;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(changes)
+}
+
+#[tauri::command]
+pub async fn apply_remote_changes(app: AppHandle, changes: Vec<RemoteChange>) -> Result<String, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    // First, cache the local valid columns for each table we are going to touch
+    let mut table_columns: std::collections::HashMap<String, std::collections::HashSet<String>> = std::collections::HashMap::new();
+    for change in &changes {
+        let table = change.table_name.clone();
+        if !table_columns.contains_key(&table) {
+            let cols: Vec<(String,)> = sqlx::query_as(&format!("SELECT name FROM PRAGMA_TABLE_INFO('{}')", table))
+                .fetch_all(&*pool)
+                .await
+                .unwrap_or_default();
+            let cols_set: std::collections::HashSet<String> = cols.into_iter().map(|(c,)| c).collect();
+            table_columns.insert(table, cols_set);
+        }
+    }
+
+    let mut applied_count = 0;
+
+    for change in changes {
+        let table = change.table_name.as_str();
+        let payload = change.payload;
+        let valid_cols = table_columns.get(table);
+
+        if let Some(obj) = payload.as_object() {
+            if change.change_type == "new" {
+                // We use QueryBuilder since dynamically binding in SQLite requires knowing exact counts up front, 
+                // but sqlx query string allows building.
+                
+                // Create parallel vecs of keys and values
+                let mut keys = Vec::new();
+                let mut vals = Vec::new();
+                for (k, v) in obj {
+                    if let Some(cols) = valid_cols {
+                        if !cols.contains(k) { continue; }
+                    }
+                    keys.push(k.clone());
+                    vals.push(v);
+                }
+                
+                if keys.is_empty() {
+                    continue;
+                }
+
+                let cols_str = keys.join(", ");
+                let placeholders = vec!["?"; keys.len()].join(", ");
+                let query_str = format!("INSERT INTO {} ({}) VALUES ({})", table, cols_str, placeholders);
+                
+                let mut q = sqlx::query(&query_str);
+                
+                for v in vals {
+                    if v.is_null() {
+                        // For sqlite, binding Option::<String>::None effectively binds NULL
+                        q = q.bind(Option::<String>::None);
+                    } else if let Some(s) = v.as_str() {
+                        q = q.bind(s.to_string());
+                    } else if let Some(i) = v.as_i64() {
+                        q = q.bind(i);
+                    } else if let Some(n) = v.as_f64() {
+                        q = q.bind(n);
+                    } else if let Some(b) = v.as_bool() {
+                        q = q.bind(b);
+                    } else {
+                        q = q.bind(v.to_string());
+                    }
+                }
+                
+                let res = q.execute(&*pool).await;
+                if res.is_ok() {
+                    applied_count += 1;
+                } else {
+                    eprintln!("Failed to apply NEW change for {}: {:?}", table, res.err());
+                }
+            } else if change.change_type == "modified" {
+                let mut updates = Vec::new();
+                let mut vals = Vec::new();
+                for (k, v) in obj {
+                    if k != "id" {
+                        if let Some(cols) = valid_cols {
+                            if !cols.contains(k) { continue; }
+                        }
+                        updates.push(format!("{} = ?", k));
+                        vals.push(v);
+                    }
+                }
+                
+                if updates.is_empty() {
+                    continue;
+                }
+
+                let update_str = updates.join(", ");
+                let query_str = format!("UPDATE {} SET {} WHERE id = ?", table, update_str);
+                
+                let mut q = sqlx::query(&query_str);
+                
+                for v in vals {
+                    if v.is_null() {
+                        q = q.bind(Option::<String>::None);
+                    } else if let Some(s) = v.as_str() {
+                        q = q.bind(s.to_string());
+                    } else if let Some(i) = v.as_i64() {
+                        q = q.bind(i);
+                    } else if let Some(n) = v.as_f64() {
+                        q = q.bind(n);
+                    } else if let Some(b) = v.as_bool() {
+                        q = q.bind(b);
+                    } else {
+                        q = q.bind(v.to_string());
+                    }
+                }
+                
+                q = q.bind(change.record_id);
+                
+                let res = q.execute(&*pool).await;
+                if res.is_ok() {
+                    applied_count += 1;
+                } else {
+                    eprintln!("Failed to apply MODIFIED change for {}: {:?}", table, res.err());
+                }
+            }
+        }
+    }
+
+    Ok(format!("Successfully applied {} remote changes locally.", applied_count))
+}
