@@ -18,6 +18,11 @@ import { useAppSettings } from "../../../context/AppSettingsContext";
 import SettingsToggle from "./SettingsToggle";
 import { cleanSyncData } from "../../../api/syncApi";
 
+type AwsS3ConnectionStatus = {
+  connected: boolean;
+  message: string;
+};
+
 function SettingsDbStatus() {
   const [status, setStatus] = useState<{
     total_tables: number;
@@ -219,6 +224,12 @@ export default function SettingsDataPanel() {
     setBackupFrequency,
     backup_time,
     setBackupTime,
+    updateSettings,
+    aws_access_key_id,
+    aws_secret_access_key,
+    aws_region,
+    aws_bucket_name,
+    imagekit_base_url,
   } = useAppSettings();
 
   const [driveConnected, setDriveConnected] = useState(false);
@@ -226,10 +237,37 @@ export default function SettingsDataPanel() {
   const [checkingDrive, setCheckingDrive] = useState(true);
   const [driveConnecting, setDriveConnecting] = useState(false);
   const [triggeringBackup, setTriggeringBackup] = useState(false);
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState("");
+  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState("");
+  const [awsRegion, setAwsRegion] = useState("");
+  const [awsBucketName, setAwsBucketName] = useState("");
+  const [imagekitBaseUrl, setImagekitBaseUrl] = useState("");
+  const [checkingAws, setCheckingAws] = useState(true);
+  const [testingAws, setTestingAws] = useState(false);
+  const [savingAws, setSavingAws] = useState(false);
+  const [awsConnected, setAwsConnected] = useState(false);
+  const [awsStatusMessage, setAwsStatusMessage] = useState<string | null>(null);
+  const [awsSuccessMsg, setAwsSuccessMsg] = useState<string | null>(null);
+  const [awsErrorMsg, setAwsErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     checkDriveStatus();
+    checkAwsStatus();
   }, []);
+
+  useEffect(() => {
+    setAwsAccessKeyId(aws_access_key_id ?? "");
+    setAwsSecretAccessKey(aws_secret_access_key ?? "");
+    setAwsRegion(aws_region ?? "");
+    setAwsBucketName(aws_bucket_name ?? "");
+    setImagekitBaseUrl(imagekit_base_url ?? "");
+  }, [
+    aws_access_key_id,
+    aws_secret_access_key,
+    aws_region,
+    aws_bucket_name,
+    imagekit_base_url,
+  ]);
 
   const checkDriveStatus = async () => {
     try {
@@ -289,6 +327,168 @@ export default function SettingsDataPanel() {
       playSound("error");
     } finally {
       setTriggeringBackup(false);
+    }
+  };
+
+  const buildAwsConfig = () => ({
+    access_key_id: awsAccessKeyId.trim(),
+    secret_access_key: awsSecretAccessKey.trim(),
+    region: awsRegion.trim(),
+    bucket_name: awsBucketName.trim(),
+  });
+
+  const hasAwsConfigValues = () => {
+    const config = buildAwsConfig();
+    return Boolean(
+      config.access_key_id ||
+        config.secret_access_key ||
+        config.region ||
+        config.bucket_name ||
+        imagekitBaseUrl.trim(),
+    );
+  };
+
+  const checkAwsStatus = async () => {
+    try {
+      setCheckingAws(true);
+      const status = await invoke<AwsS3ConnectionStatus>(
+        "get_aws_s3_connection_status",
+      );
+      setAwsConnected(status.connected);
+      setAwsStatusMessage(status.message);
+    } catch (err) {
+      console.error("Failed to check AWS status:", err);
+      setAwsConnected(false);
+      setAwsStatusMessage(t("settings.data_mgmt.aws.connection_fail"));
+    } finally {
+      setCheckingAws(false);
+    }
+  };
+
+  const handleTestAwsConnection = async () => {
+    const config = buildAwsConfig();
+    if (
+      !config.access_key_id ||
+      !config.secret_access_key ||
+      !config.region ||
+      !config.bucket_name
+    ) {
+      setAwsErrorMsg(t("settings.data_mgmt.aws.required_fields"));
+      setAwsSuccessMsg(null);
+      setAwsConnected(false);
+      playSound("error");
+      return;
+    }
+
+    try {
+      setTestingAws(true);
+      setAwsErrorMsg(null);
+      setAwsSuccessMsg(null);
+      const status = await invoke<AwsS3ConnectionStatus>("test_aws_s3_connection", {
+        config,
+      });
+      setAwsConnected(status.connected);
+      setAwsStatusMessage(status.message);
+
+      if (status.connected) {
+        setAwsSuccessMsg(t("settings.data_mgmt.aws.connection_ok"));
+        playSound("success");
+      } else {
+        setAwsErrorMsg(status.message || t("settings.data_mgmt.aws.connection_fail"));
+        playSound("error");
+      }
+    } catch (err) {
+      console.error("Failed to test AWS S3 connection:", err);
+      setAwsConnected(false);
+      setAwsStatusMessage(t("settings.data_mgmt.aws.connection_fail"));
+      setAwsErrorMsg(t("settings.data_mgmt.aws.connection_fail"));
+      setAwsSuccessMsg(null);
+      playSound("error");
+    } finally {
+      setTestingAws(false);
+    }
+  };
+
+  const handleSaveAwsConfig = async () => {
+    const config = buildAwsConfig();
+    if (
+      !config.access_key_id ||
+      !config.secret_access_key ||
+      !config.region ||
+      !config.bucket_name
+    ) {
+      setAwsErrorMsg(t("settings.data_mgmt.aws.required_fields"));
+      setAwsSuccessMsg(null);
+      playSound("error");
+      return;
+    }
+
+    try {
+      setSavingAws(true);
+      setAwsErrorMsg(null);
+      setAwsSuccessMsg(null);
+
+      await updateSettings({
+        aws_access_key_id: config.access_key_id,
+        aws_secret_access_key: config.secret_access_key,
+        aws_region: config.region,
+        aws_bucket_name: config.bucket_name,
+        imagekit_base_url: imagekitBaseUrl.trim(),
+      });
+
+      const status = await invoke<AwsS3ConnectionStatus>("test_aws_s3_connection", {
+        config,
+      });
+      setAwsConnected(status.connected);
+      setAwsStatusMessage(status.message);
+
+      if (status.connected) {
+        setAwsSuccessMsg(t("settings.data_mgmt.aws.config_saved"));
+        playSound("success");
+      } else {
+        setAwsErrorMsg(status.message || t("settings.data_mgmt.aws.connection_fail"));
+        playSound("error");
+      }
+    } catch (err) {
+      console.error("Failed to save AWS config:", err);
+      setAwsErrorMsg(t("settings.data_mgmt.aws.save_error"));
+      setAwsSuccessMsg(null);
+      playSound("error");
+    } finally {
+      setSavingAws(false);
+    }
+  };
+
+  const handleDisconnectAws = async () => {
+    try {
+      setSavingAws(true);
+      setAwsErrorMsg(null);
+      setAwsSuccessMsg(null);
+
+      await updateSettings({
+        aws_access_key_id: "",
+        aws_secret_access_key: "",
+        aws_region: "",
+        aws_bucket_name: "",
+        imagekit_base_url: "",
+      });
+
+      setAwsAccessKeyId("");
+      setAwsSecretAccessKey("");
+      setAwsRegion("");
+      setAwsBucketName("");
+      setImagekitBaseUrl("");
+      setAwsConnected(false);
+      setAwsStatusMessage(t("settings.data_mgmt.aws.disconnected_status"));
+      setAwsSuccessMsg(t("settings.data_mgmt.aws.disconnected"));
+      playSound("click");
+    } catch (err) {
+      console.error("Failed to disconnect AWS config:", err);
+      setAwsErrorMsg(t("settings.data_mgmt.aws.disconnect_error"));
+      setAwsSuccessMsg(null);
+      playSound("error");
+    } finally {
+      setSavingAws(false);
     }
   };
 
@@ -553,6 +753,149 @@ export default function SettingsDataPanel() {
                     </div>
                   )}
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
+              <IconCloud size={20} strokeWidth={2} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-text-primary mb-1">
+                {t("settings.data_mgmt.aws.title")}
+              </h3>
+              <p className="text-xs text-text-muted mb-4">
+                {t("settings.data_mgmt.aws.subtitle")}
+              </p>
+
+              <div className="mb-4 p-3 rounded-lg bg-glass-white-hover border border-glass-border">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">
+                      {awsConnected
+                        ? t("settings.data_mgmt.aws.status_connected")
+                        : t("settings.data_mgmt.aws.status_disconnected")}
+                    </p>
+                    {awsStatusMessage && (
+                      <p className="text-xs text-text-muted mt-1">
+                        {awsStatusMessage}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    onClick={checkAwsStatus}
+                    variant="ghost"
+                    className="text-xs py-1.5 px-3"
+                    loading={checkingAws}
+                    loadingText={t("settings.data_mgmt.aws.checking")}
+                  >
+                    {t("settings.data_mgmt.aws.check_status")}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-text-muted mb-1.5">
+                    {t("settings.data_mgmt.aws.access_key")}
+                  </label>
+                  <Input
+                    type="text"
+                    value={awsAccessKeyId}
+                    onChange={(e) => setAwsAccessKeyId(e.target.value)}
+                    placeholder={t("settings.data_mgmt.aws.access_key_placeholder")}
+                    className="w-full input-liquid"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-text-muted mb-1.5">
+                    {t("settings.data_mgmt.aws.secret_key")}
+                  </label>
+                  <Input
+                    type="password"
+                    value={awsSecretAccessKey}
+                    onChange={(e) => setAwsSecretAccessKey(e.target.value)}
+                    placeholder={t("settings.data_mgmt.aws.secret_key_placeholder")}
+                    className="w-full input-liquid"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-text-muted mb-1.5">
+                    {t("settings.data_mgmt.aws.region")}
+                  </label>
+                  <Input
+                    type="text"
+                    value={awsRegion}
+                    onChange={(e) => setAwsRegion(e.target.value)}
+                    placeholder={t("settings.data_mgmt.aws.region_placeholder")}
+                    className="w-full input-liquid"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-text-muted mb-1.5">
+                    {t("settings.data_mgmt.aws.bucket")}
+                  </label>
+                  <Input
+                    type="text"
+                    value={awsBucketName}
+                    onChange={(e) => setAwsBucketName(e.target.value)}
+                    placeholder={t("settings.data_mgmt.aws.bucket_placeholder")}
+                    className="w-full input-liquid"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs text-text-muted mb-1.5">
+                    {t("settings.data_mgmt.aws.imagekit_base_url")}
+                  </label>
+                  <Input
+                    type="text"
+                    value={imagekitBaseUrl}
+                    onChange={(e) => setImagekitBaseUrl(e.target.value)}
+                    placeholder={t(
+                      "settings.data_mgmt.aws.imagekit_base_url_placeholder",
+                    )}
+                    className="w-full input-liquid"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-3 flex-wrap">
+                <Button
+                  onClick={handleSaveAwsConfig}
+                  variant="primary"
+                  className="px-4 py-2 text-xs font-semibold"
+                  loading={savingAws}
+                  loadingText={t("settings.data_mgmt.aws.saving")}
+                >
+                  {t("settings.data_mgmt.aws.save_connect")}
+                </Button>
+                <Button
+                  onClick={handleTestAwsConnection}
+                  variant="ghost"
+                  className="px-4 py-2 text-xs font-semibold"
+                  loading={testingAws}
+                  loadingText={t("settings.data_mgmt.aws.testing")}
+                >
+                  {t("settings.data_mgmt.aws.test_connection")}
+                </Button>
+                <Button
+                  onClick={handleDisconnectAws}
+                  variant="ghost"
+                  className="px-4 py-2 text-xs font-semibold"
+                  disabled={!hasAwsConfigValues() && !awsConnected}
+                >
+                  {t("settings.data_mgmt.aws.disconnect")}
+                </Button>
+              </div>
+
+              {awsSuccessMsg && (
+                <p className="text-xs text-green-500 mt-3">{awsSuccessMsg}</p>
+              )}
+              {awsErrorMsg && (
+                <p className="text-xs text-red-500 mt-3">{awsErrorMsg}</p>
               )}
             </div>
           </div>

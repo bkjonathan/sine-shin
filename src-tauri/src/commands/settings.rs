@@ -1,3 +1,6 @@
+use aws_config::BehaviorVersion;
+use aws_credential_types::provider::SharedCredentialsProvider;
+use aws_sdk_s3::config::{Credentials, Region};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use tauri::Manager;
@@ -29,6 +32,16 @@ pub struct AppSettings {
     pub backup_time: String,
     #[serde(default = "default_font_size")]
     pub font_size: String,
+    #[serde(default)]
+    pub aws_access_key_id: String,
+    #[serde(default)]
+    pub aws_secret_access_key: String,
+    #[serde(default)]
+    pub aws_region: String,
+    #[serde(default)]
+    pub aws_bucket_name: String,
+    #[serde(default)]
+    pub imagekit_base_url: String,
 }
 
 fn default_accent_color() -> String {
@@ -88,8 +101,82 @@ impl Default for AppSettings {
             backup_frequency: "never".to_string(),
             backup_time: "23:00".to_string(),
             font_size: "normal".to_string(),
+            aws_access_key_id: String::new(),
+            aws_secret_access_key: String::new(),
+            aws_region: String::new(),
+            aws_bucket_name: String::new(),
+            imagekit_base_url: String::new(),
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AwsS3ConnectionInput {
+    pub access_key_id: String,
+    pub secret_access_key: String,
+    pub region: String,
+    pub bucket_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AwsS3ConnectionStatus {
+    pub connected: bool,
+    pub message: String,
+}
+
+fn normalize_s3_bucket_name(bucket_name: &str) -> String {
+    bucket_name
+        .trim()
+        .trim_start_matches("s3://")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+fn validate_s3_connection_input(input: &AwsS3ConnectionInput) -> Result<AwsS3ConnectionInput, String> {
+    let normalized = AwsS3ConnectionInput {
+        access_key_id: input.access_key_id.trim().to_string(),
+        secret_access_key: input.secret_access_key.trim().to_string(),
+        region: input.region.trim().to_string(),
+        bucket_name: normalize_s3_bucket_name(&input.bucket_name),
+    };
+
+    if normalized.access_key_id.is_empty()
+        || normalized.secret_access_key.is_empty()
+        || normalized.region.is_empty()
+        || normalized.bucket_name.is_empty()
+    {
+        return Err("AWS Access Key, Secret Key, Region, and Bucket are required.".to_string());
+    }
+
+    Ok(normalized)
+}
+
+async fn check_aws_s3_connection(input: &AwsS3ConnectionInput) -> Result<(), String> {
+    let normalized = validate_s3_connection_input(input)?;
+
+    let credentials = Credentials::new(
+        normalized.access_key_id,
+        normalized.secret_access_key,
+        None,
+        None,
+        "thai-htay-settings",
+    );
+
+    let config = aws_config::defaults(BehaviorVersion::latest())
+        .region(Region::new(normalized.region))
+        .credentials_provider(SharedCredentialsProvider::new(credentials))
+        .load()
+        .await;
+
+    let client = aws_sdk_s3::Client::new(&config);
+    client
+        .head_bucket()
+        .bucket(normalized.bucket_name)
+        .send()
+        .await
+        .map_err(|err| format!("Unable to connect to S3 bucket: {err}"))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -121,4 +208,53 @@ pub fn update_app_settings(app: tauri::AppHandle, settings: AppSettings) -> Resu
     fs::write(settings_path, settings_json).map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn test_aws_s3_connection(
+    config: AwsS3ConnectionInput,
+) -> Result<AwsS3ConnectionStatus, String> {
+    match check_aws_s3_connection(&config).await {
+        Ok(_) => Ok(AwsS3ConnectionStatus {
+            connected: true,
+            message: "Connected to AWS S3 successfully.".to_string(),
+        }),
+        Err(err) => Ok(AwsS3ConnectionStatus {
+            connected: false,
+            message: err,
+        }),
+    }
+}
+
+#[tauri::command]
+pub async fn get_aws_s3_connection_status(app: tauri::AppHandle) -> Result<AwsS3ConnectionStatus, String> {
+    let settings = get_app_settings(app)?;
+    if settings.aws_access_key_id.trim().is_empty()
+        || settings.aws_secret_access_key.trim().is_empty()
+        || settings.aws_region.trim().is_empty()
+        || settings.aws_bucket_name.trim().is_empty()
+    {
+        return Ok(AwsS3ConnectionStatus {
+            connected: false,
+            message: "AWS S3 is not configured.".to_string(),
+        });
+    }
+
+    let config = AwsS3ConnectionInput {
+        access_key_id: settings.aws_access_key_id,
+        secret_access_key: settings.aws_secret_access_key,
+        region: settings.aws_region,
+        bucket_name: settings.aws_bucket_name,
+    };
+
+    match check_aws_s3_connection(&config).await {
+        Ok(_) => Ok(AwsS3ConnectionStatus {
+            connected: true,
+            message: "Connected to AWS S3 successfully.".to_string(),
+        }),
+        Err(err) => Ok(AwsS3ConnectionStatus {
+            connected: false,
+            message: err,
+        }),
+    }
 }

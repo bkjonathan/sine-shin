@@ -186,6 +186,7 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         ("expenses", "synced", "INTEGER DEFAULT 0"),
         ("shop_settings", "updated_at", "DATETIME"),
         ("shop_settings", "synced", "INTEGER DEFAULT 0"),
+        ("shop_settings", "logo_cloud_url", "TEXT"),
         ("users", "master_password_hash", "TEXT"),
         ("sync_config", "sync_interval", "INTEGER DEFAULT 30"),
     ];

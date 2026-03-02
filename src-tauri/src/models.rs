@@ -7,6 +7,8 @@ pub struct ShopSettings {
     pub phone: Option<String>,
     pub address: Option<String>,
     pub logo_path: Option<String>,
+    #[sqlx(default)]
+    pub logo_cloud_url: Option<String>,
     pub customer_id_prefix: Option<String>,
     pub order_id_prefix: Option<String>,
     pub created_at: Option<String>,

@@ -16,6 +16,11 @@ export interface AppSettings {
   backup_frequency: string;
   backup_time: string;
   font_size: string;
+  aws_access_key_id: string;
+  aws_secret_access_key: string;
+  aws_region: string;
+  aws_bucket_name: string;
+  imagekit_base_url: string;
 }
 
 interface AppSettingsContextType extends AppSettings {
@@ -53,6 +58,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   backup_frequency: "never",
   backup_time: "23:00",
   font_size: "normal",
+  aws_access_key_id: "",
+  aws_secret_access_key: "",
+  aws_region: "",
+  aws_bucket_name: "",
+  imagekit_base_url: "",
 };
 
 export function AppSettingsProvider({

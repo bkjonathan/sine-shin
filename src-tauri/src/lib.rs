@@ -29,8 +29,13 @@ use crate::commands::order::{
     create_order, delete_order, get_customer_orders, get_dashboard_stats, get_order, get_orders,
     get_orders_for_export, get_orders_paginated, update_order,
 };
-use crate::commands::settings::{get_app_settings, update_app_settings, AppSettings};
-use crate::commands::shop::{get_shop_settings, save_shop_setup, update_shop_settings};
+use crate::commands::settings::{
+    get_app_settings, get_aws_s3_connection_status, test_aws_s3_connection, update_app_settings,
+    AppSettings,
+};
+use crate::commands::shop::{
+    get_shop_settings, save_shop_setup, update_shop_settings, upload_shop_logo_to_s3,
+};
 use crate::commands::staff::{create_staff_user, delete_staff_user, get_staff_users, update_staff_user};
 use crate::commands::system::{
     backup_database, get_db_status, reset_app_data, reset_table_sequence, restore_database,
@@ -230,6 +235,7 @@ pub fn run() {
             save_shop_setup,
             get_shop_settings,
             update_shop_settings,
+            upload_shop_logo_to_s3,
             reset_app_data,
             backup_database,
             restore_database,
@@ -261,6 +267,8 @@ pub fn run() {
             get_account_summary,
             get_app_settings,
             update_app_settings,
+            test_aws_s3_connection,
+            get_aws_s3_connection_status,
             print_window,
             print_invoice_direct,
             start_google_oauth,

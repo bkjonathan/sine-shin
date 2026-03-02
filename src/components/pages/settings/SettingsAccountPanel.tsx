@@ -8,6 +8,11 @@ import { Button, Input } from "../../ui";
 import { useSound } from "../../../context/SoundContext";
 import { IconImage } from "../../icons";
 
+type AwsS3ConnectionStatus = {
+  connected: boolean;
+  message: string;
+};
+
 function getMimeType(filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase() || "";
   const mimeMap: Record<string, string> = {
@@ -35,9 +40,14 @@ export default function SettingsAccountPanel() {
   const [customerIdPrefix, setCustomerIdPrefix] = useState("SSC-");
   const [orderIdPrefix, setOrderIdPrefix] = useState("SSO-");
   const [newLogoPath, setNewLogoPath] = useState<string | null>(null);
+  const [currentLogoPath, setCurrentLogoPath] = useState<string | null>(null);
+  const [logoCloudUrl, setLogoCloudUrl] = useState<string | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingCloud, setUploadingCloud] = useState(false);
+  const [checkingAws, setCheckingAws] = useState(true);
+  const [awsConnected, setAwsConnected] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -48,7 +58,23 @@ export default function SettingsAccountPanel() {
 
   useEffect(() => {
     fetchSettings();
+    checkAwsConnectionStatus();
   }, []);
+
+  const checkAwsConnectionStatus = async () => {
+    try {
+      setCheckingAws(true);
+      const status = await invoke<AwsS3ConnectionStatus>(
+        "get_aws_s3_connection_status",
+      );
+      setAwsConnected(status.connected);
+    } catch (err) {
+      console.error("Failed to check AWS connection status:", err);
+      setAwsConnected(false);
+    } finally {
+      setCheckingAws(false);
+    }
+  };
 
   const fetchSettings = async (showLoading = true) => {
     try {
@@ -58,12 +84,15 @@ export default function SettingsAccountPanel() {
         phone: string | null;
         address: string | null;
         logo_path: string | null;
+        logo_cloud_url: string | null;
         customer_id_prefix: string | null;
         order_id_prefix: string | null;
       }>("get_shop_settings");
       setShopName(settings.shop_name);
       setPhone(settings.phone || "");
       setAddress(settings.address || "");
+      setCurrentLogoPath(settings.logo_path || null);
+      setLogoCloudUrl(settings.logo_cloud_url || null);
       setCustomerIdPrefix(settings.customer_id_prefix || "SSC-");
       setOrderIdPrefix(settings.order_id_prefix || "SSO-");
 
@@ -144,6 +173,49 @@ export default function SettingsAccountPanel() {
     }
   };
 
+  const handleUploadToCloud = async () => {
+    const sourceLogoPath = newLogoPath || currentLogoPath;
+    if (!sourceLogoPath) {
+      setMessage({
+        type: "error",
+        text: t("settings.account.no_logo_to_upload"),
+      });
+      playSound("error");
+      return;
+    }
+
+    try {
+      setUploadingCloud(true);
+      setMessage(null);
+      const cloudUrl = await invoke<string>("upload_shop_logo_to_s3", {
+        logoPath: sourceLogoPath,
+      });
+
+      setLogoCloudUrl(cloudUrl);
+      setMessage({
+        type: "success",
+        text: t("settings.account.upload_cloud_success"),
+      });
+      playSound("success");
+
+      if (previewSrc && previewSrc.startsWith("blob:")) {
+        URL.revokeObjectURL(previewSrc);
+      }
+      setNewLogoPath(null);
+      await fetchSettings(false);
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error("Failed to upload logo to cloud:", err);
+      setMessage({
+        type: "error",
+        text: t("settings.account.upload_cloud_error"),
+      });
+      playSound("error");
+    } finally {
+      setUploadingCloud(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -210,7 +282,28 @@ export default function SettingsAccountPanel() {
             >
               {t("settings.account.change_logo")}
             </Button>
+            {!checkingAws && awsConnected && (
+              <Button
+                onClick={handleUploadToCloud}
+                variant="primary"
+                className="text-xs px-3 py-1.5"
+                loading={uploadingCloud}
+                loadingText={t("settings.account.uploading_to_cloud")}
+              >
+                {t("settings.account.upload_to_cloud")}
+              </Button>
+            )}
           </div>
+          {logoCloudUrl && (
+            <a
+              href={logoCloudUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-accent-blue hover:underline w-fit"
+            >
+              {t("settings.account.view_cloud_logo")}
+            </a>
+          )}
         </div>
 
         <div>

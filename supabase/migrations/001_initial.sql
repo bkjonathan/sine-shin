@@ -10,12 +10,16 @@ CREATE TABLE IF NOT EXISTS shop_settings (
   phone TEXT,
   address TEXT,
   logo_path TEXT,
+  logo_cloud_url TEXT,
   customer_id_prefix TEXT DEFAULT 'SSC-',
   order_id_prefix TEXT DEFAULT 'SSO-',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   synced_from_device_at TIMESTAMPTZ
 );
+
+ALTER TABLE shop_settings
+  ADD COLUMN IF NOT EXISTS logo_cloud_url TEXT;
 
 -- ── users ──
 CREATE TABLE IF NOT EXISTS users (
