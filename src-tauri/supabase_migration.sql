@@ -87,7 +87,10 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
-  synced_from_device_at TIMESTAMPTZ
+  synced_from_device_at TIMESTAMPTZ,
+  CONSTRAINT orders_customer_id_fkey
+    FOREIGN KEY (customer_id)
+    REFERENCES customers(local_id)
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -101,7 +104,11 @@ CREATE TABLE IF NOT EXISTS order_items (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
-  synced_from_device_at TIMESTAMPTZ
+  synced_from_device_at TIMESTAMPTZ,
+  CONSTRAINT order_items_order_id_fkey
+    FOREIGN KEY (order_id)
+    REFERENCES orders(local_id)
+    ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS expenses (

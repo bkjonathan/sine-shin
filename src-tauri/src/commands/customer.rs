@@ -12,6 +12,7 @@ const MAX_CUSTOMERS_PAGE_SIZE: i64 = 100;
 #[tauri::command]
 pub async fn create_customer(
     app: AppHandle,
+    uuid: Option<String>,
     name: String,
     phone: Option<String>,
     address: Option<String>,
@@ -20,35 +21,51 @@ pub async fn create_customer(
     platform: Option<String>,
     id: Option<i64>,
     customer_id: Option<String>,
+    created_at: Option<String>,
+    updated_at: Option<String>,
+    deleted_at: Option<String>,
 ) -> Result<i64, String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
+    let normalized_customer_id = customer_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     let inserted_id = if let Some(provided_id) = id {
         sqlx::query(
-            "INSERT INTO customers (id, name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO customers (id, uuid, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
         )
         .bind(provided_id)
+        .bind(&uuid)
+        .bind(&normalized_customer_id)
         .bind(&name)
         .bind(&phone)
         .bind(&address)
         .bind(&city)
         .bind(&social_media_url)
         .bind(&platform)
+        .bind(&created_at)
+        .bind(&updated_at)
+        .bind(&deleted_at)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?
         .last_insert_rowid()
     } else {
         sqlx::query(
-            "INSERT INTO customers (name, phone, address, city, social_media_url, platform) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO customers (uuid, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
         )
+        .bind(&uuid)
+        .bind(&normalized_customer_id)
         .bind(&name)
         .bind(&phone)
         .bind(&address)
         .bind(&city)
         .bind(&social_media_url)
         .bind(&platform)
+        .bind(&created_at)
+        .bind(&updated_at)
+        .bind(&deleted_at)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?
@@ -58,18 +75,7 @@ pub async fn create_customer(
     // If a customer_id was provided efficiently, we can use it.
     // If not, we generate it.
 
-    if let Some(cid) = customer_id {
-        // Optimization: If we could insert customer_id in the first INSERT, that would be better,
-        // but since `id` auto-generation case doesn't have it, we might need a separate UPDATE
-        // or a smarter INSERT query.
-        // For simplicity/safety with existing schema, let's just UPDATE it if it was null/different or verify it.
-        // Actually, let's just update it to ensure it's set correctly.
-        let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
-            .bind(cid)
-            .bind(inserted_id)
-            .execute(&*pool)
-            .await;
-    } else {
+    if normalized_customer_id.is_none() {
         // Generate new one
         let prefix: Option<String> = sqlx::query_scalar(
             "SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1",
@@ -274,25 +280,39 @@ pub async fn get_customer(app: AppHandle, id: i64) -> Result<Customer, String> {
 pub async fn update_customer(
     app: AppHandle,
     id: i64,
+    uuid: Option<String>,
+    customer_id: Option<String>,
     name: String,
     phone: Option<String>,
     address: Option<String>,
     city: Option<String>,
     social_media_url: Option<String>,
     platform: Option<String>,
+    created_at: Option<String>,
+    updated_at: Option<String>,
+    deleted_at: Option<String>,
 ) -> Result<(), String> {
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
+    let normalized_customer_id = customer_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
     sqlx::query(
-        "UPDATE customers SET name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE customers SET uuid = COALESCE(?, uuid), customer_id = ?, name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, created_at = COALESCE(?, created_at), updated_at = COALESCE(?, datetime('now')), deleted_at = ? WHERE id = ?",
     )
+    .bind(&uuid)
+    .bind(&normalized_customer_id)
     .bind(&name)
     .bind(&phone)
     .bind(&address)
     .bind(&city)
     .bind(&social_media_url)
     .bind(&platform)
+    .bind(&created_at)
+    .bind(&updated_at)
+    .bind(&deleted_at)
     .bind(id)
     .execute(&*pool)
     .await

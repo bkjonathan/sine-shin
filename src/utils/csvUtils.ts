@@ -1,57 +1,102 @@
-export const parseCSV = (csvText: string): Record<string, string>[] => {
-  // Remove BOM if present
+const parseCSVRows = (csvText: string): string[][] => {
   const cleanText = csvText.replace(/^\uFEFF/, "");
-  const lines = cleanText.trim().split(/\r?\n/);
-  if (lines.length === 0) return [];
+  const rows: string[][] = [];
 
-  const headers = lines[0].split(","); // Simple split for headers, assuming no commas in headers
-  const result: Record<string, string>[] = [];
+  let currentRow: string[] = [];
+  let currentField = "";
+  let inQuotes = false;
 
-  for (let i = 1; i < lines.length; i++) {
-    const obj: Record<string, string> = {};
-    const currentLine = lines[i];
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
 
-    // Improved CSV parsing logic to handle quoted fields containing commas
-    const values: string[] = [];
-    let currentVal = "";
-    let inQuotes = false;
-
-    for (let j = 0; j < currentLine.length; j++) {
-      const char = currentLine[j];
-
-      if (char === '"') {
-        if (inQuotes && currentLine[j + 1] === '"') {
-          // Escaped quote
-          currentVal += '"';
-          j++;
-        } else {
-          // Toggle quote state
-          inQuotes = !inQuotes;
-        }
-      } else if (char === "," && !inQuotes) {
-        // End of field
-        values.push(currentVal);
-        currentVal = "";
+    if (char === '"') {
+      if (inQuotes && cleanText[i + 1] === '"') {
+        currentField += '"';
+        i++;
       } else {
-        currentVal += char;
+        inQuotes = !inQuotes;
       }
+      continue;
     }
-    values.push(currentVal); // Push the last value
 
-    // Map values to headers
-    headers.forEach((header, index) => {
-      // Normalize header key (trim quotes if present)
-      const cleanHeader = header.replace(/^"|"$/g, "").trim();
-      // Only include value if it exists
-      if (index < values.length) {
-        obj[cleanHeader] = values[index].trim();
+    if (char === "," && !inQuotes) {
+      currentRow.push(currentField);
+      currentField = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && cleanText[i + 1] === "\n") {
+        i++;
       }
-    });
-
-    if (Object.keys(obj).length > 0) {
-      result.push(obj);
+      currentRow.push(currentField);
+      currentField = "";
+      rows.push(currentRow);
+      currentRow = [];
+      continue;
     }
+
+    currentField += char;
   }
 
-  return result;
+  currentRow.push(currentField);
+  rows.push(currentRow);
+
+  return rows;
+};
+
+export const parseCSV = (csvText: string): Record<string, string>[] => {
+  const rows = parseCSVRows(csvText).filter((row) =>
+    row.some((value) => value.trim() !== ""),
+  );
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const headers = rows[0].map((header) => header.replace(/^"|"$/g, "").trim());
+  if (headers.length === 0 || headers.every((header) => !header)) {
+    return [];
+  }
+
+  return rows
+    .slice(1)
+    .map((values) => {
+      const record: Record<string, string> = {};
+      headers.forEach((header, index) => {
+        if (!header) {
+          return;
+        }
+        record[header] = (values[index] ?? "").trim();
+      });
+      return record;
+    })
+    .filter((record) =>
+      Object.values(record).some((value) => value.trim().length > 0),
+    );
+};
+
+export const escapeCSVField = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  const stringValue = String(value);
+  if (
+    stringValue.includes(",") ||
+    stringValue.includes('"') ||
+    stringValue.includes("\n") ||
+    stringValue.includes("\r")
+  ) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+
+  return stringValue;
+};
+
+export const createCSVContent = (
+  headers: string[],
+  rows: Array<Array<unknown>>,
+): string => {
+  const csvRows = rows.map((row) => row.map(escapeCSVField).join(","));
+  return [headers.map(escapeCSVField).join(","), ...csvRows].join("\n");
 };

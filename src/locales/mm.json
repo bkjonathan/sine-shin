@@ -457,6 +457,13 @@
       "address_too_long": "လိပ်စာသည် {{max}} လုံးထက် မကျော်ရပါ",
       "social_url_invalid": "လူမှုကွန်ရက် လင့်ခ်သည် http:// သို့မဟုတ် https:// ဖြင့် စရပါမည်"
     },
+    "import": {
+      "no_records_found": "CSV တွင် မှန်ကန်သော ဖောက်သည်မှတ်တမ်းများ မတွေ့ပါ",
+      "missing_name": "Row {{row}}: အမည် လိုအပ်ပါသည်",
+      "complete": "ထည့်သွင်းပြီးပါပြီ။\nအသစ်ဖန်တီးခဲ့သည်: {{created}}\nပြင်ဆင်ခဲ့သည်: {{updated}}\nမအောင်မြင်ခဲ့သည်: {{failed}}",
+      "check_console": "\n\nအသေးစိတ်ကို console တွင် စစ်ဆေးပါ။",
+      "parse_error": "CSV ဖိုင်ကို ဖတ်မရပါ"
+    },
     "delete_modal": {
       "title": "ဖောက်သည် ဖျက်မည်လား?",
       "message_part1": "",

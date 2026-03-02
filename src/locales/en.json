@@ -459,6 +459,13 @@
       "address_too_long": "Address must be {{max}} characters or less",
       "social_url_invalid": "Social URL must start with http:// or https://"
     },
+    "import": {
+      "no_records_found": "No valid records found in CSV",
+      "missing_name": "Row {{row}}: Name is required",
+      "complete": "Import complete.\nCreated: {{created}}\nUpdated: {{updated}}\nFailed: {{failed}}",
+      "check_console": "\n\nCheck console for details.",
+      "parse_error": "Failed to parse CSV file"
+    },
     "delete_modal": {
       "title": "Delete Customer?",
       "message_part1": "Are you sure you want to delete ",

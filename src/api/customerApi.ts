@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Customer } from "../types/customer";
+import { Customer, CustomerMutationInput } from "../types/customer";
 
 export const CUSTOMER_PAGE_SIZE_LIMITS = {
   min: 5,
@@ -59,9 +59,10 @@ export const getCustomersPaginated = async (
 };
 
 export const createCustomer = async (
-  customer: Omit<Customer, "created_at" | "id"> & { id?: number },
+  customer: CustomerMutationInput,
 ): Promise<number> => {
   return await invoke("create_customer", {
+    uuid: customer.uuid,
     name: customer.name,
     phone: customer.phone,
     address: customer.address,
@@ -70,18 +71,28 @@ export const createCustomer = async (
     platform: customer.platform,
     id: customer.id,
     customerId: customer.customer_id,
+    createdAt: customer.created_at,
+    updatedAt: customer.updated_at,
+    deletedAt: customer.deleted_at,
   });
 };
 
-export const updateCustomer = async (customer: Customer): Promise<void> => {
+export const updateCustomer = async (
+  customer: CustomerMutationInput & { id: number },
+): Promise<void> => {
   return await invoke("update_customer", {
     id: customer.id,
+    uuid: customer.uuid,
+    customerId: customer.customer_id,
     name: customer.name,
     phone: customer.phone,
     address: customer.address,
     city: customer.city,
     socialMediaUrl: customer.social_media_url,
     platform: customer.platform,
+    createdAt: customer.created_at,
+    updatedAt: customer.updated_at,
+    deletedAt: customer.deleted_at,
   });
 };
 

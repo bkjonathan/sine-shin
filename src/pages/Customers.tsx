@@ -14,11 +14,12 @@ import {
   Customer,
   CustomerFormData,
   CustomerFormErrors,
+  CustomerMutationInput,
 } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Select } from "../components/ui";
-import { parseCSV } from "../utils/csvUtils";
+import { createCSVContent, parseCSV } from "../utils/csvUtils";
 import CustomerDeleteModal from "../components/pages/customers/CustomerDeleteModal";
 import CustomerFormModal from "../components/pages/customers/CustomerFormModal";
 import {
@@ -96,6 +97,71 @@ const URL_REGEX = /^https?:\/\/\S+$/i;
 const MAX_NAME_LENGTH = 100;
 const MAX_CITY_LENGTH = 100;
 const MAX_ADDRESS_LENGTH = 500;
+const CUSTOMER_CSV_HEADERS = [
+  "ID",
+  "UUID",
+  "Customer ID",
+  "Name",
+  "Phone",
+  "Address",
+  "City",
+  "Platform",
+  "Social URL",
+  "Created At",
+  "Updated At",
+  "Deleted At",
+] as const;
+
+const getCsvRecordValue = (
+  record: Record<string, string>,
+  aliases: string[],
+): string | undefined => {
+  const match = Object.keys(record).find((key) =>
+    aliases.includes(key.trim().toLowerCase()),
+  );
+  return match ? record[match] : undefined;
+};
+
+const parseCsvOptionalString = (
+  record: Record<string, string>,
+  aliases: string[],
+): string | null | undefined => {
+  const raw = getCsvRecordValue(record, aliases);
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "-") {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const parseCsvOptionalNumber = (
+  record: Record<string, string>,
+  aliases: string[],
+): number | undefined => {
+  const raw = parseCsvOptionalString(record, aliases);
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+
+  return parsed;
+};
+
+const toTitleCase = (value: string) => {
+  return value.replace(
+    /\w\S*/g,
+    (token) => token.charAt(0).toUpperCase() + token.substring(1).toLowerCase(),
+  );
+};
 
 export default function Customers() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
@@ -272,97 +338,179 @@ export default function Customers() {
 
       if (records.length === 0) {
         playSound("error");
-        alert(
-          t("customers.import.no_records") || "No valid records found in CSV",
-        );
+        alert(t("customers.import.no_records_found"));
         return;
       }
 
-      console.log("Parsed CSV Records:", records); // Debug log
+      const existingCustomers = await getCustomers();
+      const customersById = new Map<number, Customer>(
+        existingCustomers.map((customer) => [customer.id, customer]),
+      );
+      const customersByCustomerId = new Map<string, Customer>(
+        existingCustomers
+          .filter((customer) => customer.customer_id?.trim())
+          .map((customer) => [customer.customer_id!.trim().toLowerCase(), customer]),
+      );
 
-      let successCount = 0;
+      let createdCount = 0;
+      let updatedCount = 0;
       let errorCount = 0;
       const errorDetails: string[] = [];
 
-      for (const record of records) {
-        // Map CSV headers to Customer object keys (case-insensitive check)
-        // Expected headers: Name, Phone, Address, City, Platform, Social URL
-        // We look for these keys in the record object
-
-        const getValue = (key: string) => {
-          const foundKey = Object.keys(record).find(
-            (k) => k.toLowerCase() === key.toLowerCase(),
-          );
-          return foundKey ? record[foundKey] : "";
-        };
-
-        const name = getValue("name");
-
+      for (const [index, record] of records.entries()) {
+        const rowNumber = index + 2;
+        const name = parseCsvOptionalString(record, ["name"])?.trim() ?? "";
         if (!name) {
-          console.warn("Skipping record without name:", record);
           errorCount++;
-          errorDetails.push(`Row without name: ${JSON.stringify(record)}`);
+          errorDetails.push(
+            t("customers.import.missing_name", { row: rowNumber }),
+          );
           continue;
         }
 
-        const toTitleCase = (str: string) => {
-          return str.replace(
-            /\w\S*/g,
-            (txt) =>
-              txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase(),
-          );
+        const importedCustomer: CustomerMutationInput = {
+          id: parseCsvOptionalNumber(record, ["id", "local_id"]),
+          uuid: parseCsvOptionalString(record, ["uuid"]),
+          customer_id: parseCsvOptionalString(record, [
+            "customer id",
+            "customer_id",
+          ]),
+          name,
+          phone: parseCsvOptionalString(record, ["phone"]),
+          address: parseCsvOptionalString(record, ["address"]),
+          city: parseCsvOptionalString(record, ["city"]),
+          social_media_url: parseCsvOptionalString(record, [
+            "social url",
+            "social media url",
+            "social_media_url",
+            "social_url",
+          ]),
+          platform: (() => {
+            const value = parseCsvOptionalString(record, ["platform"]);
+            return typeof value === "string" ? toTitleCase(value) : value;
+          })(),
+          created_at: parseCsvOptionalString(record, ["created at", "created_at"]),
+          updated_at: parseCsvOptionalString(record, ["updated at", "updated_at"]),
+          deleted_at: parseCsvOptionalString(record, ["deleted at", "deleted_at"]),
         };
 
-        const customerData: any = {
-          name: name,
-          phone: getValue("phone"),
-          address: getValue("address"),
-          city: getValue("city"),
-          social_media_url:
-            getValue("social url") ||
-            getValue("social_media_url") ||
-            getValue("social_url"),
-          platform: getValue("platform")
-            ? toTitleCase(getValue("platform"))
-            : "",
-        };
-
-        // Extract ID if present (for restoration/migration)
-        const idStr = getValue("id");
-        if (idStr && !isNaN(parseInt(idStr))) {
-          customerData.id = parseInt(idStr);
+        const importedCustomerIdKey = importedCustomer.customer_id
+          ?.trim()
+          .toLowerCase();
+        let targetCustomer: Customer | undefined;
+        if (importedCustomer.id !== undefined) {
+          targetCustomer = customersById.get(importedCustomer.id);
         }
-
-        // Extract Customer ID if present
-        const customerId = getValue("customer id") || getValue("customer_id");
-        if (customerId) {
-          customerData.customer_id = customerId;
+        if (!targetCustomer && importedCustomerIdKey) {
+          targetCustomer = customersByCustomerId.get(importedCustomerIdKey);
         }
 
         try {
-          await createCustomer(customerData);
-          successCount++;
-        } catch (e) {
-          console.error("Failed to import customer:", name, e);
+          if (targetCustomer) {
+            const previousCustomerIdKey = targetCustomer.customer_id
+              ?.trim()
+              .toLowerCase();
+            const mergedPayload: CustomerMutationInput & { id: number } = {
+              id: targetCustomer.id,
+              uuid:
+                importedCustomer.uuid === undefined
+                  ? targetCustomer.uuid
+                  : importedCustomer.uuid,
+              customer_id:
+                importedCustomer.customer_id === undefined
+                  ? targetCustomer.customer_id
+                  : importedCustomer.customer_id,
+              name,
+              phone:
+                importedCustomer.phone === undefined
+                  ? targetCustomer.phone
+                  : importedCustomer.phone,
+              address:
+                importedCustomer.address === undefined
+                  ? targetCustomer.address
+                  : importedCustomer.address,
+              city:
+                importedCustomer.city === undefined
+                  ? targetCustomer.city
+                  : importedCustomer.city,
+              social_media_url:
+                importedCustomer.social_media_url === undefined
+                  ? targetCustomer.social_media_url
+                  : importedCustomer.social_media_url,
+              platform:
+                importedCustomer.platform === undefined
+                  ? targetCustomer.platform
+                  : importedCustomer.platform,
+              created_at:
+                importedCustomer.created_at === undefined
+                  ? targetCustomer.created_at
+                  : importedCustomer.created_at,
+              updated_at:
+                importedCustomer.updated_at === undefined
+                  ? targetCustomer.updated_at
+                  : importedCustomer.updated_at,
+              deleted_at:
+                importedCustomer.deleted_at === undefined
+                  ? targetCustomer.deleted_at
+                  : importedCustomer.deleted_at,
+            };
+
+            await updateCustomer(mergedPayload);
+            updatedCount++;
+
+            const updatedCustomer: Customer = {
+              ...targetCustomer,
+              ...mergedPayload,
+            };
+            customersById.set(updatedCustomer.id, updatedCustomer);
+            if (previousCustomerIdKey) {
+              customersByCustomerId.delete(previousCustomerIdKey);
+            }
+            const nextCustomerIdKey = updatedCustomer.customer_id
+              ?.trim()
+              .toLowerCase();
+            if (nextCustomerIdKey) {
+              customersByCustomerId.set(nextCustomerIdKey, updatedCustomer);
+            }
+          } else {
+            const createdId = await createCustomer(importedCustomer);
+            createdCount++;
+
+            const createdCustomer: Customer = {
+              ...importedCustomer,
+              id: createdId,
+              name,
+            };
+            customersById.set(createdId, createdCustomer);
+            if (importedCustomerIdKey) {
+              customersByCustomerId.set(importedCustomerIdKey, createdCustomer);
+            }
+          }
+        } catch (error) {
           errorCount++;
-          errorDetails.push(`Failed to import '${name}': ${e}`);
+          errorDetails.push(
+            `Row ${rowNumber} (${name}): ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
 
-      playSound(successCount > 0 ? "success" : "error");
+      playSound(createdCount + updatedCount > 0 ? "success" : "error");
       await fetchCustomers(currentPage);
 
-      // Detailed feedback
-      let message = `Import complete.\nSuccess: ${successCount}\nFailed: ${errorCount}`;
+      let message = t("customers.import.complete", {
+        created: createdCount,
+        updated: updatedCount,
+        failed: errorCount,
+      });
       if (errorCount > 0) {
-        message += "\n\nCheck console for details.";
+        message += t("customers.import.check_console");
         console.error("Import Errors:", errorDetails);
       }
       alert(message);
     } catch (error) {
       console.error("Failed to parse CSV:", error);
       playSound("error");
-      alert("Failed to parse CSV file");
+      alert(t("customers.import.parse_error"));
     } finally {
       setIsImporting(false);
     }
@@ -468,6 +616,7 @@ export default function Customers() {
         await updateCustomer({
           ...editingCustomer,
           ...normalizedFormData,
+          updated_at: undefined,
         });
       } else {
         await createCustomer(normalizedFormData);
@@ -550,46 +699,32 @@ export default function Customers() {
               try {
                 const allCustomers = await getCustomers();
                 if (!allCustomers || allCustomers.length === 0) {
+                  playSound("error");
                   return;
                 }
 
-                // 2. Define headers
-                const headers = [
-                  "ID",
-                  "Customer ID",
-                  "Name",
-                  "Phone",
-                  "Address",
-                  "City",
-                  "Platform",
-                  "Social URL",
-                  "Created At",
-                ];
-
-                // 3. Format data rows
-                // Sort customers by ID ascending (1, 2, 3...)
                 const sortedCustomers = [...allCustomers].sort(
                   (a, b) => a.id - b.id,
                 );
+                const csvRows = sortedCustomers.map((customer) => [
+                  customer.id,
+                  customer.uuid,
+                  customer.customer_id,
+                  customer.name,
+                  customer.phone,
+                  customer.address,
+                  customer.city,
+                  customer.platform,
+                  customer.social_media_url,
+                  customer.created_at,
+                  customer.updated_at,
+                  customer.deleted_at,
+                ]);
 
-                const csvRows = sortedCustomers.map((c) => {
-                  return [
-                    c.id,
-                    c.customer_id || "-",
-                    `"${c.name.replace(/"/g, '""')}"`, // Handle quotes in names
-                    c.phone ? `"${c.phone}"` : "-",
-                    c.address ? `"${c.address.replace(/"/g, '""')}"` : "-",
-                    c.city ? `"${c.city}"` : "-",
-                    c.platform || "-",
-                    c.social_media_url || "-",
-                    c.created_at || "-",
-                  ].join(",");
-                });
-
-                // 4. Combine headers and rows
-                const csvContent = [headers.join(","), ...csvRows].join("\n");
-
-                // 5. Create blob and download link
+                const csvContent = createCSVContent(
+                  [...CUSTOMER_CSV_HEADERS],
+                  csvRows,
+                );
                 const blob = new Blob([csvContent], {
                   type: "text/csv;charset=utf-8;",
                 });
@@ -597,7 +732,6 @@ export default function Customers() {
                 const link = document.createElement("a");
                 link.setAttribute("href", url);
 
-                // Format filename: customers_export_YYYY-MM-DD.csv
                 const date = new Date().toISOString().split("T")[0];
                 link.setAttribute("download", `customers_export_${date}.csv`);
 
