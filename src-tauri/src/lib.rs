@@ -32,7 +32,9 @@ use crate::commands::order::{
 use crate::commands::settings::{get_app_settings, update_app_settings, AppSettings};
 use crate::commands::shop::{get_shop_settings, save_shop_setup, update_shop_settings};
 use crate::commands::staff::{create_staff_user, delete_staff_user, get_staff_users, update_staff_user};
-use crate::commands::system::{backup_database, get_db_status, reset_app_data, restore_database};
+use crate::commands::system::{
+    backup_database, get_db_status, reset_app_data, reset_table_sequence, restore_database,
+};
 use crate::commands::drive::{disconnect_google_drive, get_drive_connection_status, start_google_oauth, trigger_drive_backup};
 use crate::db::init_db;
 use crate::state::AppDb;
@@ -234,6 +236,7 @@ pub fn run() {
             register_user,
             login_user,
             get_db_status,
+            reset_table_sequence,
             create_customer,
             get_customers,
             get_customers_paginated,

@@ -589,6 +589,8 @@
       "refresh_status": "Refresh Status",
       "clean_sync": "Clean Sync Data",
       "cleaned_count": "{{count}} sync records cleaned",
+      "reset_sequence": "Reset auto-increment sequence",
+      "sequence_reset_done": "Sequence reset for {{table}} (seq={{seq}})",
       "backup_title": "Backup Database",
       "backup_desc": "Save a copy of your database to your computer",
       "backup_btn": "Backup Now",

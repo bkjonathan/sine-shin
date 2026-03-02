@@ -218,6 +218,13 @@ pub struct DbStatus {
     pub size_bytes: Option<u64>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TableSequenceResetStatus {
+    pub table_name: String,
+    pub max_id: i64,
+    pub sequence_value: i64,
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct OrderExportRow {
     pub order_id: Option<String>,

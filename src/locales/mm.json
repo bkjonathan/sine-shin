@@ -587,6 +587,8 @@
       "refresh_status": "အခြေအနေ ပြန်လည်ဆန်းသစ်ရန်",
       "clean_sync": "ချိန်ကိုက်ဒေတာ ရှင်းလင်းရန်",
       "cleaned_count": "ချိန်ကိုက်မှတ်တမ်း {{count}} ခု ရှင်းလင်းပြီး",
+      "reset_sequence": "Auto-increment sequence ပြန်ညှိရန်",
+      "sequence_reset_done": "{{table}} အတွက် sequence ကို reset လုပ်ပြီးပါပြီ (seq={{seq}})",
       "backup_title": "ဒေတာဘေ့စ် မိတ္တူကူးရန်",
       "backup_desc": "သင့်ကွန်ပျူတာထဲသို့ ဒေတာဘေ့စ် မိတ္တူ သိမ်းဆည်းရန်",
       "backup_btn": "ယခု မိတ္တူကူးမည်",

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 use crate::db::init_db;
-use crate::models::{DbStatus, TableStatus};
+use crate::models::{DbStatus, TableSequenceResetStatus, TableStatus};
 use crate::state::AppDb;
 
 #[tauri::command]
@@ -152,5 +152,76 @@ pub async fn get_db_status(app: AppHandle) -> Result<DbStatus, String> {
         total_tables: tables.len() as i64,
         tables: table_statuses,
         size_bytes,
+    })
+}
+
+fn quote_sqlite_identifier(identifier: &str) -> String {
+    format!("\"{}\"", identifier.replace('"', "\"\""))
+}
+
+#[tauri::command]
+pub async fn reset_table_sequence(
+    app: AppHandle,
+    table_name: String,
+) -> Result<TableSequenceResetStatus, String> {
+    let table_name = table_name.trim();
+    if table_name.is_empty() {
+        return Err("Table name is required".to_string());
+    }
+
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let table_exists: Option<String> = sqlx::query_scalar(
+        "SELECT name FROM sqlite_schema WHERE type='table' AND name = ? AND name NOT LIKE 'sqlite_%' LIMIT 1",
+    )
+    .bind(table_name)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let table_name = table_exists.ok_or_else(|| format!("Table not found: {}", table_name))?;
+    let quoted_table = quote_sqlite_identifier(&table_name);
+
+    let max_id_query = format!("SELECT COALESCE(MAX(id), 0) FROM {}", quoted_table);
+    let max_id: i64 = sqlx::query_scalar(&max_id_query)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("no such column: id") {
+                format!("Table '{}' does not have an 'id' column", table_name)
+            } else {
+                msg
+            }
+        })?;
+
+    let update_result = sqlx::query("UPDATE sqlite_sequence SET seq = ? WHERE name = ?")
+        .bind(max_id)
+        .bind(&table_name)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if update_result.rows_affected() == 0 {
+        sqlx::query("INSERT INTO sqlite_sequence(name, seq) VALUES(?, ?)")
+            .bind(&table_name)
+            .bind(max_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    let sequence_value: i64 =
+        sqlx::query_scalar("SELECT COALESCE(seq, 0) FROM sqlite_sequence WHERE name = ? LIMIT 1")
+            .bind(&table_name)
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    Ok(TableSequenceResetStatus {
+        table_name,
+        max_id,
+        sequence_value,
     })
 }

@@ -10,6 +10,7 @@ import {
   IconCloud,
   IconDownload,
   IconRefresh,
+  IconRotateCcw,
   IconTrash,
   IconTriangleAlert,
 } from "../../icons";
@@ -25,6 +26,7 @@ function SettingsDbStatus() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [cleaning, setCleaning] = useState(false);
+  const [resettingTable, setResettingTable] = useState<string | null>(null);
   const [cleanMsg, setCleanMsg] = useState<string | null>(null);
   const { t } = useTranslation();
   const { playSound } = useSound();
@@ -62,6 +64,32 @@ function SettingsDbStatus() {
       playSound("error");
     } finally {
       setCleaning(false);
+    }
+  };
+
+  const handleResetTableSequence = async (tableName: string) => {
+    try {
+      setResettingTable(tableName);
+      setCleanMsg(null);
+      const result = await invoke<{
+        table_name: string;
+        max_id: number;
+        sequence_value: number;
+      }>("reset_table_sequence", { tableName });
+      playSound("success");
+      setCleanMsg(
+        t("settings.data_mgmt.sequence_reset_done", {
+          table: result.table_name,
+          seq: result.sequence_value,
+        }),
+      );
+      setTimeout(() => setCleanMsg(null), 3000);
+      await fetchStatus();
+    } catch (err) {
+      console.error("Failed to reset table sequence:", err);
+      playSound("error");
+    } finally {
+      setResettingTable(null);
     }
   };
 
@@ -139,15 +167,33 @@ function SettingsDbStatus() {
             className="flex items-center justify-between text-xs py-2 border-b border-glass-border last:border-0 last:pb-0"
           >
             <span className="font-mono text-text-secondary">{table.name}</span>
-            <span
-              className={`font-medium px-2 py-0.5 rounded-md ${
-                syncTables.includes(table.name) && table.row_count > 100
-                  ? "text-amber-600 bg-amber-500/10"
-                  : "text-text-primary bg-glass-white-hover"
-              }`}
-            >
-              {table.row_count} {t("settings.data_mgmt.rows")}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => handleResetTableSequence(table.name)}
+                disabled={resettingTable === table.name}
+                className="p-1 hover:bg-glass-white-hover rounded-md text-text-secondary transition-colors disabled:opacity-50"
+                title={t("settings.data_mgmt.reset_sequence")}
+              >
+                {resettingTable === table.name ? (
+                  <IconRefresh
+                    size={12}
+                    strokeWidth={2}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <IconRotateCcw size={12} strokeWidth={2} />
+                )}
+              </button>
+              <span
+                className={`font-medium px-2 py-0.5 rounded-md ${
+                  syncTables.includes(table.name) && table.row_count > 100
+                    ? "text-amber-600 bg-amber-500/10"
+                    : "text-text-primary bg-glass-white-hover"
+                }`}
+              >
+                {table.row_count} {t("settings.data_mgmt.rows")}
+              </span>
+            </div>
           </div>
         ))}
       </div>
