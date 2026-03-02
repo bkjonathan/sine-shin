@@ -13,9 +13,9 @@ pub const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
     SELECT
         o.*,
         c.name as customer_name,
-        COALESCE(SUM(oi.price * oi.product_qty), 0) as total_price,
-        COALESCE(SUM(oi.product_qty), 0) as total_qty,
-        COALESCE(SUM(oi.product_weight), 0) as total_weight,
+        CAST(COALESCE(SUM(oi.price * oi.product_qty), 0) AS REAL) as total_price,
+        CAST(COALESCE(SUM(oi.product_qty), 0) AS INTEGER) as total_qty,
+        CAST(COALESCE(SUM(oi.product_weight), 0) AS REAL) as total_weight,
         (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id

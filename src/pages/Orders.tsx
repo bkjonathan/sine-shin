@@ -5,6 +5,7 @@ import { toPng } from "html-to-image";
 import { MYANMAR_FONT_EMBED_CSS } from "../assets/fonts/myanmar-fonts";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
+  getOrders,
   getOrdersPaginated,
   ORDER_PAGE_SIZE_LIMITS,
   createOrder,
@@ -419,6 +420,103 @@ export default function Orders() {
   >("order_id");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc"); // Default to desc for orders
 
+  const getLocalPaginatedOrders = (
+    allOrders: OrderWithCustomer[],
+    page: number,
+  ): { orders: OrderWithCustomer[]; total: number; total_pages: number } => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
+    const filteredOrders = allOrders.filter((order) => {
+      if (
+        statusFilter !== "all" &&
+        (order.status ?? "").toLowerCase() !== statusFilter
+      ) {
+        return false;
+      }
+
+      if (!normalizedSearchTerm) {
+        return true;
+      }
+
+      let searchableValue = "";
+      switch (searchKey) {
+        case "customerName":
+          searchableValue = order.customer_name ?? "";
+          break;
+        case "orderId":
+          searchableValue = order.order_id ?? "";
+          break;
+        case "customerId":
+          searchableValue =
+            order.customer_id !== undefined && order.customer_id !== null
+              ? String(order.customer_id)
+              : "";
+          break;
+        case "customerPhone":
+          searchableValue =
+            customers.find((customer) => customer.id === order.customer_id)
+              ?.phone ?? "";
+          break;
+        default:
+          searchableValue = "";
+      }
+
+      return searchableValue.toLowerCase().includes(normalizedSearchTerm);
+    });
+
+    const sortedOrders = [...filteredOrders].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortBy === "customer_name") {
+        comparison = (a.customer_name ?? "").localeCompare(
+          b.customer_name ?? "",
+          undefined,
+          { sensitivity: "base" },
+        );
+      } else if (sortBy === "created_at") {
+        const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+        comparison = aDate - bDate;
+      } else {
+        comparison = a.id - b.id;
+      }
+
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+
+    const total = sortedOrders.length;
+    const noLimit = pageSize === "all";
+
+    if (noLimit) {
+      return {
+        orders: sortedOrders,
+        total,
+        total_pages: total > 0 ? 1 : 0,
+      };
+    }
+
+    const requestedPageSize =
+      typeof pageSize === "number"
+        ? pageSize
+        : ORDER_PAGE_SIZE_LIMITS.default;
+    const resolvedPageSize = Math.max(
+      ORDER_PAGE_SIZE_LIMITS.min,
+      Math.min(
+        ORDER_PAGE_SIZE_LIMITS.max,
+        requestedPageSize,
+      ),
+    );
+    const totalPages = total > 0 ? Math.ceil(total / resolvedPageSize) : 0;
+    const safePage = Math.max(1, page);
+    const start = (safePage - 1) * resolvedPageSize;
+
+    return {
+      orders: sortedOrders.slice(start, start + resolvedPageSize),
+      total,
+      total_pages: totalPages,
+    };
+  };
+
   useEffect(() => {
     fetchOrders(currentPage);
   }, [
@@ -471,7 +569,33 @@ export default function Orders() {
       setHasLoadedOnce(true);
       setPageTransitionKey((prev) => prev + 1);
     } catch (error) {
-      console.error("Failed to fetch orders:", error);
+      console.error("Failed to fetch paginated orders:", error);
+
+      try {
+        const allOrders = await getOrders();
+        const data = getLocalPaginatedOrders(allOrders, page);
+
+        if (fetchId !== latestFetchIdRef.current) {
+          return;
+        }
+
+        if (page > 1 && data.total_pages > 0 && page > data.total_pages) {
+          setCurrentPage(data.total_pages);
+          return;
+        }
+        if (page > 1 && data.total_pages === 0) {
+          setCurrentPage(1);
+          return;
+        }
+
+        setOrders(data.orders);
+        setTotalOrders(data.total);
+        setTotalPages(data.total_pages);
+        setHasLoadedOnce(true);
+        setPageTransitionKey((prev) => prev + 1);
+      } catch (fallbackError) {
+        console.error("Fallback orders fetch failed:", fallbackError);
+      }
     } finally {
       if (fetchId === latestFetchIdRef.current) {
         setLoading(false);
