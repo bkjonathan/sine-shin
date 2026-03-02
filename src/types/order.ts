@@ -21,6 +21,8 @@ export interface Order {
   shipment_date?: string;
   user_withdraw_date?: string;
   created_at?: string;
+  updated_at?: string;
+  deleted_at?: string;
   service_fee?: number;
   product_discount?: number;
   service_fee_type?: "fixed" | "percent";
@@ -43,6 +45,8 @@ export interface OrderItem {
   price?: number;
   product_weight?: number;
   created_at?: string;
+  updated_at?: string;
+  deleted_at?: string;
 }
 
 export interface OrderItemPayload {

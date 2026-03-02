@@ -12,7 +12,6 @@ import {
   updateOrder,
   deleteOrder,
   getOrderById,
-  getOrdersForExport,
 } from "../api/orderApi";
 import { formatDate } from "../utils/date";
 import { getCustomers } from "../api/customerApi";
@@ -30,8 +29,8 @@ import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Select } from "../components/ui";
-import { parseCSV } from "../utils/csvUtils";
-import { processOrderCSV } from "../utils/orderImportUtils";
+import { createCSVContent, parseCSV } from "../utils/csvUtils";
+import { ORDER_CSV_HEADERS, processOrderCSV } from "../utils/orderImportUtils";
 import { useAppSettings } from "../context/AppSettingsContext";
 import OrderDeleteModal from "../components/pages/orders/OrderDeleteModal";
 import OrderFormModal from "../components/pages/orders/OrderFormModal";
@@ -1004,31 +1003,190 @@ export default function Orders() {
         return;
       }
 
-      let successCount = 0;
+      const existingOrders = await getOrders();
+      const ordersById = new Map<number, OrderWithCustomer>(
+        existingOrders.map((order) => [order.id, order]),
+      );
+      const ordersByUuid = new Map<string, OrderWithCustomer>(
+        existingOrders
+          .filter((order) => order.uuid?.trim())
+          .map((order) => [order.uuid!.trim().toLowerCase(), order]),
+      );
+      const ordersByOrderId = new Map<string, OrderWithCustomer>(
+        existingOrders
+          .filter((order) => order.order_id?.trim())
+          .map((order) => [order.order_id!.trim().toLowerCase(), order]),
+      );
+
+      let createdCount = 0;
+      let updatedCount = 0;
       let failCount = 0;
+      const importErrors: string[] = [];
 
       for (const order of validOrders) {
         try {
-          await createOrder(order);
-          successCount++;
+          const normalizedUuidKey = order.uuid?.trim().toLowerCase();
+          const normalizedOrderIdKey = order.order_id?.trim().toLowerCase();
+
+          let targetOrder: OrderWithCustomer | undefined;
+          if (order.id !== undefined) {
+            targetOrder = ordersById.get(order.id);
+          }
+          if (!targetOrder && normalizedUuidKey) {
+            targetOrder = ordersByUuid.get(normalizedUuidKey);
+          }
+          if (!targetOrder && normalizedOrderIdKey) {
+            targetOrder = ordersByOrderId.get(normalizedOrderIdKey);
+          }
+
+          if (targetOrder) {
+            const mergedPayload = {
+              id: targetOrder.id,
+              customer_id: order.customer_id,
+              status: order.status ?? targetOrder.status,
+              order_from: order.order_from ?? targetOrder.order_from,
+              exchange_rate: order.exchange_rate ?? targetOrder.exchange_rate,
+              shipping_fee: order.shipping_fee ?? targetOrder.shipping_fee,
+              delivery_fee: order.delivery_fee ?? targetOrder.delivery_fee,
+              cargo_fee: order.cargo_fee ?? targetOrder.cargo_fee,
+              order_date: order.order_date ?? targetOrder.order_date,
+              arrived_date: order.arrived_date ?? targetOrder.arrived_date,
+              shipment_date: order.shipment_date ?? targetOrder.shipment_date,
+              user_withdraw_date:
+                order.user_withdraw_date ?? targetOrder.user_withdraw_date,
+              service_fee: order.service_fee ?? targetOrder.service_fee,
+              product_discount:
+                order.product_discount ?? targetOrder.product_discount,
+              service_fee_type:
+                order.service_fee_type ??
+                targetOrder.service_fee_type ??
+                "fixed",
+              shipping_fee_paid:
+                order.shipping_fee_paid ?? targetOrder.shipping_fee_paid,
+              delivery_fee_paid:
+                order.delivery_fee_paid ?? targetOrder.delivery_fee_paid,
+              cargo_fee_paid: order.cargo_fee_paid ?? targetOrder.cargo_fee_paid,
+              service_fee_paid:
+                order.service_fee_paid ?? targetOrder.service_fee_paid,
+              shipping_fee_by_shop:
+                order.shipping_fee_by_shop ?? targetOrder.shipping_fee_by_shop,
+              delivery_fee_by_shop:
+                order.delivery_fee_by_shop ?? targetOrder.delivery_fee_by_shop,
+              cargo_fee_by_shop:
+                order.cargo_fee_by_shop ?? targetOrder.cargo_fee_by_shop,
+              exclude_cargo_fee:
+                order.exclude_cargo_fee ?? targetOrder.exclude_cargo_fee,
+              items: order.items,
+            };
+
+            await updateOrder(mergedPayload);
+            updatedCount++;
+
+            const updatedOrder: OrderWithCustomer = {
+              ...targetOrder,
+              ...mergedPayload,
+            };
+            ordersById.set(updatedOrder.id, updatedOrder);
+          } else {
+            const createdId = await createOrder({
+              id: order.id,
+              customer_id: order.customer_id,
+              order_id: order.order_id ?? undefined,
+              status: order.status,
+              order_from: order.order_from,
+              exchange_rate: order.exchange_rate,
+              shipping_fee: order.shipping_fee,
+              delivery_fee: order.delivery_fee,
+              cargo_fee: order.cargo_fee,
+              order_date: order.order_date,
+              arrived_date: order.arrived_date,
+              shipment_date: order.shipment_date,
+              user_withdraw_date: order.user_withdraw_date,
+              service_fee: order.service_fee,
+              product_discount: order.product_discount,
+              service_fee_type: order.service_fee_type,
+              shipping_fee_paid: order.shipping_fee_paid,
+              delivery_fee_paid: order.delivery_fee_paid,
+              cargo_fee_paid: order.cargo_fee_paid,
+              service_fee_paid: order.service_fee_paid,
+              shipping_fee_by_shop: order.shipping_fee_by_shop,
+              delivery_fee_by_shop: order.delivery_fee_by_shop,
+              cargo_fee_by_shop: order.cargo_fee_by_shop,
+              exclude_cargo_fee: order.exclude_cargo_fee,
+              items: order.items,
+            });
+            createdCount++;
+
+            const createdOrder: OrderWithCustomer = {
+              id: createdId,
+              uuid: order.uuid,
+              order_id: order.order_id ?? undefined,
+              customer_id: order.customer_id,
+              status: order.status,
+              order_from: order.order_from,
+              exchange_rate: order.exchange_rate,
+              shipping_fee: order.shipping_fee,
+              delivery_fee: order.delivery_fee,
+              cargo_fee: order.cargo_fee,
+              order_date: order.order_date,
+              arrived_date: order.arrived_date,
+              shipment_date: order.shipment_date,
+              user_withdraw_date: order.user_withdraw_date,
+              service_fee: order.service_fee,
+              product_discount: order.product_discount,
+              service_fee_type: order.service_fee_type,
+              shipping_fee_paid: order.shipping_fee_paid,
+              delivery_fee_paid: order.delivery_fee_paid,
+              cargo_fee_paid: order.cargo_fee_paid,
+              service_fee_paid: order.service_fee_paid,
+              shipping_fee_by_shop: order.shipping_fee_by_shop,
+              delivery_fee_by_shop: order.delivery_fee_by_shop,
+              cargo_fee_by_shop: order.cargo_fee_by_shop,
+              exclude_cargo_fee: order.exclude_cargo_fee,
+            };
+
+            ordersById.set(createdId, createdOrder);
+            if (normalizedUuidKey) {
+              ordersByUuid.set(normalizedUuidKey, createdOrder);
+            }
+            if (normalizedOrderIdKey) {
+              ordersByOrderId.set(normalizedOrderIdKey, createdOrder);
+            }
+          }
         } catch (err) {
+          const orderRef =
+            order.order_id ??
+            order.id?.toString() ??
+            order.uuid ??
+            "unidentified-order";
+          importErrors.push(
+            `${orderRef}: ${err instanceof Error ? err.message : String(err)}`,
+          );
           console.error("Failed to import order:", order, err);
           failCount++;
         }
       }
 
-      playSound(successCount > 0 ? "success" : "error");
+      playSound(createdCount + updatedCount > 0 ? "success" : "error");
       await fetchOrders(currentPage);
 
       alert(
         t("orders.import.complete", {
-          success: successCount,
+          success: createdCount + updatedCount,
           failed: failCount,
         }) +
           (errors.length > 0
             ? t("orders.import.skipped_count", { skipped: errors.length })
+            : "") +
+          (importErrors.length > 0
+            ? t("orders.import.skipped_count", {
+                skipped: importErrors.length,
+              })
             : ""),
       );
+      if (importErrors.length > 0) {
+        console.error("Order import failures:", importErrors);
+      }
     } catch (error) {
       console.error("Failed to parse CSV:", error);
       playSound("error");
@@ -1040,69 +1198,87 @@ export default function Orders() {
 
   const handleExport = async () => {
     try {
-      const data = await getOrdersForExport();
-      if (!data || data.length === 0) {
+      const [allOrders, allCustomers] = await Promise.all([
+        getOrders(),
+        getCustomers(),
+      ]);
+
+      if (!allOrders || allOrders.length === 0) {
         playSound("error");
         alert(t("orders.no_orders"));
         return;
       }
 
-      const headers = [
-        "Order ID",
-        "Customer Name",
-        "Customer Phone",
-        "Status",
-        "Order From",
-        "Order Date",
-        "Arrived Date",
-        "Shipment Date",
-        "Service Fee",
-        "Product Discount",
-        "Service Fee Type",
-        "Exchange Rate",
-        "Shipping Fee",
-        "Delivery Fee",
-        "Cargo Fee",
-        "Product URL",
-        "Item Qty",
-        "Item Price",
-        "Item Weight",
-        "Created At",
-      ];
+      const customersById = new Map<number, Customer>(
+        allCustomers.map((customer) => [customer.id, customer]),
+      );
+      const sortedOrderIds = [...allOrders].sort((a, b) => a.id - b.id);
+      const orderDetails = await Promise.all(
+        sortedOrderIds.map((order) => getOrderById(order.id)),
+      );
 
-      const csvRows = data.map((row) => {
-        return [
-          row.order_id || "",
-          `"${(row.customer_name || "").replace(/"/g, '""')}"`,
-          `"${(row.customer_phone || "").replace(/"/g, '""')}"`,
-          row.status || "",
-          row.order_from || "",
-          row.order_date || "",
-          row.arrived_date || "",
-          row.shipment_date || "",
-          row.service_fee || "",
-          row.product_discount || "",
-          row.service_fee_type || "",
-          row.exchange_rate || "",
-          row.shipping_fee || "",
-          row.delivery_fee || "",
-          row.cargo_fee || "",
-          `"${(row.product_url || "").replace(/"/g, '""')}"`,
-          row.product_qty || "",
-          row.product_price || "",
-          row.product_weight || "",
-          row.created_at || "",
-        ].join(",");
-      });
+      const csvRows: Array<Array<unknown>> = [];
+      for (const detail of orderDetails) {
+        const { order, items } = detail;
+        const customer = order.customer_id
+          ? customersById.get(order.customer_id)
+          : undefined;
+        const itemRows = items.length > 0 ? items : [undefined];
 
-      const csvContent = [headers.join(","), ...csvRows].join("\n");
+        for (const item of itemRows) {
+          csvRows.push([
+            order.id,
+            order.uuid ?? "",
+            order.order_id ?? "",
+            customer?.id ?? order.customer_id ?? "",
+            customer?.uuid ?? "",
+            customer?.customer_id ?? "",
+            customer?.name ?? order.customer_name ?? "",
+            order.status ?? "",
+            order.order_from ?? "",
+            order.exchange_rate ?? "",
+            order.shipping_fee ?? "",
+            order.delivery_fee ?? "",
+            order.cargo_fee ?? "",
+            order.order_date ?? "",
+            order.arrived_date ?? "",
+            order.shipment_date ?? "",
+            order.user_withdraw_date ?? "",
+            order.service_fee ?? "",
+            order.product_discount ?? "",
+            order.service_fee_type ?? "",
+            order.shipping_fee_paid ?? "",
+            order.delivery_fee_paid ?? "",
+            order.cargo_fee_paid ?? "",
+            order.service_fee_paid ?? "",
+            order.shipping_fee_by_shop ?? "",
+            order.delivery_fee_by_shop ?? "",
+            order.cargo_fee_by_shop ?? "",
+            order.exclude_cargo_fee ?? "",
+            order.created_at ?? "",
+            order.updated_at ?? "",
+            order.deleted_at ?? "",
+            item?.id ?? "",
+            item?.uuid ?? "",
+            item?.product_url ?? "",
+            item?.product_qty ?? "",
+            item?.price ?? "",
+            item?.product_weight ?? "",
+            item?.created_at ?? "",
+            item?.updated_at ?? "",
+            item?.deleted_at ?? "",
+          ]);
+        }
+      }
+
+      const csvContent = createCSVContent([...ORDER_CSV_HEADERS], csvRows);
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
 
       const date = new Date().toISOString().split("T")[0];
-      link.setAttribute("download", `orders_export_full_${date}.csv`);
+      link.setAttribute("download", `orders_export_${date}.csv`);
 
       document.body.appendChild(link);
       link.click();
