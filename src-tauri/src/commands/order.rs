@@ -651,37 +651,40 @@ pub async fn get_dashboard_stats(
     let df = date_from.unwrap_or_default();
     let dt = date_to.unwrap_or_default();
     let normalized_status = normalize_order_status_filter(status)?;
+    let column_with_alias = |alias: &str, column: &str| -> String {
+        if alias.is_empty() {
+            column.to_string()
+        } else {
+            format!("{}.{}", alias, column)
+        }
+    };
 
     // Helper: build a WHERE clause fragment for the orders table
     let orders_where = |alias: &str| -> String {
         let mut conditions = Vec::new();
+        conditions.push(format!("{} IS NULL", column_with_alias(alias, "deleted_at")));
 
         if has_range {
-            let prefix = if alias.is_empty() {
-                col.to_string()
+            let date_value = if col == "order_date" {
+                format!(
+                    "COALESCE({}, {})",
+                    column_with_alias(alias, "order_date"),
+                    column_with_alias(alias, "created_at")
+                )
             } else {
-                format!("{}.{}", alias, col)
+                column_with_alias(alias, col)
             };
             conditions.push(format!(
                 "date({}) >= '{}' AND date({}) <= '{}'",
-                prefix, df, prefix, dt
+                date_value, df, date_value, dt
             ));
         }
 
         if let Some(s) = &normalized_status {
-            let prefix = if alias.is_empty() {
-                "status".to_string()
-            } else {
-                format!("{}.status", alias)
-            };
-            conditions.push(format!("{} = '{}'", prefix, s));
+            conditions.push(format!("{} = '{}'", column_with_alias(alias, "status"), s));
         }
 
-        if conditions.is_empty() {
-            String::new()
-        } else {
-            format!(" WHERE {}", conditions.join(" AND "))
-        }
+        format!(" WHERE {}", conditions.join(" AND "))
     };
 
     // 1) Total revenue

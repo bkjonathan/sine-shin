@@ -108,6 +108,10 @@
     "date_from": "From",
     "date_to": "To",
     "actions": {
+      "orders": "Orders",
+      "customers": "Customers",
+      "expenses": "Expenses",
+      "settings": "Settings",
       "new_order": "New Order",
       "new_order_desc": "Create a new order",
       "add_product": "Add Product",

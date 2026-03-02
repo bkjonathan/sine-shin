@@ -108,6 +108,10 @@
     "date_from": "မှ",
     "date_to": "ထိ",
     "actions": {
+      "orders": "အော်ဒါများ",
+      "customers": "ဖောက်သည်များ",
+      "expenses": "အသုံးစရိတ်များ",
+      "settings": "ဆက်တင်များ",
       "new_order": "အော်ဒါသစ်",
       "new_order_desc": "အော်ဒါသစ် ဖန်တီးရန်",
       "add_product": "ပစ္စည်းထည့်ရန်",

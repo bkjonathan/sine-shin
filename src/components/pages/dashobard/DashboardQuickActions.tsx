@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, PackagePlus, UsersRound, BarChart3 } from "lucide-react";
+import { ShoppingCart, UserRound, Wallet, Settings } from "lucide-react";
 
 interface DashboardQuickActionsProps {
   onNavigate: (path: string) => void;
@@ -7,27 +7,27 @@ interface DashboardQuickActionsProps {
 
 const quickActions = [
   {
-    label: "dashboard.actions.new_order",
+    label: "dashboard.actions.orders",
     icon: ShoppingCart,
-    path: "/orders/new",
+    path: "/orders",
     gradient: "from-blue-500 to-cyan-500",
   },
   {
-    label: "dashboard.actions.add_product",
-    icon: PackagePlus,
-    path: "/inventory/new",
+    label: "dashboard.actions.customers",
+    icon: UserRound,
+    path: "/customers",
     gradient: "from-violet-500 to-purple-500",
   },
   {
-    label: "dashboard.actions.manage_staff",
-    icon: UsersRound,
-    path: "/staff",
+    label: "dashboard.actions.expenses",
+    icon: Wallet,
+    path: "/expenses",
     gradient: "from-emerald-500 to-teal-500",
   },
   {
-    label: "dashboard.actions.reports",
-    icon: BarChart3,
-    path: "/reports",
+    label: "dashboard.actions.settings",
+    icon: Settings,
+    path: "/settings",
     gradient: "from-amber-500 to-orange-500",
   },
 ];
