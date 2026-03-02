@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, RefObject } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -25,6 +25,7 @@ import OrderDetailProductsCard from "../components/pages/order-detail/OrderDetai
 import OrderDetailStatusCard from "../components/pages/order-detail/OrderDetailStatusCard";
 import OrderDetailTimelineCard from "../components/pages/order-detail/OrderDetailTimelineCard";
 import OrderInvoicePrintLayout from "../components/pages/order-detail/OrderInvoicePrintLayout";
+import OrderInvoiceDownloadTemplate from "../components/pages/order-detail/OrderInvoiceDownloadTemplate";
 import { IconCheck, IconCircle, IconEdit, IconX } from "../components/icons";
 
 const ORDER_STATUS_OPTIONS: OrderStatus[] = [
@@ -88,6 +89,7 @@ export default function OrderDetail() {
     silent_invoice_print,
   } = useAppSettings();
   const invoiceRef = useRef<HTMLDivElement>(null);
+  const downloadInvoiceRef = useRef<HTMLDivElement>(null);
 
   const [orderDetail, setOrderDetail] = useState<OrderDetailType | null>(null);
   const [customerDetail, setCustomerDetail] = useState<Customer | null>(null);
@@ -199,10 +201,12 @@ export default function OrderDetail() {
     }
   };
 
-  const captureInvoicePngBytes = async (): Promise<Uint8Array> => {
-    if (!invoiceRef.current || !orderDetail) {
+  const captureInvoicePngBytes = async (
+    targetRef: RefObject<HTMLDivElement | null>,
+  ): Promise<Uint8Array> => {
+    if (!targetRef.current || !orderDetail) {
       console.error("Missing ref or order", {
-        ref: !!invoiceRef.current,
+        ref: !!targetRef.current,
         order: !!orderDetail,
       });
       throw new Error(t("orders.invoice.error_element_not_found"));
@@ -216,7 +220,7 @@ export default function OrderDetail() {
     // text shaping engine — essential for Myanmar script (Canvas 2D breaks it).
     // MYANMAR_FONT_EMBED_CSS is baked in at build time (Vite ?inline) so no
     // runtime fetch is needed — avoids [object Event] errors in Tauri webview.
-    const dataUrl = await toPng(invoiceRef.current, {
+    const dataUrl = await toPng(targetRef.current, {
       pixelRatio: 2,
       backgroundColor: "#ffffff",
       // skipFonts: stop html-to-image from XHR-fetching font CSS files
@@ -246,7 +250,7 @@ export default function OrderDetail() {
     try {
       setDownloading(true);
       playSound("click");
-      const uint8Array = await captureInvoicePngBytes();
+      const uint8Array = await captureInvoicePngBytes(downloadInvoiceRef);
 
       const fileName = `invoice_${order.order_id || order.id}.png`;
 
@@ -288,7 +292,7 @@ export default function OrderDetail() {
       playSound("click");
 
       if (silent_invoice_print) {
-        const bytes = await captureInvoicePngBytes();
+        const bytes = await captureInvoicePngBytes(invoiceRef);
         await invoke("print_invoice_direct", {
           bytes: Array.from(bytes),
           printerName:
@@ -821,6 +825,27 @@ export default function OrderDetail() {
 
         <OrderInvoicePrintLayout
           invoiceRef={invoiceRef}
+          shopSettings={shopSettings}
+          logoDataUrl={logoDataUrl}
+          order={order}
+          items={items}
+          customerName={customerName}
+          customerCode={customerCode}
+          customerPhone={customerPhone}
+          customerCity={customerCity}
+          customerAddress={customerAddress}
+          customerPlatform={customerPlatform}
+          qrCodeUrl={qrCodeUrl}
+          serviceFeeAmount={serviceFeeAmount}
+          orderTotal={orderTotal}
+          exchangeRate={exchangeRate}
+          totalWithExchange={totalWithExchange}
+          formatPrice={formatPrice}
+          formatExchangePrice={formatExchangePrice}
+        />
+
+        <OrderInvoiceDownloadTemplate
+          invoiceRef={downloadInvoiceRef}
           shopSettings={shopSettings}
           logoDataUrl={logoDataUrl}
           order={order}
