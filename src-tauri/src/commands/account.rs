@@ -59,6 +59,7 @@ pub async fn get_account_summary(
         LEFT JOIN (
             SELECT order_id, COALESCE(SUM(price * product_qty), 0) as total_price
             FROM order_items
+            WHERE deleted_at IS NULL
             GROUP BY order_id
         ) agg ON agg.order_id = o.id
         WHERE o.deleted_at IS NULL{}
@@ -88,6 +89,7 @@ pub async fn get_account_summary(
         LEFT JOIN (
             SELECT order_id, COALESCE(SUM(price * product_qty), 0) as total_price
             FROM order_items
+            WHERE deleted_at IS NULL
             GROUP BY order_id
         ) agg ON agg.order_id = o.id
         WHERE o.deleted_at IS NULL

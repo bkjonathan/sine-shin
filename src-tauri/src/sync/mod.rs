@@ -98,6 +98,10 @@ fn supports_synced_marker(table: &str) -> bool {
     )
 }
 
+fn supports_deleted_at(table: &str) -> bool {
+    matches!(table, "customers" | "orders" | "order_items" | "expenses")
+}
+
 fn extract_record_uuid(payload: &serde_json::Value) -> Option<String> {
     payload
         .get("uuid")
@@ -1038,7 +1042,7 @@ pub struct RemoteChange {
     pub table_name: String,
     pub record_id: i64,
     pub record_uuid: Option<String>,
-    pub change_type: String, // "new" | "modified"
+    pub change_type: String, // "new" | "modified" | "deleted"
     pub payload: serde_json::Value,
 }
 
@@ -1098,6 +1102,12 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                             .and_then(|v| v.as_str())
                             .map(|v| v.trim().to_string())
                             .filter(|v| !v.is_empty());
+                        let remote_deleted_at = row
+                            .get("deleted_at")
+                            .and_then(|v| v.as_str())
+                            .map(|v| v.trim().to_string())
+                            .filter(|v| !v.is_empty());
+                        let is_remote_deleted = remote_deleted_at.is_some();
                         // try to get updated_at, fallback to current or empty string if not available
                         let remote_updated_at =
                             row.get("updated_at").and_then(|v| v.as_str()).unwrap_or("");
@@ -1107,11 +1117,16 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                             let json_expr = table_json_fields
                                 .get(table)
                                 .unwrap_or(&"json_object('id', id, 'uuid', uuid)");
+                            let deleted_at_expr = if supports_deleted_at(table) {
+                                "deleted_at".to_string()
+                            } else {
+                                "NULL as deleted_at".to_string()
+                            };
                             let query = format!(
-                                "SELECT updated_at, {} as payload FROM {} WHERE (uuid = ? OR id = ?) LIMIT 1",
-                                json_expr, table
+                                "SELECT updated_at, {}, {} as payload FROM {} WHERE (uuid = ? OR id = ?) LIMIT 1",
+                                deleted_at_expr, json_expr, table
                             );
-                            let local_row: Option<(Option<String>, String)> =
+                            let local_row: Option<(Option<String>, Option<String>, String)> =
                                 sqlx::query_as(&query)
                                     .bind(remote_uuid.clone())
                                     .bind(local_id)
@@ -1121,8 +1136,76 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
 
                             match local_row {
                                 None => {
-                                    // Local doesn't have it -> "new" (ignoring deleted for now)
-                                    // If column 'deleted_at' is null in remote, it's new
+                                    // Ignore rows already deleted on remote when local also has no row.
+                                    if is_remote_deleted {
+                                        continue;
+                                    }
+
+                                    // Prevent duplicate order_items when remote has stale item rows that
+                                    // match an existing active local item for the same order.
+                                    if table == "order_items" {
+                                        let remote_order_id =
+                                            row.get("order_id").and_then(|v| v.as_i64());
+                                        let remote_product_url = row
+                                            .get("product_url")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        let remote_product_qty =
+                                            row.get("product_qty").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let remote_price =
+                                            row.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                        let remote_weight = row
+                                            .get("product_weight")
+                                            .and_then(|v| v.as_f64())
+                                            .unwrap_or(0.0);
+
+                                        if let Some(order_id) = remote_order_id {
+                                            let existing_match: Option<(i64, Option<String>)> =
+                                                sqlx::query_as(
+                                                    "SELECT id, uuid FROM order_items
+                                                     WHERE deleted_at IS NULL
+                                                       AND order_id = ?
+                                                       AND COALESCE(product_url, '') = ?
+                                                       AND COALESCE(product_qty, 0) = ?
+                                                       AND ABS(COALESCE(price, 0) - ?) < 0.000001
+                                                       AND ABS(COALESCE(product_weight, 0) - ?) < 0.000001
+                                                     LIMIT 1",
+                                                )
+                                                .bind(order_id)
+                                                .bind(remote_product_url)
+                                                .bind(remote_product_qty)
+                                                .bind(remote_price)
+                                                .bind(remote_weight)
+                                                .fetch_optional(&*pool)
+                                                .await
+                                                .unwrap_or(None);
+
+                                            if let Some((existing_id, existing_uuid)) = existing_match
+                                            {
+                                                if existing_uuid.is_none() || !remote_updated_at.is_empty()
+                                                {
+                                                    let _ = sqlx::query(
+                                                        "UPDATE order_items
+                                                         SET uuid = COALESCE(uuid, ?),
+                                                             updated_at = COALESCE(?, updated_at)
+                                                         WHERE id = ?",
+                                                    )
+                                                    .bind(remote_uuid.clone())
+                                                    .bind(if remote_updated_at.is_empty() {
+                                                        None::<String>
+                                                    } else {
+                                                        Some(remote_updated_at.to_string())
+                                                    })
+                                                    .bind(existing_id)
+                                                    .execute(&*pool)
+                                                    .await;
+                                                }
+                                                continue;
+                                            }
+                                        }
+                                    }
+
                                     changes.push(RemoteChange {
                                         table_name: table.to_string(),
                                         record_id: local_id,
@@ -1131,7 +1214,25 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                         payload: row,
                                     });
                                 }
-                                Some((local_updated_at, local_payload_str)) => {
+                                Some((local_updated_at, local_deleted_at, local_payload_str)) => {
+                                    if is_remote_deleted {
+                                        let local_is_deleted = local_deleted_at
+                                            .as_deref()
+                                            .map(|v| !v.trim().is_empty())
+                                            .unwrap_or(false);
+
+                                        if !local_is_deleted {
+                                            changes.push(RemoteChange {
+                                                table_name: table.to_string(),
+                                                record_id: local_id,
+                                                record_uuid: remote_uuid.clone(),
+                                                change_type: "deleted".to_string(),
+                                                payload: row,
+                                            });
+                                        }
+                                        continue;
+                                    }
+
                                     // Exists locally. Compare updated_at.
                                     let mut is_newer = false;
 
@@ -1323,7 +1424,68 @@ pub async fn apply_remote_changes(
         let valid_cols = table_columns.get(table);
 
         if let Some(obj) = payload.as_object() {
-            if change.change_type == "new" {
+            if change.change_type == "deleted" {
+                if table == "order_items" {
+                    let res = sqlx::query("DELETE FROM order_items WHERE (uuid = ? OR id = ?)")
+                        .bind(change.record_uuid.clone())
+                        .bind(change.record_id)
+                        .execute(&*pool)
+                        .await;
+
+                    if let Ok(result) = res {
+                        if result.rows_affected() > 0 {
+                            applied_count += 1;
+                        }
+                    } else {
+                        eprintln!(
+                            "Failed to apply DELETED change for {}: {:?}",
+                            table,
+                            res.err()
+                        );
+                    }
+                } else {
+                    let supports_soft_delete = valid_cols
+                        .map(|cols| cols.contains("deleted_at"))
+                        .unwrap_or(false);
+
+                    if supports_soft_delete {
+                        let deleted_at = obj
+                            .get("deleted_at")
+                            .and_then(|v| v.as_str())
+                            .map(|v| v.trim().to_string())
+                            .filter(|v| !v.is_empty());
+                        let updated_at = obj
+                            .get("updated_at")
+                            .and_then(|v| v.as_str())
+                            .map(|v| v.trim().to_string())
+                            .filter(|v| !v.is_empty());
+
+                        let query_str = format!(
+                            "UPDATE {} SET deleted_at = COALESCE(?, deleted_at, datetime('now')), updated_at = COALESCE(?, updated_at, datetime('now')) WHERE (uuid = ? OR id = ?)",
+                            table
+                        );
+                        let res = sqlx::query(&query_str)
+                            .bind(deleted_at)
+                            .bind(updated_at)
+                            .bind(change.record_uuid.clone())
+                            .bind(change.record_id)
+                            .execute(&*pool)
+                            .await;
+
+                        if let Ok(result) = res {
+                            if result.rows_affected() > 0 {
+                                applied_count += 1;
+                            }
+                        } else {
+                            eprintln!(
+                                "Failed to apply DELETED change for {}: {:?}",
+                                table,
+                                res.err()
+                            );
+                        }
+                    }
+                }
+            } else if change.change_type == "new" {
                 // We use QueryBuilder since dynamically binding in SQLite requires knowing exact counts up front,
                 // but sqlx query string allows building.
 

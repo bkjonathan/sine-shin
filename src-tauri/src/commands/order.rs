@@ -197,7 +197,9 @@ pub async fn create_order(
     }
     // Enqueue sync for order items
     if let Ok(items_db) =
-        sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+        sqlx::query_as::<_, OrderItem>(
+            "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
+        )
             .bind(inserted_id)
             .fetch_all(&*pool)
             .await
@@ -413,7 +415,9 @@ pub async fn get_order(app: AppHandle, id: i64) -> Result<OrderDetail, String> {
         .map_err(|e| e.to_string())?
         .ok_or("Order not found".to_string())?;
 
-    let items = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+    let items = sqlx::query_as::<_, OrderItem>(
+        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
+    )
         .bind(id)
         .fetch_all(&*pool)
         .await
@@ -457,11 +461,13 @@ pub async fn update_order(
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    let old_items = sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-        .bind(id)
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+    let old_items = sqlx::query_as::<_, OrderItem>(
+        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
 
     sqlx::query(
         "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?",
@@ -549,7 +555,9 @@ pub async fn update_order(
 
     // Enqueue sync for order items
     if let Ok(items_db) =
-        sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+        sqlx::query_as::<_, OrderItem>(
+            "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
+        )
             .bind(id)
             .fetch_all(&*pool)
             .await
@@ -693,7 +701,7 @@ pub async fn get_dashboard_stats(
     // 1) Total revenue
     let revenue_where = orders_where("o");
     let revenue_sql = format!(
-        "SELECT COALESCE(SUM(oi.price * oi.product_qty), 0.0) FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id{}",
+        "SELECT COALESCE(SUM(oi.price * oi.product_qty), 0.0) FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id AND oi.deleted_at IS NULL{}",
         revenue_where
     );
     let total_revenue: (f64,) = sqlx::query_as(&revenue_sql)
@@ -708,7 +716,7 @@ pub async fn get_dashboard_stats(
         SELECT COALESCE(SUM(
             CASE 
                 WHEN service_fee_type = 'percent' THEN 
-                    (SELECT COALESCE(SUM(price * product_qty), 0) FROM order_items WHERE order_id = orders.id) * (COALESCE(service_fee, 0) / 100.0)
+                    (SELECT COALESCE(SUM(price * product_qty), 0) FROM order_items WHERE order_id = orders.id AND deleted_at IS NULL) * (COALESCE(service_fee, 0) / 100.0)
                 ELSE 
                     COALESCE(service_fee, 0)
             END
@@ -806,7 +814,7 @@ pub async fn get_orders_for_export(app: AppHandle) -> Result<Vec<OrderExportRow>
             o.created_at
         FROM orders o
         LEFT JOIN customers c ON o.customer_id = c.id
-        LEFT JOIN order_items oi ON o.id = oi.order_id
+        LEFT JOIN order_items oi ON o.id = oi.order_id AND oi.deleted_at IS NULL
         ORDER BY o.id ASC
     "#;
 

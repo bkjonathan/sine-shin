@@ -150,7 +150,7 @@ export interface RemoteChange {
   table_name: string;
   record_id: number;
   record_uuid?: string | null;
-  change_type: "new" | "modified";
+  change_type: "new" | "modified" | "deleted";
   payload: Record<string, any>;
 }
 

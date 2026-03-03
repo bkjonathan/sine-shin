@@ -841,7 +841,9 @@ export default function SettingsSyncPanel() {
                                 className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
                                   c.change_type === "new"
                                     ? "bg-green-500/10 text-green-500"
-                                    : "bg-blue-500/10 text-blue-500"
+                                    : c.change_type === "deleted"
+                                      ? "bg-red-500/10 text-red-500"
+                                      : "bg-blue-500/10 text-blue-500"
                                 }`}
                               >
                                 {c.change_type}
@@ -1286,7 +1288,9 @@ export default function SettingsSyncPanel() {
                     className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
                       viewingChange.change_type === "new"
                         ? "bg-green-500/10 text-green-500"
-                        : "bg-blue-500/10 text-blue-500"
+                        : viewingChange.change_type === "deleted"
+                          ? "bg-red-500/10 text-red-500"
+                          : "bg-blue-500/10 text-blue-500"
                     }`}
                   >
                     {viewingChange.change_type}

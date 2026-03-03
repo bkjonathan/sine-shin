@@ -16,10 +16,10 @@ pub const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
         CAST(COALESCE(SUM(oi.price * oi.product_qty), 0) AS REAL) as total_price,
         CAST(COALESCE(SUM(oi.product_qty), 0) AS INTEGER) as total_qty,
         CAST(COALESCE(SUM(oi.product_weight), 0) AS REAL) as total_weight,
-        (SELECT product_url FROM order_items WHERE order_id = o.id LIMIT 1) as first_product_url
+        (SELECT product_url FROM order_items WHERE order_id = o.id AND deleted_at IS NULL LIMIT 1) as first_product_url
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
-    LEFT JOIN order_items oi ON o.id = oi.order_id
+    LEFT JOIN order_items oi ON o.id = oi.order_id AND oi.deleted_at IS NULL
 "#;
 pub const ORDER_WITH_CUSTOMER_GROUP_BY: &str = " GROUP BY o.id ";
 
