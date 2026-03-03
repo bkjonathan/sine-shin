@@ -102,6 +102,90 @@ fn supports_deleted_at(table: &str) -> bool {
     matches!(table, "customers" | "orders" | "order_items" | "expenses")
 }
 
+fn remote_row_is_deleted(row: &serde_json::Value) -> bool {
+    row.get("deleted_at")
+        .and_then(|v| v.as_str())
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false)
+}
+
+fn parse_timestamp_millis(ts: &str) -> Option<i64> {
+    if ts.trim().is_empty() {
+        return None;
+    }
+
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts) {
+        return Some(dt.timestamp_millis());
+    }
+
+    if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S") {
+        return Some(naive.and_utc().timestamp_millis());
+    }
+
+    None
+}
+
+fn remote_row_timestamp_millis(row: &serde_json::Value) -> i64 {
+    let ts = row
+        .get("updated_at")
+        .and_then(|v| v.as_str())
+        .or_else(|| row.get("created_at").and_then(|v| v.as_str()))
+        .unwrap_or("");
+
+    parse_timestamp_millis(ts).unwrap_or(0)
+}
+
+fn remote_order_item_signature(row: &serde_json::Value) -> Option<String> {
+    let order_id = row.get("order_id").and_then(|v| v.as_i64())?;
+    let product_url = row
+        .get("product_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let product_qty = row.get("product_qty").and_then(|v| v.as_i64()).unwrap_or(0);
+    let price = row.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let weight = row
+        .get("product_weight")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+
+    Some(format!(
+        "{}|{}|{}|{:.6}|{:.6}",
+        order_id, product_url, product_qty, price, weight
+    ))
+}
+
+async fn local_record_is_active(pool: &Pool<Sqlite>, table: &str, record_id: i64) -> bool {
+    let exists = match table {
+        "shop_settings" => sqlx::query_scalar::<_, i64>(
+            "SELECT 1 FROM shop_settings WHERE id = ? LIMIT 1",
+        )
+        .bind(record_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .is_some(),
+        "customers" | "orders" | "order_items" | "expenses" => {
+            let query = format!(
+                "SELECT 1 FROM {} WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+                table
+            );
+            sqlx::query_scalar::<_, i64>(&query)
+                .bind(record_id)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        }
+        _ => false,
+    };
+
+    exists
+}
+
 fn extract_record_uuid(payload: &serde_json::Value) -> Option<String> {
     payload
         .get("uuid")
@@ -299,6 +383,37 @@ pub async fn enqueue_sync(
             _ => return, // sync is not enabled, so we don't enqueue anything
         };
 
+        // Deduplicate queue entries to avoid stale inserts/updates being synced
+        // after a record has changed again (especially for order_items edits).
+        match operation.as_str() {
+            "INSERT" | "UPDATE" => {
+                let _ = sqlx::query(
+                    "DELETE FROM sync_queue
+                     WHERE table_name = ?
+                       AND record_id = ?
+                       AND operation IN ('INSERT', 'UPDATE')
+                       AND status IN ('pending', 'failed')",
+                )
+                .bind(&table_name)
+                .bind(record_id)
+                .execute(&pool_clone)
+                .await;
+            }
+            "DELETE" => {
+                let _ = sqlx::query(
+                    "DELETE FROM sync_queue
+                     WHERE table_name = ?
+                       AND record_id = ?
+                       AND status IN ('pending', 'failed')",
+                )
+                .bind(&table_name)
+                .bind(record_id)
+                .execute(&pool_clone)
+                .await;
+            }
+            _ => {}
+        }
+
         // Online-first behavior: successful direct writes should not enter queue.
         match push_sync_item(
             &config,
@@ -398,6 +513,24 @@ pub async fn process_sync_queue(app: &AppHandle) {
     let mut total_failed: i64 = 0;
 
     for item in &items {
+        // Skip stale queue rows where the local record no longer exists/active.
+        // This prevents old order_items INSERTs from resurrecting replaced rows remotely.
+        if item.operation != "DELETE"
+            && !local_record_is_active(&pool, &item.table_name, item.record_id).await
+        {
+            let _ = sqlx::query(
+                "UPDATE sync_queue
+                 SET status = 'synced',
+                     synced_at = datetime('now'),
+                     error_message = COALESCE(error_message, 'Skipped stale queue item: local record missing')
+                 WHERE id = ?",
+            )
+            .bind(item.id)
+            .execute(&*pool)
+            .await;
+            continue;
+        }
+
         // Mark as syncing
         let _ = sqlx::query("UPDATE sync_queue SET status = 'syncing' WHERE id = ?")
             .bind(item.id)
@@ -1092,7 +1225,79 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
         if let Ok(res) = resp {
             if res.status().is_success() {
                 if let Ok(rows) = res.json::<Vec<serde_json::Value>>().await {
+                    // Keep a single remote row per local_id. If remote contains duplicate
+                    // local_id records, prefer the newest updated_at/created_at row.
+                    let mut deduped_rows: std::collections::HashMap<i64, serde_json::Value> =
+                        std::collections::HashMap::new();
                     for row in rows {
+                        let key = row
+                            .get("local_id")
+                            .and_then(|v| v.as_i64())
+                            .or_else(|| row.get("id").and_then(|v| v.as_i64()));
+
+                        let Some(local_id_key) = key else {
+                            continue;
+                        };
+
+                        let should_replace = if let Some(existing) = deduped_rows.get(&local_id_key)
+                        {
+                            let existing_ts = remote_row_timestamp_millis(existing);
+                            let current_ts = remote_row_timestamp_millis(&row);
+                            if current_ts > existing_ts {
+                                true
+                            } else if current_ts < existing_ts {
+                                false
+                            } else {
+                                // If timestamps are equal, prefer non-deleted row over deleted row.
+                                let existing_deleted = remote_row_is_deleted(existing);
+                                let current_deleted = remote_row_is_deleted(&row);
+                                !current_deleted && existing_deleted
+                            }
+                        } else {
+                            true
+                        };
+
+                        if should_replace {
+                            deduped_rows.insert(local_id_key, row);
+                        }
+                    }
+
+                    let rows_to_process: Vec<serde_json::Value> = if table == "order_items" {
+                        // Additional guard: collapse exact duplicate remote item lines for the same order.
+                        let mut deduped_by_signature: std::collections::HashMap<
+                            String,
+                            serde_json::Value,
+                        > = std::collections::HashMap::new();
+
+                        for row in deduped_rows.into_values() {
+                            let signature = remote_order_item_signature(&row).unwrap_or_else(|| {
+                                format!(
+                                    "raw:{}",
+                                    row.get("uuid")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or_default()
+                                )
+                            });
+
+                            let should_replace =
+                                if let Some(existing) = deduped_by_signature.get(&signature) {
+                                    remote_row_timestamp_millis(&row)
+                                        > remote_row_timestamp_millis(existing)
+                                } else {
+                                    true
+                                };
+
+                            if should_replace {
+                                deduped_by_signature.insert(signature, row);
+                            }
+                        }
+
+                        deduped_by_signature.into_values().collect()
+                    } else {
+                        deduped_rows.into_values().collect()
+                    };
+
+                    for row in rows_to_process {
                         let local_id = row
                             .get("local_id")
                             .and_then(|v| v.as_i64())
@@ -1146,6 +1351,11 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                     if table == "order_items" {
                                         let remote_order_id =
                                             row.get("order_id").and_then(|v| v.as_i64());
+                                        let remote_created_at = row
+                                            .get("created_at")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
                                         let remote_product_url = row
                                             .get("product_url")
                                             .and_then(|v| v.as_str())
@@ -1161,6 +1371,33 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                             .unwrap_or(0.0);
 
                                         if let Some(order_id) = remote_order_id {
+                                            // If local order was updated after this remote row was created,
+                                            // this remote item is stale and should not be re-imported.
+                                            let local_order_updated_at: Option<String> =
+                                                sqlx::query_scalar(
+                                                    "SELECT updated_at FROM orders WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+                                                )
+                                                .bind(order_id)
+                                                .fetch_optional(&*pool)
+                                                .await
+                                                .unwrap_or(None);
+
+                                            if let Some(local_updated) =
+                                                local_order_updated_at.as_deref()
+                                            {
+                                                let remote_created_ms =
+                                                    parse_timestamp_millis(&remote_created_at);
+                                                let local_updated_ms =
+                                                    parse_timestamp_millis(local_updated);
+                                                if let (Some(remote_created_ms), Some(local_updated_ms)) =
+                                                    (remote_created_ms, local_updated_ms)
+                                                {
+                                                    if remote_created_ms <= local_updated_ms + 1000 {
+                                                        continue;
+                                                    }
+                                                }
+                                            }
+
                                             let existing_match: Option<(i64, Option<String>)> =
                                                 sqlx::query_as(
                                                     "SELECT id, uuid FROM order_items

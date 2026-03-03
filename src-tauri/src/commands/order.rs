@@ -499,7 +499,9 @@ pub async fn update_order(
     .await
     .map_err(|e| e.to_string())?;
 
-    sqlx::query("DELETE FROM order_items WHERE order_id = ?")
+    sqlx::query(
+        "UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ? AND deleted_at IS NULL",
+    )
         .bind(id)
         .execute(&mut *tx)
         .await
