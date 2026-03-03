@@ -36,6 +36,65 @@ const ORDER_STATUS_OPTIONS: OrderStatus[] = [
   "cancelled",
 ];
 
+const preloadImage = async (src: string): Promise<void> => {
+  await new Promise<void>((resolve) => {
+    const img = new Image();
+    const done = () => resolve();
+
+    img.onload = () => {
+      if (typeof img.decode === "function") {
+        img.decode().then(done).catch(done);
+        return;
+      }
+      done();
+    };
+    img.onerror = done;
+    img.src = src;
+
+    if (img.complete && img.naturalWidth > 0) {
+      done();
+    }
+  });
+};
+
+const waitForImagesReady = async (container: HTMLElement): Promise<void> => {
+  const images = Array.from(container.querySelectorAll("img"));
+  await Promise.all(
+    images.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          const src = img.getAttribute("src");
+          if (!src) {
+            resolve();
+            return;
+          }
+
+          const finalize = () => {
+            if (typeof img.decode === "function") {
+              img.decode().then(() => resolve()).catch(() => resolve());
+              return;
+            }
+            resolve();
+          };
+
+          if (img.complete && img.naturalWidth > 0) {
+            finalize();
+            return;
+          }
+
+          const done = () => {
+            img.removeEventListener("load", done);
+            img.removeEventListener("error", done);
+            finalize();
+          };
+
+          img.addEventListener("load", done, { once: true });
+          img.addEventListener("error", done, { once: true });
+        }),
+    ),
+  );
+};
+
 const getOrderStatusDisplay = (
   status?: string | null,
 ): { labelKey: string; className: string } => {
@@ -142,7 +201,9 @@ export default function OrderDetail() {
               : ext === "webp"
                 ? "image/webp"
                 : "image/png";
-          setLogoDataUrl(`data:${mime};base64,${btoa(binary)}`);
+          const nextLogoDataUrl = `data:${mime};base64,${btoa(binary)}`;
+          await preloadImage(nextLogoDataUrl);
+          setLogoDataUrl(nextLogoDataUrl);
         } catch (logoErr) {
           console.warn("Could not preload logo:", logoErr);
           setLogoDataUrl("");
@@ -214,6 +275,7 @@ export default function OrderDetail() {
     // Wait for all web fonts (including Noto Sans Myanmar) to be fully loaded
     // so Myanmar characters are shaped correctly before capture.
     await document.fonts.ready;
+    await waitForImagesReady(targetRef.current);
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     // html-to-image uses SVG foreignObject which keeps the browser's native

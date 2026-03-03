@@ -666,10 +666,13 @@ pub async fn get_dashboard_stats(
 
         if has_range {
             let date_value = if col == "order_date" {
+                let order_date_col = column_with_alias(alias, "order_date");
+                let created_at_col = column_with_alias(alias, "created_at");
+                // If order_date is set in the future, use created_at so newly-created
+                // orders are still included in current-period dashboard stats.
                 format!(
-                    "COALESCE({}, {})",
-                    column_with_alias(alias, "order_date"),
-                    column_with_alias(alias, "created_at")
+                    "CASE WHEN {} IS NULL OR trim({}) = '' THEN {} WHEN date({}) > date('{}') THEN {} ELSE {} END",
+                    order_date_col, order_date_col, created_at_col, order_date_col, dt, created_at_col, order_date_col
                 )
             } else {
                 column_with_alias(alias, col)
@@ -705,7 +708,7 @@ pub async fn get_dashboard_stats(
         SELECT COALESCE(SUM(
             CASE 
                 WHEN service_fee_type = 'percent' THEN 
-                    (SELECT COALESCE(SUM(price * product_qty), 0) FROM order_items WHERE order_id = orders.id) * (service_fee / 100.0)
+                    (SELECT COALESCE(SUM(price * product_qty), 0) FROM order_items WHERE order_id = orders.id) * (COALESCE(service_fee, 0) / 100.0)
                 ELSE 
                     COALESCE(service_fee, 0)
             END
