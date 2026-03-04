@@ -219,6 +219,9 @@ pub struct AccountSummary {
     pub total_expense_records: i64,
     pub this_month_income: f64,
     pub this_month_expenses: f64,
+    pub total_service_fee: f64,
+    pub total_product_discount: f64,
+    pub total_cargo_fee: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

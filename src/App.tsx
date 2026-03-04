@@ -3,17 +3,6 @@ import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import AppLayout from "./pages/AppLayout";
 import OnboardingForm from "./pages/OnboardingForm";
-import Dashboard from "./pages/Dashboard";
-import Orders from "./pages/Orders";
-import Expenses from "./pages/Expenses";
-import AccountBook from "./pages/AccountBook";
-import Customers from "./pages/Customers";
-import CustomerDetail from "./pages/CustomerDetail";
-import OrderDetail from "./pages/OrderDetail";
-import Settings from "./pages/Settings.tsx";
-import Reports from "./pages/Reports";
-import Help from "./pages/Help";
-import Staff from "./pages/Staff";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SoundProvider } from "./context/SoundContext";
 import { AppSettingsProvider } from "./context/AppSettingsContext";
@@ -123,39 +112,11 @@ function AppRoutes() {
       {/* Login - Full screen */}
       <Route path="/login" element={<Login />} />
 
-      {/* App shell with sidebar protection */}
-      <Route
-        element={
-          isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />
-        }
-      >
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/orders" element={<Orders />} />
-        <Route path="/expenses" element={<Expenses />} />
-        <Route path="/account-book" element={<AccountBook />} />
-        <Route path="/staff" element={<Staff />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/customers" element={<Customers />} />
-        <Route path="/customers/:id" element={<CustomerDetail />} />
-        <Route path="/orders/:id" element={<OrderDetail />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/help" element={<Help />} />
-      </Route>
-
-      {/* Fallback */}
+      {/* App shell with sidebar protection (manual tab routing inside AppLayout) */}
       <Route
         path="*"
         element={
-          <Navigate
-            to={
-              isOnboarded
-                ? isAuthenticated
-                  ? "/dashboard"
-                  : "/login"
-                : "/onboarding"
-            }
-            replace
-          />
+          isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />
         }
       />
     </Routes>

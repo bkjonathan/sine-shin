@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, RefObject } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { getOrderById, updateOrder } from "../api/orderApi";
@@ -26,6 +25,7 @@ import OrderDetailStatusCard from "../components/pages/order-detail/OrderDetailS
 import OrderDetailTimelineCard from "../components/pages/order-detail/OrderDetailTimelineCard";
 import OrderInvoicePrintLayout from "../components/pages/order-detail/OrderInvoicePrintLayout";
 import OrderInvoiceDownloadTemplate from "../components/pages/order-detail/OrderInvoiceDownloadTemplate";
+import { useTabNavigation } from "../hooks/useTabNavigation";
 import { IconCheck, IconCircle, IconEdit, IconX } from "../components/icons";
 
 const ORDER_STATUS_OPTIONS: OrderStatus[] = [
@@ -71,7 +71,10 @@ const waitForImagesReady = async (container: HTMLElement): Promise<void> => {
 
           const finalize = () => {
             if (typeof img.decode === "function") {
-              img.decode().then(() => resolve()).catch(() => resolve());
+              img
+                .decode()
+                .then(() => resolve())
+                .catch(() => resolve());
               return;
             }
             resolve();
@@ -135,10 +138,12 @@ const getOrderStatusDisplay = (
   }
 };
 
-export default function OrderDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
+interface OrderDetailProps {
+  id: string;
+}
+
+export default function OrderDetail({ id }: OrderDetailProps) {
+  const { navigateInTab } = useTabNavigation();
   const { t } = useTranslation();
   const { playSound } = useSound();
   const {
@@ -487,8 +492,7 @@ export default function OrderDetail() {
 
   const handleBack = () => {
     playSound("click");
-    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
-    navigate(returnTo || "/orders");
+    navigateInTab("/orders");
   };
 
   const containerVariants = {

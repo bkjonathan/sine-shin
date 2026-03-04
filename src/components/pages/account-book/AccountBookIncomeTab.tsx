@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, Variants } from "framer-motion";
-import { useNavigate } from "react-router-dom";
 import { getOrders } from "../../../api/orderApi";
 import { OrderWithCustomer } from "../../../types/order";
 import { AccountBookRow, AccountBookTotals } from "../../../types/accountBook";
 import { useAppSettings } from "../../../context/AppSettingsContext";
+import { useTabNavigation } from "../../../hooks/useTabNavigation";
 import AccountBookHeader from "./AccountBookHeader";
 import AccountBookSummaryCards from "./AccountBookSummaryCards";
 import AccountBookTable from "./AccountBookTable";
@@ -44,7 +44,7 @@ export default function AccountBookIncomeTab({
   dateFrom,
   dateTo,
 }: AccountBookIncomeTabProps) {
-  const navigate = useNavigate();
+  const { navigateInTab } = useTabNavigation();
   const { formatPrice } = useAppSettings();
   const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,12 +103,14 @@ export default function AccountBookIncomeTab({
       .map((order) => {
         const serviceFeeAmount = calculateServiceFeeAmount(order);
         const productDiscount = order.product_discount || 0;
-        const profit = serviceFeeAmount + productDiscount;
+        const cargoFee = order.exclude_cargo_fee ? 0 : order.cargo_fee || 0;
+        const profit = serviceFeeAmount + productDiscount + cargoFee;
 
         return {
           order,
           serviceFeeAmount,
           productDiscount,
+          cargoFee,
           profit,
         };
       });
@@ -120,6 +122,7 @@ export default function AccountBookIncomeTab({
         acc.totalSales += row.order.total_price || 0;
         acc.totalServiceFee += row.serviceFeeAmount;
         acc.totalDiscount += row.productDiscount;
+        acc.totalCargoFee += row.cargoFee;
         acc.totalProfit += row.profit;
         return acc;
       },
@@ -127,6 +130,7 @@ export default function AccountBookIncomeTab({
         totalSales: 0,
         totalServiceFee: 0,
         totalDiscount: 0,
+        totalCargoFee: 0,
         totalProfit: 0,
       },
     );
@@ -162,7 +166,7 @@ export default function AccountBookIncomeTab({
           loading={loading}
           rows={rows}
           formatPrice={formatPrice}
-          onViewOrder={(orderId) => navigate(`/orders/${orderId}`)}
+          onViewOrder={(orderId) => navigateInTab(`/orders/${orderId}`)}
         />
       </motion.div>
     </motion.div>

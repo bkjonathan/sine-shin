@@ -10,7 +10,7 @@ import {
   IconTriangleAlert,
   IconArrowLeft,
 } from "../components/icons";
-import { useNavigate } from "react-router-dom";
+import { useTabNavigation } from "../hooks/useTabNavigation";
 
 const fadeVariants = {
   hidden: { opacity: 0, y: 12 },
@@ -69,7 +69,7 @@ function StepList({ steps }: { steps: string[] }) {
 
 export default function Help() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const { navigateInTab } = useTabNavigation();
 
   const supabaseSetupSteps = t("help.sync.supabase_setup_steps", {
     returnObjects: true,
@@ -111,7 +111,7 @@ export default function Help() {
       {/* Header */}
       <motion.div variants={fadeVariants} className="mb-6">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigateInTab("/dashboard")}
           className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors mb-3"
         >
           <IconArrowLeft size={14} />

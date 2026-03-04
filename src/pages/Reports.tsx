@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   BarChart3,
@@ -28,6 +27,7 @@ import ReportTopCustomersTable from "../components/pages/reports/ReportTopCustom
 import ReportTopOrdersTable from "../components/pages/reports/ReportTopOrdersTable";
 import ReportTopSummaryCards from "../components/pages/reports/ReportTopSummaryCards";
 import ReportTrendChart from "../components/pages/reports/ReportTrendChart";
+import { useTabNavigation } from "../hooks/useTabNavigation";
 import DashboardDateFilter, {
   computeRange,
   type DateFilterValue,
@@ -159,7 +159,7 @@ const normalizeStatus = (status?: OrderStatus): OrderStatus | "unknown" => {
 const safeValue = (value?: string | null) => value?.trim() || "";
 
 export default function Reports() {
-  const navigate = useNavigate();
+  const { navigateInTab } = useTabNavigation();
   const { t } = useTranslation();
   const { formatPrice } = useAppSettings();
 
@@ -694,7 +694,7 @@ export default function Reports() {
             <ReportTopOrdersTable
               orders={topOrdersByProfit}
               formatPrice={formatPrice}
-              onViewOrder={(orderId) => navigate(`/orders/${orderId}`)}
+              onViewOrder={(orderId) => navigateInTab(`/orders/${orderId}`)}
             />
           </motion.div>
         </>

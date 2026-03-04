@@ -25,6 +25,7 @@ export {
   MapPin as IconMapPin,
   Minus as IconMinus,
   Package as IconPackage,
+  Pin as IconPin,
   Phone as IconPhone,
   Plus as IconPlus,
   Printer as IconPrinter,

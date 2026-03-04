@@ -14,6 +14,21 @@ const fadeVariants: Variants = {
   },
 };
 
+const SectionHeader = ({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle?: string;
+}) => (
+  <div className="mb-6 flex flex-col justify-between items-start">
+    <h3 className="text-lg font-bold text-text-primary tracking-tight">
+      {title}
+    </h3>
+    {subtitle && <p className="text-sm text-text-muted mt-1">{subtitle}</p>}
+  </div>
+);
+
 interface AccountBookSummaryTabProps {
   dateFrom: Date | null;
   dateTo: Date | null;
@@ -161,6 +176,76 @@ export default function AccountBookSummaryTab({
           </div>
         </div>
       </motion.div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <motion.div variants={fadeVariants} className="glass-panel p-6">
+          <SectionHeader
+            title={t("account_book.income_breakdown")}
+            subtitle={t("account_book.income_breakdown_hint")}
+          />
+          <div className="space-y-4">
+            <div className="flex justify-between items-center py-2 border-b border-glass-border border-dashed">
+              <span className="text-sm text-text-neutral">
+                {t("account_book.total_service_fees")}
+              </span>
+              <span className="font-semibold text-emerald-400">
+                {formatPrice(summary.total_service_fee || 0)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-glass-border border-dashed">
+              <span className="text-sm text-text-neutral">
+                {t("account_book.total_product_discounts")}
+              </span>
+              <span className="font-semibold text-emerald-400">
+                {formatPrice(summary.total_product_discount || 0)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-glass-border border-dashed">
+              <span className="text-sm text-text-neutral">
+                {t("account_book.total_cargo_fees")}
+              </span>
+              <span className="font-semibold text-cyan-400">
+                {formatPrice(summary.total_cargo_fee || 0)}
+              </span>
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div variants={fadeVariants} className="glass-panel p-6">
+          <SectionHeader
+            title={t("account_book.averages")}
+            subtitle={t("account_book.averages_hint")}
+          />
+          <div className="flex flex-col gap-4 mt-2">
+            <div className="bg-glass-white/40 p-4 rounded-lg border border-glass-border relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl -mr-8 -mt-8" />
+              <p className="text-xs text-text-muted mb-1 uppercase tracking-widest">
+                {t("account_book.avg_income_per_order")}
+              </p>
+              <p className="text-2xl font-bold text-emerald-400">
+                {formatPrice(
+                  summary.total_orders > 0
+                    ? summary.total_income / summary.total_orders
+                    : 0,
+                )}
+              </p>
+            </div>
+            <div className="bg-glass-white/40 p-4 rounded-lg border border-glass-border relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-full blur-2xl -mr-8 -mt-8" />
+              <p className="text-xs text-text-muted mb-1 uppercase tracking-widest">
+                {t("account_book.avg_expense_per_record")}
+              </p>
+              <p className="text-2xl font-bold text-rose-400">
+                {formatPrice(
+                  summary.total_expense_records > 0
+                    ? summary.total_expenses / summary.total_expense_records
+                    : 0,
+                )}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
     </motion.div>
   );
 }

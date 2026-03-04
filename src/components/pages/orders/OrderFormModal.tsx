@@ -11,6 +11,7 @@ import {
   OrderWithCustomer,
 } from "../../../types/order";
 import { Customer } from "../../../types/customer";
+import CustomerAutocomplete from "./CustomerAutocomplete";
 
 const modalVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95, y: 10 },
@@ -21,7 +22,7 @@ const modalVariants: Variants = {
 interface OrderFormModalProps {
   isOpen: boolean;
   editingOrder: OrderWithCustomer | null;
-  customers: Customer[];
+  editingCustomer: Customer | null;
   formData: OrderFormData;
   formErrors: OrderFormErrors;
   isSubmitting: boolean;
@@ -75,7 +76,7 @@ const toDatePickerValue = (value?: string): Date | null => {
 export default function OrderFormModal({
   isOpen,
   editingOrder,
-  customers,
+  editingCustomer,
   formData,
   formErrors,
   isSubmitting,
@@ -128,28 +129,24 @@ export default function OrderFormModal({
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <Select
+                    <CustomerAutocomplete
                       label={t("orders.form.customer")}
                       required
-                      options={customers.map((customer) => ({
-                        value: customer.id,
-                        label: `${customer.name} (${customer.customer_id})`,
-                      }))}
                       value={
                         formData.customer_id
                           ? parseInt(formData.customer_id, 10)
-                          : ""
+                          : null
                       }
-                      onChange={(value) =>
-                        onFieldChange("customer_id", String(value))
+                      onChange={(customerId) =>
+                        onFieldChange(
+                          "customer_id",
+                          customerId ? String(customerId) : "",
+                        )
                       }
                       placeholder={t("orders.form.select_customer")}
+                      error={formErrors.customer_id}
+                      initialCustomer={editingCustomer}
                     />
-                    {formErrors.customer_id && (
-                      <p className="mt-1 text-xs text-error" role="alert">
-                        {formErrors.customer_id}
-                      </p>
-                    )}
                   </div>
                   <Select
                     label={t("orders.form.order_from")}
@@ -604,7 +601,9 @@ export default function OrderFormModal({
                       className="input-liquid w-full"
                       autoComplete="off"
                       placeholder={DATE_PLACEHOLDER}
-                      value={normalizeDateInputValue(formData.user_withdraw_date)}
+                      value={normalizeDateInputValue(
+                        formData.user_withdraw_date,
+                      )}
                       onFocus={(e) => (e.target.type = "date")}
                       onBlur={(e) => {
                         if (!e.target.value) {

@@ -22,6 +22,13 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
 
   // Keep audio context ref to avoid recreating it constantly
   const audioContextRef = useRef<AudioContext | null>(null);
+  const lastPlayedAtRef = useRef<Record<SoundType, number>>({
+    click: 0,
+    success: 0,
+    error: 0,
+    switch: 0,
+    delete: 0,
+  });
 
   useEffect(() => {
     // Fetch initial sound setting from backend
@@ -150,6 +157,18 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     // soundEnabled is checked here, but for the global listener we check it inside the handler
     // to avoid playing when disabled.
     if (!soundEnabled) return;
+
+    // Global click listener + explicit handlers can fire for one interaction.
+    // Collapse near-simultaneous duplicates so users hear only one effect.
+    const nowMs = performance.now();
+    const minIntervalMs = type === "click" ? 80 : type === "switch" ? 60 : 0;
+    if (minIntervalMs > 0) {
+      const lastPlayedAt = lastPlayedAtRef.current[type];
+      if (nowMs - lastPlayedAt < minIntervalMs) {
+        return;
+      }
+      lastPlayedAtRef.current[type] = nowMs;
+    }
 
     try {
       const ctx = await ensureAudioContext();

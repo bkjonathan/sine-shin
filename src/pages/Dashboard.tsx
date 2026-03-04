@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAppSettings } from "../context/AppSettingsContext";
+import { useTabNavigation } from "../hooks/useTabNavigation";
 import DashboardHeader from "../components/pages/dashobard/DashboardHeader";
 import DashboardQuickActions from "../components/pages/dashobard/DashboardQuickActions";
 import DashboardRecentActivity from "../components/pages/dashobard/DashboardRecentActivity";
@@ -130,6 +131,7 @@ function DashboardSkeleton() {
 export default function Dashboard() {
   const { formatPrice } = useAppSettings();
   const navigate = useNavigate();
+  const { navigateInTab } = useTabNavigation();
   const { logout } = useAuth();
   const [shop, setShop] = useState<ShopData | null>(null);
   const [logoSrc, setLogoSrc] = useState("");
@@ -227,13 +229,13 @@ export default function Dashboard() {
           <DashboardRecentActivity
             orders={recentOrders}
             formatPrice={formatPrice}
-            onViewAll={() => navigate("/orders")}
-            onSelectOrder={(id) => navigate(`/orders/${id}`)}
+            onViewAll={() => navigateInTab("/orders")}
+            onSelectOrder={(id) => navigateInTab(`/orders/${id}`)}
           />
         </motion.div>
 
         <motion.div variants={itemVariants}>
-          <DashboardQuickActions onNavigate={(path) => navigate(path)} />
+          <DashboardQuickActions onNavigate={(path) => navigateInTab(path)} />
         </motion.div>
       </div>
     </motion.div>

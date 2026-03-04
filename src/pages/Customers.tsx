@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   getCustomers,
@@ -20,6 +20,7 @@ import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Select } from "../components/ui";
 import { createCSVContent, parseCSV } from "../utils/csvUtils";
+import { useTabNavigation } from "../hooks/useTabNavigation";
 import CustomerDeleteModal from "../components/pages/customers/CustomerDeleteModal";
 import CustomerFormModal from "../components/pages/customers/CustomerFormModal";
 import {
@@ -86,10 +87,6 @@ const parsePageParam = (value: string | null): number => {
   }
 
   return parsedPage;
-};
-
-const getCustomersListPath = (page: number): string => {
-  return page > 1 ? `/customers?page=${page}` : "/customers";
 };
 
 const PHONE_REGEX = /^[0-9+\-\s()]{6,20}$/;
@@ -165,7 +162,7 @@ const toTitleCase = (value: string) => {
 
 export default function Customers() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
-  const navigate = useNavigate();
+  const { navigateInTab } = useTabNavigation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -910,11 +907,7 @@ export default function Customers() {
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.95 }}
                           onClick={() =>
-                            navigate(`/customers/${customer.id}`, {
-                              state: {
-                                returnTo: getCustomersListPath(currentPage),
-                              },
-                            })
+                            navigateInTab(`/customers/${customer.id}`)
                           }
                           className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
                         >
@@ -1103,11 +1096,7 @@ export default function Customers() {
                               animate={{ opacity: 1 }}
                               exit={{ opacity: 0 }}
                               onClick={() =>
-                                navigate(`/customers/${customer.id}`, {
-                                  state: {
-                                    returnTo: getCustomersListPath(currentPage),
-                                  },
-                                })
+                                navigateInTab(`/customers/${customer.id}`)
                               }
                               className="group border-b border-glass-border/50 last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
                             >

@@ -15,7 +15,7 @@ export default function AccountBookSummaryCards({
   const { t } = useTranslation();
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
       <div className="glass-panel p-4">
         <p className="text-xs uppercase tracking-wider text-text-muted">
           {t("account_book.total_orders")}
@@ -38,6 +38,14 @@ export default function AccountBookSummaryCards({
         </p>
         <p className="text-xl font-bold text-amber-500 mt-2">
           {formatPrice(totals.totalDiscount)}
+        </p>
+      </div>
+      <div className="glass-panel p-4">
+        <p className="text-xs uppercase tracking-wider text-text-muted">
+          {t("orders.form.cargo_fee")}
+        </p>
+        <p className="text-xl font-bold text-cyan-500 mt-2">
+          {formatPrice(totals.totalCargoFee)}
         </p>
       </div>
       <div className="glass-panel p-4">

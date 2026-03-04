@@ -1,13 +1,14 @@
-import { NavLink } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getSyncConfig, SyncConfig } from "../../api/syncApi";
+import { getSyncConfig, type SyncConfig } from "../../api/syncApi";
+import { useTabStore } from "../../stores/tabStore";
+import { isNavigationItemActive } from "../../utils/tabRoutes";
 import { useSound } from "../../context/SoundContext";
 import {
   IconBookOpen,
   IconChartColumn,
-  IconHome,
   IconHelpCircle,
+  IconHome,
   IconList,
   IconSettings,
   IconUsers,
@@ -17,6 +18,14 @@ export default function AppNavigation() {
   const { playSound } = useSound();
   const { t } = useTranslation();
   const [syncConfig, setSyncConfig] = useState<SyncConfig | null>(null);
+
+  const openTab = useTabStore((state) => state.openTab);
+  const tabs = useTabStore((state) => state.tabs);
+  const activeTabId = useTabStore((state) => state.activeTabId);
+
+  const activeTabPath = useMemo(() => {
+    return tabs.find((tab) => tab.id === activeTabId)?.path ?? "/dashboard";
+  }, [activeTabId, tabs]);
 
   useEffect(() => {
     getSyncConfig()
@@ -47,19 +56,24 @@ export default function AppNavigation() {
 
   return (
     <nav className="flex-1 px-3 space-y-1">
-      {menuItems.map(({ to, label, icon: Icon }) => (
-        <NavLink
-          key={to}
-          to={to}
-          onClick={() => playSound("click")}
-          className={({ isActive }) =>
-            `nav-item ${isActive ? "nav-item-active" : ""}`
-          }
-        >
-          <Icon size={20} strokeWidth={1.8} />
-          <span>{t(label)}</span>
-        </NavLink>
-      ))}
+      {menuItems.map(({ to, label, icon: Icon }) => {
+        const isActive = isNavigationItemActive(to, activeTabPath);
+
+        return (
+          <button
+            key={to}
+            type="button"
+            onClick={() => {
+              playSound("click");
+              openTab(to, t(label));
+            }}
+            className={`nav-item w-full text-left ${isActive ? "nav-item-active" : ""}`}
+          >
+            <Icon size={20} strokeWidth={1.8} />
+            <span>{t(label)}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 }

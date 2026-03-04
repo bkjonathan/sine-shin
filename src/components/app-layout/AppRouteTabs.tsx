@@ -1,17 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { IconChevronLeft, IconChevronRight, IconX } from "../icons";
-
-export interface RouteTab {
-  id: string;
-  to: string;
-  label: string;
-}
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconClipboardCopy,
+  IconPin,
+  IconPlus,
+  IconX,
+} from "../icons";
+import type { Tab } from "../../stores/tabStore";
 
 interface AppRouteTabsProps {
-  tabs: RouteTab[];
-  activeTabId: string;
-  onSelectTab: (tab: RouteTab) => void;
-  onCloseTab: (tab: RouteTab) => void;
+  tabs: Tab[];
+  activeTabId: string | null;
+  onSelectTab: (tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
+  onCloseOthers: (tabId: string) => void;
+  onCloseAll: () => void;
+  onTogglePinTab: (tabId: string) => void;
+  onDuplicateTab: (tabId: string) => void;
+  onReorderTabs: (draggedId: string, targetId: string) => void;
+  onNewTab: () => void;
+}
+
+interface ContextMenuState {
+  tabId: string;
+  x: number;
+  y: number;
 }
 
 export default function AppRouteTabs({
@@ -19,10 +33,23 @@ export default function AppRouteTabs({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onCloseOthers,
+  onCloseAll,
+  onTogglePinTab,
+  onDuplicateTab,
+  onReorderTabs,
+  onNewTab,
 }: AppRouteTabsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+
+  const contextMenuTab = useMemo(
+    () => tabs.find((tab) => tab.id === contextMenu?.tabId) ?? null,
+    [contextMenu?.tabId, tabs],
+  );
 
   const updateScrollState = useCallback(() => {
     const container = scrollRef.current;
@@ -67,12 +94,53 @@ export default function AppRouteTabs({
     };
   }, [updateScrollState]);
 
+  useEffect(() => {
+    if (!activeTabId || !scrollRef.current) {
+      return;
+    }
+
+    const activeElement = scrollRef.current.querySelector<HTMLElement>(
+      `[data-tab-id="${activeTabId}"]`,
+    );
+
+    activeElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeTabId]);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const handlePointerDown = () => {
+      setContextMenu(null);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setContextMenu(null);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [contextMenu]);
+
   const handleScrollRight = () => {
     scrollRef.current?.scrollBy({ left: 180, behavior: "smooth" });
   };
 
   const handleScrollLeft = () => {
     scrollRef.current?.scrollBy({ left: -180, behavior: "smooth" });
+  };
+
+  const handleContextAction = (action: () => void) => {
+    action();
+    setContextMenu(null);
   };
 
   return (
@@ -85,36 +153,68 @@ export default function AppRouteTabs({
           <div className="flex items-center gap-1 min-w-max">
             {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
-              const canClose = tabs.length > 1;
+              const isPinned = Boolean(tab.pinned);
+              const canClose = tabs.length > 1 && !isPinned;
 
               return (
                 <div
                   key={tab.id}
+                  data-tab-id={tab.id}
+                  draggable
+                  onDragStart={(event) => {
+                    setDraggedTabId(tab.id);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", tab.id);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedTabId(null);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const sourceTabId =
+                      draggedTabId ?? event.dataTransfer.getData("text/plain");
+                    if (!sourceTabId) {
+                      return;
+                    }
+                    onReorderTabs(sourceTabId, tab.id);
+                    setDraggedTabId(null);
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({
+                      tabId: tab.id,
+                      x: event.clientX,
+                      y: event.clientY,
+                    });
+                  }}
                   className={
                     `group no-drag inline-flex items-center gap-1 rounded-lg text-xs font-medium transition-all border ` +
                     (isActive
-                      ? "text-text-primary bg-glass-white-hover border-glass-border shadow-[0_0_12px_rgba(0,0,0,0.08)]"
+                      ? "-translate-y-px text-text-primary bg-glass-white-hover border-glass-border shadow-[0_8px_16px_rgba(0,0,0,0.12)]"
                       : "text-text-secondary border-transparent hover:bg-glass-white hover:text-text-primary")
                   }
                 >
                   <button
                     type="button"
-                    onClick={() => onSelectTab(tab)}
-                    className="px-3 py-1.5"
+                    onClick={() => onSelectTab(tab.id)}
+                    className="px-3 py-1.5 inline-flex items-center gap-1.5"
                   >
-                    <span className="max-w-[180px] truncate block">
-                      {tab.label}
-                    </span>
+                    {isPinned && <IconPin size={11} strokeWidth={1.7} />}
+                    <span className="max-w-[180px] truncate block">{tab.title}</span>
                   </button>
                   {canClose && (
                     <button
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        onCloseTab(tab);
+                        onCloseTab(tab.id);
                       }}
                       className="mr-1 inline-flex items-center justify-center rounded p-0.5 text-text-muted hover:text-text-primary hover:bg-glass-white-hover"
-                      aria-label={`Close ${tab.label}`}
+                      aria-label={`Close ${tab.title}`}
                     >
                       <IconX size={12} strokeWidth={2} />
                     </button>
@@ -122,6 +222,16 @@ export default function AppRouteTabs({
                 </div>
               );
             })}
+
+            <button
+              type="button"
+              onClick={onNewTab}
+              className="no-drag inline-flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-glass-border text-text-secondary hover:text-text-primary hover:bg-glass-white"
+              aria-label="Open new tab"
+              title="Open new tab"
+            >
+              <IconPlus size={14} strokeWidth={2} />
+            </button>
           </div>
         </div>
 
@@ -147,6 +257,63 @@ export default function AppRouteTabs({
               aria-label="Scroll tabs left"
             >
               <IconChevronLeft size={14} strokeWidth={2} />
+            </button>
+          </div>
+        )}
+
+        {contextMenu && contextMenuTab && (
+          <div
+            className="fixed z-[100] no-drag min-w-[170px] rounded-lg border border-glass-border bg-liquid-bg/95 p-1 shadow-2xl backdrop-blur"
+            style={{
+              left: Math.min(contextMenu.x, window.innerWidth - 190),
+              top: Math.min(contextMenu.y, window.innerHeight - 210),
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => handleContextAction(() => onCloseTab(contextMenuTab.id))}
+              disabled={tabs.length <= 1}
+              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Close
+              <IconX size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleContextAction(() => onCloseOthers(contextMenuTab.id))
+              }
+              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
+            >
+              Close Others
+            </button>
+            <button
+              type="button"
+              onClick={() => handleContextAction(onCloseAll)}
+              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
+            >
+              Close All
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleContextAction(() => onTogglePinTab(contextMenuTab.id))
+              }
+              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
+            >
+              {contextMenuTab.pinned ? "Unpin Tab" : "Pin Tab"}
+              <IconPin size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleContextAction(() => onDuplicateTab(contextMenuTab.id))
+              }
+              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
+            >
+              Duplicate
+              <IconClipboardCopy size={13} />
             </button>
           </div>
         )}

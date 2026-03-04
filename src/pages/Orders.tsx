@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { toPng } from "html-to-image";
 import { MYANMAR_FONT_EMBED_CSS } from "../assets/fonts/myanmar-fonts";
@@ -14,7 +14,7 @@ import {
   getOrderById,
 } from "../api/orderApi";
 import { formatDate } from "../utils/date";
-import { getCustomers } from "../api/customerApi";
+import { getCustomers, getCustomerById } from "../api/customerApi";
 import {
   createEmptyOrderFormData,
   createEmptyOrderFormItem,
@@ -32,6 +32,7 @@ import { Button, Input, Select } from "../components/ui";
 import { createCSVContent, parseCSV } from "../utils/csvUtils";
 import { ORDER_CSV_HEADERS, processOrderCSV } from "../utils/orderImportUtils";
 import { useAppSettings } from "../context/AppSettingsContext";
+import { useTabNavigation } from "../hooks/useTabNavigation";
 import OrderDeleteModal from "../components/pages/orders/OrderDeleteModal";
 import OrderFormModal from "../components/pages/orders/OrderFormModal";
 import {
@@ -157,10 +158,6 @@ const parsePageParam = (value: string | null): number => {
   return parsedPage;
 };
 
-const getOrdersListPath = (page: number): string => {
-  return page > 1 ? `/orders?page=${page}` : "/orders";
-};
-
 const MAX_SERVICE_FEE_PERCENT = 100;
 
 const toDateInputValue = (value?: string): string => {
@@ -203,7 +200,7 @@ const hasOrderFormErrors = (errors: OrderFormErrors): boolean => {
 
 export default function Orders() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
-  const navigate = useNavigate();
+  const { navigateInTab } = useTabNavigation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -235,6 +232,7 @@ export default function Orders() {
   const [editingOrder, setEditingOrder] = useState<OrderWithCustomer | null>(
     null,
   );
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Import State
@@ -517,15 +515,10 @@ export default function Orders() {
     }
 
     const requestedPageSize =
-      typeof pageSize === "number"
-        ? pageSize
-        : ORDER_PAGE_SIZE_LIMITS.default;
+      typeof pageSize === "number" ? pageSize : ORDER_PAGE_SIZE_LIMITS.default;
     const resolvedPageSize = Math.max(
       ORDER_PAGE_SIZE_LIMITS.min,
-      Math.min(
-        ORDER_PAGE_SIZE_LIMITS.max,
-        requestedPageSize,
-      ),
+      Math.min(ORDER_PAGE_SIZE_LIMITS.max, requestedPageSize),
     );
     const totalPages = total > 0 ? Math.ceil(total / resolvedPageSize) : 0;
     const safePage = Math.max(1, page);
@@ -868,12 +861,26 @@ export default function Orders() {
           cargo_fee_by_shop: order.cargo_fee_by_shop,
           exclude_cargo_fee: order.exclude_cargo_fee,
         });
+
+        // Resolve the customer for the autocomplete
+        if (order.customer_id) {
+          try {
+            const customer = await getCustomerById(order.customer_id);
+            setEditingCustomer(customer);
+          } catch {
+            setEditingCustomer(null);
+          }
+        } else {
+          setEditingCustomer(null);
+        }
+
         setIsModalOpen(true);
       } catch (e) {
         console.error("Failed to load details for editing", e);
       }
     } else {
       setEditingOrder(null);
+      setEditingCustomer(null);
       setFormData(createEmptyOrderFormData());
       setIsModalOpen(true);
     }
@@ -884,6 +891,7 @@ export default function Orders() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingOrder(null);
+    setEditingCustomer(null);
     setFormErrors({});
   };
 
@@ -1065,7 +1073,8 @@ export default function Orders() {
                 order.shipping_fee_paid ?? targetOrder.shipping_fee_paid,
               delivery_fee_paid:
                 order.delivery_fee_paid ?? targetOrder.delivery_fee_paid,
-              cargo_fee_paid: order.cargo_fee_paid ?? targetOrder.cargo_fee_paid,
+              cargo_fee_paid:
+                order.cargo_fee_paid ?? targetOrder.cargo_fee_paid,
               service_fee_paid:
                 order.service_fee_paid ?? targetOrder.service_fee_paid,
               shipping_fee_by_shop:
@@ -1580,11 +1589,7 @@ export default function Orders() {
                               exit={{ opacity: 0, scale: 0.95 }}
                               className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
                               onClick={() =>
-                                navigate(`/orders/${order.id}`, {
-                                  state: {
-                                    returnTo: getOrdersListPath(currentPage),
-                                  },
-                                })
+                                navigateInTab(`/orders/${order.id}`)
                               }
                             >
                               <div className="relative z-10">
@@ -1755,12 +1760,7 @@ export default function Orders() {
                                   animate={{ opacity: 1 }}
                                   exit={{ opacity: 0 }}
                                   onClick={() =>
-                                    navigate(`/orders/${order.id}`, {
-                                      state: {
-                                        returnTo:
-                                          getOrdersListPath(currentPage),
-                                      },
-                                    })
+                                    navigateInTab(`/orders/${order.id}`)
                                   }
                                   className="group border-b border-glass-border/50 last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
                                 >
@@ -1971,7 +1971,7 @@ export default function Orders() {
         <OrderFormModal
           isOpen={isModalOpen}
           editingOrder={editingOrder}
-          customers={customers}
+          editingCustomer={editingCustomer}
           formData={formData}
           formErrors={formErrors}
           isSubmitting={isSubmitting}

@@ -7,6 +7,9 @@ use crate::state::AppDb;
 struct IncomeRow {
     total_income: f64,
     total_orders: i64,
+    total_service_fee: f64,
+    total_product_discount: f64,
+    total_cargo_fee: f64,
 }
 
 #[derive(Debug, serde::Deserialize, sqlx::FromRow)]
@@ -42,7 +45,7 @@ pub async fn get_account_summary(
         );
     }
 
-    // Total income from orders: service fee amount + product discount
+    // Total income from orders: service fee amount + product discount + cargo fee (if not excluded)
     let income_all_query = format!(
         r#"
         SELECT
@@ -53,8 +56,18 @@ pub async fn get_account_summary(
                     ELSE COALESCE(o.service_fee, 0)
                 END
                 + COALESCE(o.product_discount, 0)
+                + CASE WHEN o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END
             ), 0) as total_income,
-            COUNT(DISTINCT o.id) as total_orders
+            COUNT(DISTINCT o.id) as total_orders,
+            COALESCE(SUM(
+                CASE
+                    WHEN o.service_fee_type = 'percent'
+                    THEN (COALESCE(agg.total_price, 0) * COALESCE(o.service_fee, 0) / 100.0)
+                    ELSE COALESCE(o.service_fee, 0)
+                END
+            ), 0) as total_service_fee,
+            COALESCE(SUM(o.product_discount), 0) as total_product_discount,
+            COALESCE(SUM(CASE WHEN o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END), 0) as total_cargo_fee
         FROM orders o
         LEFT JOIN (
             SELECT order_id, COALESCE(SUM(price * product_qty), 0) as total_price
@@ -83,8 +96,18 @@ pub async fn get_account_summary(
                     ELSE COALESCE(o.service_fee, 0)
                 END
                 + COALESCE(o.product_discount, 0)
+                + CASE WHEN o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END
             ), 0) as total_income,
-            COUNT(DISTINCT o.id) as total_orders
+            COUNT(DISTINCT o.id) as total_orders,
+            COALESCE(SUM(
+                CASE
+                    WHEN o.service_fee_type = 'percent'
+                    THEN (COALESCE(agg.total_price, 0) * COALESCE(o.service_fee, 0) / 100.0)
+                    ELSE COALESCE(o.service_fee, 0)
+                END
+            ), 0) as total_service_fee,
+            COALESCE(SUM(o.product_discount), 0) as total_product_discount,
+            COALESCE(SUM(CASE WHEN o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END), 0) as total_cargo_fee
         FROM orders o
         LEFT JOIN (
             SELECT order_id, COALESCE(SUM(price * product_qty), 0) as total_price
@@ -140,5 +163,8 @@ pub async fn get_account_summary(
         total_expense_records: expense_all.total_records,
         this_month_income: income_month.total_income,
         this_month_expenses: expense_month.total_expenses,
+        total_service_fee: income_all.total_service_fee,
+        total_product_discount: income_all.total_product_discount,
+        total_cargo_fee: income_all.total_cargo_fee,
     })
 }

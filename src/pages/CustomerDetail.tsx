@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { getCustomerById, getCustomerOrders } from "../api/customerApi";
@@ -8,8 +7,13 @@ import { OrderWithCustomer } from "../types/order";
 import { useSound } from "../context/SoundContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { formatDate } from "../utils/date";
+import { useTabNavigation } from "../hooks/useTabNavigation";
 import { IconArrowLeft, IconExternalLink } from "../components/icons";
 import { Button } from "../components/ui";
+
+interface CustomerDetailProps {
+  id: string;
+}
 
 const fadeVariants = {
   hidden: { opacity: 0, y: 12 },
@@ -20,10 +24,8 @@ const fadeVariants = {
   },
 };
 
-export default function CustomerDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
+export default function CustomerDetail({ id }: CustomerDetailProps) {
+  const { navigateInTab } = useTabNavigation();
   const { t } = useTranslation();
   const { playSound } = useSound();
   const { formatPrice } = useAppSettings();
@@ -58,8 +60,7 @@ export default function CustomerDetail() {
 
   const handleBack = () => {
     playSound("click");
-    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
-    navigate(returnTo || "/customers");
+    navigateInTab("/customers");
   };
 
   if (loading) {
