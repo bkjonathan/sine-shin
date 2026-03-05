@@ -84,47 +84,46 @@ const getStatusLabelKey = (status: OrderStatus | "unknown") => {
   }
 };
 
-const parseOrderDate = (order: OrderWithCustomer): Date | null => {
-  const parseDateValue = (value?: string | null): Date | null => {
-    if (!value) return null;
+const parseFlexibleDate = (value?: string | null): Date | null => {
+  if (!value) return null;
 
-    const raw = value.trim();
-    if (!raw) return null;
+  const raw = value.trim();
+  if (!raw) return null;
 
-    // Handle SQLite datetime format (YYYY-MM-DD HH:MM:SS)
-    const sqliteDateTimeMatch = raw.match(
-      /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/,
+  // Handle SQLite datetime format (YYYY-MM-DD HH:MM:SS)
+  const sqliteDateTimeMatch = raw.match(
+    /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/,
+  );
+  if (sqliteDateTimeMatch) {
+    const parsed = new Date(`${sqliteDateTimeMatch[1]}T${sqliteDateTimeMatch[2]}`);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  // Handle DD-MM-YYYY or DD/MM/YYYY with optional time (e.g. DD-MM-YYYY HH:MM:SS)
+  const dmyDateMatch = raw.match(
+    /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[ T]+(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?))?$/,
+  );
+  if (dmyDateMatch) {
+    const [, day, month, year, time] = dmyDateMatch;
+    const parsed = new Date(
+      `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${time || "00:00:00"}`,
     );
-    if (sqliteDateTimeMatch) {
-      const parsed = new Date(
-        `${sqliteDateTimeMatch[1]}T${sqliteDateTimeMatch[2]}`,
-      );
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed;
-      }
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
     }
+  }
 
-    // Handle DD-MM-YYYY or DD/MM/YYYY
-    const dmyDateMatch = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-    if (dmyDateMatch) {
-      const [, day, month, year] = dmyDateMatch;
-      const parsed = new Date(
-        `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00`,
-      );
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed;
-      }
-    }
+  // Handle standard ISO or YYYY-MM-DD
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
 
-    // Handle standard ISO or YYYY-MM-DD
-    const parsed = new Date(raw);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
+  return null;
+};
 
-    return null;
-  };
-
-  const date =
-    parseDateValue(order.order_date) ?? parseDateValue(order.created_at);
+const parseOrderDate = (order: OrderWithCustomer): Date | null => {
+  const date = parseFlexibleDate(order.order_date) ?? parseFlexibleDate(order.created_at);
 
   if (!date) {
     console.warn("Failed to parse date for order:", order.id, order.order_id, {
@@ -255,28 +254,25 @@ export default function Reports() {
     const to = new Date(filter.dateTo + "T23:59:59");
 
     return enrichedOrders.filter((order) => {
-      // Strictly use the selected date field — no fallback, matching backend SQL behavior
-      const dateStr =
-        filter.dateField === "created_at" ? order.created_at : order.order_date;
-      if (!dateStr) return false;
+      let comparisonDate: Date | null = null;
 
-      const raw = dateStr.trim();
-      if (!raw) return false;
-
-      // Parse the date string (handle YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, etc.)
-      let parsed: Date | null = null;
-      const sqliteMatch = raw.match(
-        /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/,
-      );
-      if (sqliteMatch) {
-        parsed = new Date(`${sqliteMatch[1]}T${sqliteMatch[2]}`);
+      if (filter.dateField === "created_at") {
+        comparisonDate = parseFlexibleDate(order.created_at);
       } else {
-        parsed = new Date(raw.includes("T") ? raw : raw + "T00:00:00");
+        const orderDate = parseFlexibleDate(order.order_date);
+        const createdAtDate = parseFlexibleDate(order.created_at);
+
+        // Keep parity with backend: if order_date is missing/invalid/future, use created_at.
+        if (!orderDate || orderDate > to) {
+          comparisonDate = createdAtDate;
+        } else {
+          comparisonDate = orderDate;
+        }
       }
 
-      if (!parsed || isNaN(parsed.getTime())) return false;
+      if (!comparisonDate) return false;
 
-      return parsed >= from && parsed <= to;
+      return comparisonDate >= from && comparisonDate <= to;
     });
   }, [enrichedOrders, filter]);
 

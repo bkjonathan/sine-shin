@@ -39,6 +39,22 @@ fn normalize_order_status_filter(status: Option<String>) -> Result<Option<String
     normalize_order_status(normalized)
 }
 
+fn normalize_sqlite_date_expr(column: &str) -> String {
+    // Convert common DMY import formats (DD/MM/YYYY or DD-MM-YYYY, optional time)
+    // into ISO-like strings before applying SQLite date() comparisons.
+    let trimmed = format!("trim({})", column);
+    format!(
+        "CASE \
+            WHEN {trimmed} = '' THEN NULL \
+            WHEN {trimmed} GLOB '[0-9][0-9]/[0-9][0-9]/[0-9][0-9][0-9][0-9]*' THEN \
+                substr({trimmed}, 7, 4) || '-' || substr({trimmed}, 4, 2) || '-' || substr({trimmed}, 1, 2) || substr({trimmed}, 11) \
+            WHEN {trimmed} GLOB '[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]*' THEN \
+                substr({trimmed}, 7, 4) || '-' || substr({trimmed}, 4, 2) || '-' || substr({trimmed}, 1, 2) || substr({trimmed}, 11) \
+            ELSE {trimmed} \
+        END"
+    )
+}
+
 #[tauri::command]
 pub async fn create_order(
     app: AppHandle,
@@ -678,14 +694,20 @@ pub async fn get_dashboard_stats(
             let date_value = if col == "order_date" {
                 let order_date_col = column_with_alias(alias, "order_date");
                 let created_at_col = column_with_alias(alias, "created_at");
+                let normalized_order_date = normalize_sqlite_date_expr(&order_date_col);
+                let normalized_created_at = normalize_sqlite_date_expr(&created_at_col);
                 // If order_date is set in the future, use created_at so newly-created
                 // orders are still included in current-period dashboard stats.
                 format!(
-                    "CASE WHEN {} IS NULL OR trim({}) = '' THEN {} WHEN date({}) > date('{}') THEN {} ELSE {} END",
-                    order_date_col, order_date_col, created_at_col, order_date_col, dt, created_at_col, order_date_col
+                    "CASE \
+                        WHEN {order_date_col} IS NULL OR trim({order_date_col}) = '' THEN {normalized_created_at} \
+                        WHEN date({normalized_order_date}) IS NULL THEN {normalized_created_at} \
+                        WHEN date({normalized_order_date}) > date('{dt}') THEN {normalized_created_at} \
+                        ELSE {normalized_order_date} \
+                    END"
                 )
             } else {
-                column_with_alias(alias, col)
+                normalize_sqlite_date_expr(&column_with_alias(alias, col))
             };
             conditions.push(format!(
                 "date({}) >= '{}' AND date({}) <= '{}'",

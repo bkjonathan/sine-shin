@@ -109,6 +109,9 @@
     "date_to": "To",
     "actions": {
       "orders": "Orders",
+      "customers": "Customers",
+      "expenses": "Expenses",
+      "settings": "Settings",
       "month_summary": "Monthly Summary",
       "month_summary_hint": "Overview of this month's financial activity",
       "income_breakdown": "Income Breakdown",

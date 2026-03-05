@@ -1816,7 +1816,7 @@ export default function Orders() {
                                     {order.total_weight || 0} kg
                                   </td>
                                   <td className="px-4 py-3 text-right">
-                                    <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    <div className="flex gap-1 justify-end">
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
