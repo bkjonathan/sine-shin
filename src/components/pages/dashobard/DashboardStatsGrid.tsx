@@ -69,12 +69,30 @@ export default function DashboardStatsGrid({
         icon: Truck,
         clickable: true,
       },
+      {
+        key: "paid_cargo",
+        label: "dashboard.paid_cargo_fee",
+        value: stats ? formatPrice(stats.paid_cargo_fee) : "-",
+        gradient: "from-emerald-500/15 to-teal-500/10",
+        iconGradient: "from-emerald-500 to-teal-500",
+        icon: Truck,
+        clickable: true,
+      },
+      {
+        key: "unpaid_cargo",
+        label: "dashboard.unpaid_cargo_fee",
+        value: stats ? formatPrice(stats.unpaid_cargo_fee) : "-",
+        gradient: "from-rose-500/15 to-red-500/10",
+        iconGradient: "from-rose-500 to-red-500",
+        icon: Truck,
+        clickable: true,
+      },
     ],
     [formatPrice, stats],
   );
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-4">
       {statCards.map((stat) => (
         <div
           key={stat.label}

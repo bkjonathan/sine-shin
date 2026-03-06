@@ -785,6 +785,26 @@ pub async fn get_dashboard_stats(
         .await
         .map_err(|e| e.to_string())?;
 
+    // 5.1) Paid cargo fee
+    let paid_cargo_sql = format!(
+        "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 AND cargo_fee_paid = 1 THEN cargo_fee ELSE 0 END), 0.0) FROM orders{}", 
+        orders_where("")
+    );
+    let paid_cargo_fee: (f64,) = sqlx::query_as(&paid_cargo_sql)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 5.2) Unpaid cargo fee
+    let unpaid_cargo_sql = format!(
+        "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 AND (cargo_fee_paid = 0 OR cargo_fee_paid IS NULL) THEN cargo_fee ELSE 0 END), 0.0) FROM orders{}", 
+        orders_where("")
+    );
+    let unpaid_cargo_fee: (f64,) = sqlx::query_as(&unpaid_cargo_sql)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     // 6) Recent orders
     let recent_where = orders_where("o");
     let query = format!(
@@ -800,6 +820,8 @@ pub async fn get_dashboard_stats(
         total_revenue: total_revenue.0,
         total_profit: total_profit.0,
         total_cargo_fee: total_cargo_fee.0,
+        paid_cargo_fee: paid_cargo_fee.0,
+        unpaid_cargo_fee: unpaid_cargo_fee.0,
         total_orders: total_orders.0,
         total_customers: total_customers.0,
         recent_orders,
@@ -912,7 +934,35 @@ pub async fn get_dashboard_detail_records(
             "#,
             where_clause
         ),
-        _ => return Err("Invalid record_type. Must be 'profit' or 'cargo'.".to_string()),
+        "paid_cargo" => format!(
+            r#"
+            SELECT
+                o.order_id,
+                c.name as customer_name,
+                COALESCE(o.cargo_fee, 0) as amount,
+                o.order_date
+            FROM orders o
+            LEFT JOIN customers c ON o.customer_id = c.id
+            {} AND o.exclude_cargo_fee != 1 AND o.cargo_fee_paid = 1 AND COALESCE(o.cargo_fee, 0) > 0
+            ORDER BY o.created_at DESC
+            "#,
+            where_clause
+        ),
+        "unpaid_cargo" => format!(
+            r#"
+            SELECT
+                o.order_id,
+                c.name as customer_name,
+                COALESCE(o.cargo_fee, 0) as amount,
+                o.order_date
+            FROM orders o
+            LEFT JOIN customers c ON o.customer_id = c.id
+            {} AND o.exclude_cargo_fee != 1 AND (o.cargo_fee_paid = 0 OR o.cargo_fee_paid IS NULL) AND COALESCE(o.cargo_fee, 0) > 0
+            ORDER BY o.created_at DESC
+            "#,
+            where_clause
+        ),
+        _ => return Err("Invalid record_type. Must be 'profit', 'cargo', 'paid_cargo', or 'unpaid_cargo'.".to_string()),
     };
 
     let records = sqlx::query_as::<_, DashboardDetailRecord>(&sql)

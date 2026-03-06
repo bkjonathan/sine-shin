@@ -148,7 +148,9 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<DashboardStatus>("all");
 
   // Modal state for profit/cargo detail records
-  const [modalType, setModalType] = useState<"profit" | "cargo" | null>(null);
+  const [modalType, setModalType] = useState<
+    "profit" | "cargo" | "paid_cargo" | "unpaid_cargo" | null
+  >(null);
   const [detailRecords, setDetailRecords] = useState<DashboardDetailRecord[]>(
     [],
   );
@@ -197,7 +199,13 @@ export default function Dashboard() {
 
   const handleCardClick = useCallback(
     async (key: string) => {
-      if (key !== "profit" && key !== "cargo") return;
+      if (
+        key !== "profit" &&
+        key !== "cargo" &&
+        key !== "paid_cargo" &&
+        key !== "unpaid_cargo"
+      )
+        return;
       setModalType(key);
       setDetailLoading(true);
       try {
@@ -294,7 +302,11 @@ export default function Dashboard() {
         title={
           modalType === "profit"
             ? t("dashboard.profit_records_title")
-            : t("dashboard.cargo_records_title")
+            : modalType === "paid_cargo"
+              ? t("dashboard.paid_cargo_records_title")
+              : modalType === "unpaid_cargo"
+                ? t("dashboard.unpaid_cargo_records_title")
+                : t("dashboard.cargo_records_title")
         }
         records={detailRecords}
         loading={detailLoading}

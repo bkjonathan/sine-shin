@@ -23,6 +23,8 @@ export interface DashboardStats {
   total_revenue: number;
   total_profit: number;
   total_cargo_fee: number;
+  paid_cargo_fee: number;
+  unpaid_cargo_fee: number;
   total_orders: number;
   total_customers: number;
   recent_orders: DashboardOrder[];

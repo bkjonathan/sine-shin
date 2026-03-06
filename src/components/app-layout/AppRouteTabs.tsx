@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -204,7 +205,9 @@ export default function AppRouteTabs({
                     className="px-3 py-1.5 inline-flex items-center gap-1.5"
                   >
                     {isPinned && <IconPin size={11} strokeWidth={1.7} />}
-                    <span className="max-w-[180px] truncate block">{tab.title}</span>
+                    <span className="max-w-[180px] truncate block">
+                      {tab.title}
+                    </span>
                   </button>
                   {canClose && (
                     <button
@@ -261,62 +264,67 @@ export default function AppRouteTabs({
           </div>
         )}
 
-        {contextMenu && contextMenuTab && (
-          <div
-            className="fixed z-[100] no-drag min-w-[170px] rounded-lg border border-glass-border bg-liquid-bg/95 p-1 shadow-2xl backdrop-blur"
-            style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 190),
-              top: Math.min(contextMenu.y, window.innerHeight - 210),
-            }}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => handleContextAction(() => onCloseTab(contextMenuTab.id))}
-              disabled={tabs.length <= 1}
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+        {contextMenu &&
+          contextMenuTab &&
+          createPortal(
+            <div
+              className="fixed z-[100] no-drag min-w-[170px] rounded-lg border border-glass-border bg-liquid-bg/95 p-1 shadow-2xl backdrop-blur"
+              style={{
+                left: Math.min(contextMenu.x, window.innerWidth - 190),
+                top: Math.min(contextMenu.y, window.innerHeight - 210),
+              }}
+              onMouseDown={(event) => event.stopPropagation()}
             >
-              Close
-              <IconX size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                handleContextAction(() => onCloseOthers(contextMenuTab.id))
-              }
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
-            >
-              Close Others
-            </button>
-            <button
-              type="button"
-              onClick={() => handleContextAction(onCloseAll)}
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
-            >
-              Close All
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                handleContextAction(() => onTogglePinTab(contextMenuTab.id))
-              }
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
-            >
-              {contextMenuTab.pinned ? "Unpin Tab" : "Pin Tab"}
-              <IconPin size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                handleContextAction(() => onDuplicateTab(contextMenuTab.id))
-              }
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
-            >
-              Duplicate
-              <IconClipboardCopy size={13} />
-            </button>
-          </div>
-        )}
+              <button
+                type="button"
+                onClick={() =>
+                  handleContextAction(() => onCloseTab(contextMenuTab.id))
+                }
+                disabled={tabs.length <= 1}
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Close
+                <IconX size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleContextAction(() => onCloseOthers(contextMenuTab.id))
+                }
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
+              >
+                Close Others
+              </button>
+              <button
+                type="button"
+                onClick={() => handleContextAction(onCloseAll)}
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
+              >
+                Close All
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleContextAction(() => onTogglePinTab(contextMenuTab.id))
+                }
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
+              >
+                {contextMenuTab.pinned ? "Unpin Tab" : "Pin Tab"}
+                <IconPin size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleContextAction(() => onDuplicateTab(contextMenuTab.id))
+                }
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-glass-white hover:text-text-primary"
+              >
+                Duplicate
+                <IconClipboardCopy size={13} />
+              </button>
+            </div>,
+            document.body,
+          )}
       </div>
     </div>
   );
