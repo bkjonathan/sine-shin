@@ -27,3 +27,10 @@ export interface DashboardStats {
   total_customers: number;
   recent_orders: DashboardOrder[];
 }
+
+export interface DashboardDetailRecord {
+  order_id: string | null;
+  customer_name: string | null;
+  amount: number;
+  order_date: string | null;
+}

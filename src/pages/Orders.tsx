@@ -200,7 +200,7 @@ const hasOrderFormErrors = (errors: OrderFormErrors): boolean => {
 
 export default function Orders() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
-  const { navigateInTab } = useTabNavigation();
+  const { openTab } = useTabNavigation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -1588,9 +1588,7 @@ export default function Orders() {
                               animate={{ opacity: 1, scale: 1 }}
                               exit={{ opacity: 0, scale: 0.95 }}
                               className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
-                              onClick={() =>
-                                navigateInTab(`/orders/${order.id}`)
-                              }
+                              onClick={() => openTab(`/orders/${order.id}`)}
                             >
                               <div className="relative z-10">
                                 <div className="flex justify-between items-start mb-3">
@@ -1759,9 +1757,7 @@ export default function Orders() {
                                   initial={{ opacity: 0 }}
                                   animate={{ opacity: 1 }}
                                   exit={{ opacity: 0 }}
-                                  onClick={() =>
-                                    navigateInTab(`/orders/${order.id}`)
-                                  }
+                                  onClick={() => openTab(`/orders/${order.id}`)}
                                   className="group border-b border-glass-border/50 last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
                                 >
                                   <td

@@ -51,7 +51,11 @@ export default function AppLayout() {
 
   // One-way sync: tab store → URL bar (passive display only).
   // We never read location to drive tab state — the store is the single source of truth.
+  // We store `navigate` in a ref so the effect doesn't re-fire when the URL changes
+  // (useNavigate returns a new function identity on every location change).
   const lastNavigatedPathRef = useRef<string | null>(null);
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
 
   useEffect(() => {
     const targetPath = activeTab?.path ?? DEFAULT_TAB_PATH;
@@ -59,8 +63,8 @@ export default function AppLayout() {
       return;
     }
     lastNavigatedPathRef.current = targetPath;
-    navigate(targetPath, { replace: true });
-  }, [activeTab?.path, navigate]);
+    navigateRef.current(targetPath, { replace: true });
+  }, [activeTab?.path]);
 
   // Update tab titles when language changes.
   useEffect(() => {

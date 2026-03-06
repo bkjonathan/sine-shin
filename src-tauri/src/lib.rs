@@ -29,8 +29,9 @@ use crate::commands::expense::{
     update_expense,
 };
 use crate::commands::order::{
-    create_order, delete_order, get_customer_orders, get_dashboard_stats, get_order, get_orders,
-    get_orders_for_export, get_orders_paginated, update_order,
+    create_order, delete_order, get_customer_orders, get_dashboard_detail_records,
+    get_dashboard_stats, get_order, get_orders, get_orders_for_export, get_orders_paginated,
+    update_order,
 };
 use crate::commands::settings::{
     get_app_settings, get_aws_s3_connection_status, test_aws_s3_connection, update_app_settings,
@@ -267,6 +268,7 @@ pub fn run() {
             update_order,
             delete_order,
             get_dashboard_stats,
+            get_dashboard_detail_records,
             get_account_summary,
             get_app_settings,
             update_app_settings,

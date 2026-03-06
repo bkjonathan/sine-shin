@@ -5,8 +5,8 @@ use crate::db::{
     DEFAULT_ORDER_ID_PREFIX, ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
 };
 use crate::models::{
-    DashboardStats, OrderDetail, OrderExportRow, OrderItem, OrderItemPayload, OrderWithCustomer,
-    PaginatedOrders,
+    DashboardDetailRecord, DashboardStats, OrderDetail, OrderExportRow, OrderItem,
+    OrderItemPayload, OrderWithCustomer, PaginatedOrders,
 };
 use crate::state::AppDb;
 use crate::sync::enqueue_sync;
@@ -804,6 +804,123 @@ pub async fn get_dashboard_stats(
         total_customers: total_customers.0,
         recent_orders,
     })
+}
+
+#[tauri::command]
+pub async fn get_dashboard_detail_records(
+    app: AppHandle,
+    record_type: String,
+    date_from: Option<String>,
+    date_to: Option<String>,
+    date_field: Option<String>,
+    status: Option<String>,
+) -> Result<Vec<DashboardDetailRecord>, String> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await;
+
+    let col = match date_field.as_deref() {
+        Some("created_at") => "created_at",
+        _ => "order_date",
+    };
+
+    let has_range = date_from.is_some() && date_to.is_some();
+    let df = date_from.unwrap_or_default();
+    let dt = date_to.unwrap_or_default();
+    let normalized_status = normalize_order_status_filter(status)?;
+
+    let orders_where = |alias: &str| -> String {
+        let column_with_alias = |col_name: &str| -> String {
+            if alias.is_empty() {
+                col_name.to_string()
+            } else {
+                format!("{}.{}", alias, col_name)
+            }
+        };
+
+        let mut conditions = Vec::new();
+        conditions.push(format!("{} IS NULL", column_with_alias("deleted_at")));
+
+        if has_range {
+            let date_value = if col == "order_date" {
+                let order_date_col = column_with_alias("order_date");
+                let created_at_col = column_with_alias("created_at");
+                let normalized_order_date = normalize_sqlite_date_expr(&order_date_col);
+                let normalized_created_at = normalize_sqlite_date_expr(&created_at_col);
+                format!(
+                    "CASE \
+                        WHEN {order_date_col} IS NULL OR trim({order_date_col}) = '' THEN {normalized_created_at} \
+                        WHEN date({normalized_order_date}) IS NULL THEN {normalized_created_at} \
+                        WHEN date({normalized_order_date}) > date('{dt}') THEN {normalized_created_at} \
+                        ELSE {normalized_order_date} \
+                    END"
+                )
+            } else {
+                normalize_sqlite_date_expr(&column_with_alias(col))
+            };
+            conditions.push(format!(
+                "date({}) >= '{}' AND date({}) <= '{}'",
+                date_value, df, date_value, dt
+            ));
+        }
+
+        if let Some(s) = &normalized_status {
+            conditions.push(format!("{} = '{}'", column_with_alias("status"), s));
+        }
+
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+
+    let where_clause = orders_where("o");
+
+    let sql = match record_type.as_str() {
+        "profit" => format!(
+            r#"
+            SELECT
+                o.order_id,
+                c.name as customer_name,
+                (
+                    CASE
+                        WHEN o.service_fee_type = 'percent' THEN
+                            (SELECT COALESCE(SUM(price * product_qty), 0) FROM order_items WHERE order_id = o.id AND deleted_at IS NULL) * (COALESCE(o.service_fee, 0) / 100.0)
+                        ELSE
+                            COALESCE(o.service_fee, 0)
+                    END
+                    + COALESCE(o.product_discount, 0)
+                    + CASE WHEN o.shipping_fee_by_shop = 1 THEN COALESCE(o.shipping_fee, 0) ELSE 0 END
+                    + CASE WHEN o.delivery_fee_by_shop = 1 THEN COALESCE(o.delivery_fee, 0) ELSE 0 END
+                    + CASE WHEN o.cargo_fee_by_shop = 1 AND o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END
+                ) as amount,
+                o.order_date
+            FROM orders o
+            LEFT JOIN customers c ON o.customer_id = c.id
+            {}
+            ORDER BY o.created_at DESC
+            "#,
+            where_clause
+        ),
+        "cargo" => format!(
+            r#"
+            SELECT
+                o.order_id,
+                c.name as customer_name,
+                COALESCE(o.cargo_fee, 0) as amount,
+                o.order_date
+            FROM orders o
+            LEFT JOIN customers c ON o.customer_id = c.id
+            {} AND o.exclude_cargo_fee != 1 AND COALESCE(o.cargo_fee, 0) > 0
+            ORDER BY o.created_at DESC
+            "#,
+            where_clause
+        ),
+        _ => return Err("Invalid record_type. Must be 'profit' or 'cargo'.".to_string()),
+    };
+
+    let records = sqlx::query_as::<_, DashboardDetailRecord>(&sql)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(records)
 }
 
 #[tauri::command]

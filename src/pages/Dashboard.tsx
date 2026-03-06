@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { useTabNavigation } from "../hooks/useTabNavigation";
@@ -10,6 +11,7 @@ import DashboardHeader from "../components/pages/dashobard/DashboardHeader";
 import DashboardQuickActions from "../components/pages/dashobard/DashboardQuickActions";
 import DashboardRecentActivity from "../components/pages/dashobard/DashboardRecentActivity";
 import DashboardStatsGrid from "../components/pages/dashobard/DashboardStatsGrid";
+import DashboardRecordsModal from "../components/pages/dashobard/DashboardRecordsModal";
 import DashboardDateFilter, {
   computeRange,
   type DateFilterValue,
@@ -17,7 +19,11 @@ import DashboardDateFilter, {
 import DashboardStatusFilter, {
   DashboardStatus,
 } from "../components/pages/dashobard/DashboardStatusFilter";
-import { DashboardStats, ShopData } from "../types/dashboard";
+import {
+  DashboardDetailRecord,
+  DashboardStats,
+  ShopData,
+} from "../types/dashboard";
 
 // ── Animation variants ──
 const containerVariants = {
@@ -130,6 +136,7 @@ function DashboardSkeleton() {
 
 export default function Dashboard() {
   const { formatPrice } = useAppSettings();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { navigateInTab } = useTabNavigation();
   const { logout } = useAuth();
@@ -139,6 +146,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<DateFilterValue>(DEFAULT_FILTER);
   const [statusFilter, setStatusFilter] = useState<DashboardStatus>("all");
+
+  // Modal state for profit/cargo detail records
+  const [modalType, setModalType] = useState<"profit" | "cargo" | null>(null);
+  const [detailRecords, setDetailRecords] = useState<DashboardDetailRecord[]>(
+    [],
+  );
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const loadData = useCallback(
     async (f: DateFilterValue, s: DashboardStatus) => {
@@ -181,6 +195,33 @@ export default function Dashboard() {
     setFilter(newFilter);
   }, []);
 
+  const handleCardClick = useCallback(
+    async (key: string) => {
+      if (key !== "profit" && key !== "cargo") return;
+      setModalType(key);
+      setDetailLoading(true);
+      try {
+        const records = await invoke<DashboardDetailRecord[]>(
+          "get_dashboard_detail_records",
+          {
+            recordType: key,
+            dateFrom: filter.dateFrom || null,
+            dateTo: filter.dateTo || null,
+            dateField: filter.dateField,
+            status: statusFilter === "all" ? null : statusFilter,
+          },
+        );
+        setDetailRecords(records);
+      } catch (err) {
+        console.error("Failed to load detail records:", err);
+        setDetailRecords([]);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [filter, statusFilter],
+  );
+
   if (loading) {
     return <DashboardSkeleton />;
   }
@@ -220,7 +261,11 @@ export default function Dashboard() {
       </motion.div>
 
       <motion.div variants={itemVariants}>
-        <DashboardStatsGrid stats={stats} formatPrice={formatPrice} />
+        <DashboardStatsGrid
+          stats={stats}
+          formatPrice={formatPrice}
+          onCardClick={handleCardClick}
+        />
       </motion.div>
 
       {/* ── Two-column bottom section ── */}
@@ -238,6 +283,23 @@ export default function Dashboard() {
           <DashboardQuickActions onNavigate={(path) => navigateInTab(path)} />
         </motion.div>
       </div>
+
+      {/* Profit / Cargo detail records modal */}
+      <DashboardRecordsModal
+        isOpen={modalType !== null}
+        onClose={() => {
+          setModalType(null);
+          setDetailRecords([]);
+        }}
+        title={
+          modalType === "profit"
+            ? t("dashboard.profit_records_title")
+            : t("dashboard.cargo_records_title")
+        }
+        records={detailRecords}
+        loading={detailLoading}
+        formatPrice={formatPrice}
+      />
     </motion.div>
   );
 }

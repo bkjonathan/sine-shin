@@ -210,6 +210,14 @@ pub struct DashboardStats {
     pub recent_orders: Vec<OrderWithCustomer>,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct DashboardDetailRecord {
+    pub order_id: Option<String>,
+    pub customer_name: Option<String>,
+    pub amount: f64,
+    pub order_date: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AccountSummary {
     pub total_income: f64,
