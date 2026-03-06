@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
@@ -51,6 +51,26 @@ const DEFAULT_FILTER: DateFilterValue = {
   dateField: "order_date",
   preset: "this_month",
 };
+
+function buildDashboardFilterPayload(filter: DateFilterValue): {
+  dateFrom: string | null;
+  dateTo: string | null;
+  dateField: "order_date" | "created_at";
+} {
+  const dateFrom = (filter.dateFrom || "").trim();
+  const dateTo = (filter.dateTo || "").trim();
+  const dateField = filter.dateField === "created_at" ? "created_at" : "order_date";
+
+  if (!dateFrom || !dateTo) {
+    return { dateFrom: null, dateTo: null, dateField };
+  }
+
+  if (dateFrom <= dateTo) {
+    return { dateFrom, dateTo, dateField };
+  }
+
+  return { dateFrom: dateTo, dateTo: dateFrom, dateField };
+}
 
 // ── Shimmer Loading Skeleton ──
 function DashboardSkeleton() {
@@ -146,6 +166,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<DateFilterValue>(DEFAULT_FILTER);
   const [statusFilter, setStatusFilter] = useState<DashboardStatus>("all");
+  const loadRequestIdRef = useRef(0);
 
   // Modal state for profit/cargo detail records
   const [modalType, setModalType] = useState<
@@ -155,29 +176,35 @@ export default function Dashboard() {
     [],
   );
   const [detailLoading, setDetailLoading] = useState(false);
+  const detailRequestIdRef = useRef(0);
 
   const loadData = useCallback(
     async (f: DateFilterValue, s: DashboardStatus) => {
+      const requestId = ++loadRequestIdRef.current;
+      const payload = buildDashboardFilterPayload(f);
       try {
         setLoading(true);
         const [shopData, dashboardStats] = await Promise.all([
           invoke<ShopData>("get_shop_settings"),
           invoke<DashboardStats>("get_dashboard_stats", {
-            dateFrom: f.dateFrom || null,
-            dateTo: f.dateTo || null,
-            dateField: f.dateField,
+            dateFrom: payload.dateFrom,
+            dateTo: payload.dateTo,
+            dateField: payload.dateField,
             status: s === "all" ? null : s,
           }),
         ]);
 
+        if (requestId !== loadRequestIdRef.current) return;
         setShop(shopData);
         setStats(dashboardStats);
         setLogoSrc(
           shopData.logo_path ? convertFileSrc(shopData.logo_path) : "",
         );
       } catch (err) {
+        if (requestId !== loadRequestIdRef.current) return;
         console.error("Failed to load dashboard data:", err);
       } finally {
+        if (requestId !== loadRequestIdRef.current) return;
         setLoading(false);
       }
     },
@@ -207,23 +234,28 @@ export default function Dashboard() {
       )
         return;
       setModalType(key);
+      const requestId = ++detailRequestIdRef.current;
+      const payload = buildDashboardFilterPayload(filter);
       setDetailLoading(true);
       try {
         const records = await invoke<DashboardDetailRecord[]>(
           "get_dashboard_detail_records",
           {
             recordType: key,
-            dateFrom: filter.dateFrom || null,
-            dateTo: filter.dateTo || null,
-            dateField: filter.dateField,
+            dateFrom: payload.dateFrom,
+            dateTo: payload.dateTo,
+            dateField: payload.dateField,
             status: statusFilter === "all" ? null : statusFilter,
           },
         );
+        if (requestId !== detailRequestIdRef.current) return;
         setDetailRecords(records);
       } catch (err) {
+        if (requestId !== detailRequestIdRef.current) return;
         console.error("Failed to load detail records:", err);
         setDetailRecords([]);
       } finally {
+        if (requestId !== detailRequestIdRef.current) return;
         setDetailLoading(false);
       }
     },

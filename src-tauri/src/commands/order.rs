@@ -1,4 +1,6 @@
+use chrono::{DateTime, NaiveDate, NaiveDateTime};
 use sqlx::{QueryBuilder, Sqlite};
+use std::collections::HashSet;
 use tauri::{AppHandle, Manager};
 
 use crate::db::{
@@ -39,20 +41,146 @@ fn normalize_order_status_filter(status: Option<String>) -> Result<Option<String
     normalize_order_status(normalized)
 }
 
-fn normalize_sqlite_date_expr(column: &str) -> String {
-    // Convert common DMY import formats (DD/MM/YYYY or DD-MM-YYYY, optional time)
-    // into ISO-like strings before applying SQLite date() comparisons.
-    let trimmed = format!("trim({})", column);
-    format!(
-        "CASE \
-            WHEN {trimmed} = '' THEN NULL \
-            WHEN {trimmed} GLOB '[0-9][0-9]/[0-9][0-9]/[0-9][0-9][0-9][0-9]*' THEN \
-                substr({trimmed}, 7, 4) || '-' || substr({trimmed}, 4, 2) || '-' || substr({trimmed}, 1, 2) || substr({trimmed}, 11) \
-            WHEN {trimmed} GLOB '[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]*' THEN \
-                substr({trimmed}, 7, 4) || '-' || substr({trimmed}, 4, 2) || '-' || substr({trimmed}, 1, 2) || substr({trimmed}, 11) \
-            ELSE {trimmed} \
-        END"
-    )
+fn parse_flexible_date(value: Option<&str>) -> Option<NaiveDate> {
+    let raw = value?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+
+    if let Ok(parsed) = DateTime::parse_from_rfc3339(raw) {
+        return Some(parsed.date_naive());
+    }
+
+    const DATETIME_FORMATS: [&str; 12] = [
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M",
+        "%d/%m/%Y %H:%M:%S%.f",
+        "%d/%m/%Y %H:%M",
+        "%d-%m-%Y %H:%M:%S%.f",
+        "%d-%m-%Y %H:%M",
+        "%Y/%m/%d %H:%M:%S%.f",
+        "%Y/%m/%d %H:%M",
+        "%d.%m.%Y %H:%M:%S%.f",
+        "%d.%m.%Y %H:%M",
+    ];
+
+    for fmt in DATETIME_FORMATS {
+        if let Ok(parsed) = NaiveDateTime::parse_from_str(raw, fmt) {
+            return Some(parsed.date());
+        }
+    }
+
+    const DATE_FORMATS: [&str; 6] = [
+        "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%Y.%m.%d",
+    ];
+
+    for fmt in DATE_FORMATS {
+        if let Ok(parsed) = NaiveDate::parse_from_str(raw, fmt) {
+            return Some(parsed);
+        }
+    }
+
+    None
+}
+
+fn normalized_dashboard_date_field(date_field: Option<String>) -> &'static str {
+    match date_field.as_deref() {
+        Some("created_at") => "created_at",
+        _ => "order_date",
+    }
+}
+
+fn resolve_dashboard_comparison_date(
+    order: &OrderWithCustomer,
+    date_field: &str,
+    range_to: Option<NaiveDate>,
+) -> Option<NaiveDate> {
+    if date_field == "created_at" {
+        return parse_flexible_date(order.created_at.as_deref());
+    }
+
+    let order_date = parse_flexible_date(order.order_date.as_deref());
+    let created_at = parse_flexible_date(order.created_at.as_deref());
+
+    match order_date {
+        None => created_at,
+        Some(parsed_order_date) => {
+            if let Some(to) = range_to {
+                if parsed_order_date > to {
+                    return created_at;
+                }
+            }
+            Some(parsed_order_date)
+        }
+    }
+}
+
+fn matches_dashboard_date_range(
+    order: &OrderWithCustomer,
+    date_field: &str,
+    range_from: Option<NaiveDate>,
+    range_to: Option<NaiveDate>,
+) -> bool {
+    if range_from.is_none() && range_to.is_none() {
+        return true;
+    }
+
+    let Some(comparison_date) = resolve_dashboard_comparison_date(order, date_field, range_to) else {
+        return false;
+    };
+
+    if let Some(from) = range_from {
+        if comparison_date < from {
+            return false;
+        }
+    }
+
+    if let Some(to) = range_to {
+        if comparison_date > to {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn calculate_dashboard_profit(order: &OrderWithCustomer) -> f64 {
+    let total_price = order.total_price.unwrap_or(0.0);
+    let service_fee = order.service_fee.unwrap_or(0.0);
+    let service_fee_amount = if order.service_fee_type.as_deref() == Some("percent") {
+        total_price * (service_fee / 100.0)
+    } else {
+        service_fee
+    };
+
+    let product_discount = order.product_discount.unwrap_or(0.0);
+    let shipping_fee = if order.shipping_fee_by_shop.unwrap_or(false) {
+        order.shipping_fee.unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    let delivery_fee = if order.delivery_fee_by_shop.unwrap_or(false) {
+        order.delivery_fee.unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    let cargo_fee = if order.cargo_fee_by_shop.unwrap_or(false) && !order.exclude_cargo_fee.unwrap_or(false) {
+        order.cargo_fee.unwrap_or(0.0)
+    } else {
+        0.0
+    };
+
+    service_fee_amount + product_discount + shipping_fee + delivery_fee + cargo_fee
+}
+
+fn calculate_effective_cargo_fee(order: &OrderWithCustomer) -> f64 {
+    if order.exclude_cargo_fee.unwrap_or(false) {
+        return 0.0;
+    }
+
+    order.cargo_fee.unwrap_or(0.0)
 }
 
 #[tauri::command]
@@ -667,163 +795,87 @@ pub async fn get_dashboard_stats(
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    // Validate date_field — only allow "order_date" or "created_at"
-    let col = match date_field.as_deref() {
-        Some("created_at") => "created_at",
-        _ => "order_date", // default
+    let selected_date_field = normalized_dashboard_date_field(date_field);
+    let df = date_from.unwrap_or_default().trim().to_string();
+    let dt = date_to.unwrap_or_default().trim().to_string();
+    let has_range = !df.is_empty() && !dt.is_empty();
+    let range_from = if has_range {
+        parse_flexible_date(Some(&df)).ok_or_else(|| "Invalid date_from".to_string())?
+    } else {
+        NaiveDate::from_ymd_opt(1970, 1, 1).ok_or_else(|| "Invalid range start".to_string())?
     };
-
-    let has_range = date_from.is_some() && date_to.is_some();
-    let df = date_from.unwrap_or_default();
-    let dt = date_to.unwrap_or_default();
+    let range_to = if has_range {
+        parse_flexible_date(Some(&dt)).ok_or_else(|| "Invalid date_to".to_string())?
+    } else {
+        NaiveDate::from_ymd_opt(2999, 12, 31).ok_or_else(|| "Invalid range end".to_string())?
+    };
+    let range_from_opt = if has_range { Some(range_from) } else { None };
+    let range_to_opt = if has_range { Some(range_to) } else { None };
     let normalized_status = normalize_order_status_filter(status)?;
-    let column_with_alias = |alias: &str, column: &str| -> String {
-        if alias.is_empty() {
-            column.to_string()
-        } else {
-            format!("{}.{}", alias, column)
-        }
-    };
-
-    // Helper: build a WHERE clause fragment for the orders table
-    let orders_where = |alias: &str| -> String {
-        let mut conditions = Vec::new();
-        conditions.push(format!("{} IS NULL", column_with_alias(alias, "deleted_at")));
-
-        if has_range {
-            let date_value = if col == "order_date" {
-                let order_date_col = column_with_alias(alias, "order_date");
-                let created_at_col = column_with_alias(alias, "created_at");
-                let normalized_order_date = normalize_sqlite_date_expr(&order_date_col);
-                let normalized_created_at = normalize_sqlite_date_expr(&created_at_col);
-                // If order_date is set in the future, use created_at so newly-created
-                // orders are still included in current-period dashboard stats.
-                format!(
-                    "CASE \
-                        WHEN {order_date_col} IS NULL OR trim({order_date_col}) = '' THEN {normalized_created_at} \
-                        WHEN date({normalized_order_date}) IS NULL THEN {normalized_created_at} \
-                        WHEN date({normalized_order_date}) > date('{dt}') THEN {normalized_created_at} \
-                        ELSE {normalized_order_date} \
-                    END"
-                )
-            } else {
-                normalize_sqlite_date_expr(&column_with_alias(alias, col))
-            };
-            conditions.push(format!(
-                "date({}) >= '{}' AND date({}) <= '{}'",
-                date_value, df, date_value, dt
-            ));
-        }
-
-        if let Some(s) = &normalized_status {
-            conditions.push(format!("{} = '{}'", column_with_alias(alias, "status"), s));
-        }
-
-        format!(" WHERE {}", conditions.join(" AND "))
-    };
-
-    // 1) Total revenue
-    let revenue_where = orders_where("o");
-    let revenue_sql = format!(
-        "SELECT COALESCE(SUM(oi.price * oi.product_qty), 0.0) FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id AND oi.deleted_at IS NULL{}",
-        revenue_where
-    );
-    let total_revenue: (f64,) = sqlx::query_as(&revenue_sql)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 2) Total profit
-    let profit_where = orders_where("");
-    let profit_sql = format!(
-        r#"
-        SELECT COALESCE(SUM(
-            CASE 
-                WHEN service_fee_type = 'percent' THEN 
-                    (SELECT COALESCE(SUM(price * product_qty), 0) FROM order_items WHERE order_id = orders.id AND deleted_at IS NULL) * (COALESCE(service_fee, 0) / 100.0)
-                ELSE 
-                    COALESCE(service_fee, 0)
-            END
-            + COALESCE(product_discount, 0)
-            + CASE WHEN shipping_fee_by_shop = 1 THEN COALESCE(shipping_fee, 0) ELSE 0 END
-            + CASE WHEN delivery_fee_by_shop = 1 THEN COALESCE(delivery_fee, 0) ELSE 0 END
-            + CASE WHEN cargo_fee_by_shop = 1 AND exclude_cargo_fee != 1 THEN COALESCE(cargo_fee, 0) ELSE 0 END
-        ), 0.0)
-        FROM orders{}
-        "#,
-        profit_where
-    );
-    let total_profit: (f64,) = sqlx::query_as(&profit_sql)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 3) Total orders
-    let orders_count_sql = format!("SELECT COUNT(*) FROM orders{}", orders_where(""));
-    let total_orders: (i64,) = sqlx::query_as(&orders_count_sql)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 4) Total customers
-    let customers_sql = format!(
-        "SELECT COUNT(DISTINCT customer_id) FROM orders{}",
-        orders_where("")
-    );
-    let total_customers: (i64,) = sqlx::query_as(&customers_sql)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 5) Total cargo fee
-    let cargo_sql = format!(
-        "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 THEN cargo_fee ELSE 0 END), 0.0) FROM orders{}", 
-        orders_where("")
-    );
-    let total_cargo_fee: (f64,) = sqlx::query_as(&cargo_sql)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 5.1) Paid cargo fee
-    let paid_cargo_sql = format!(
-        "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 AND cargo_fee_paid = 1 THEN cargo_fee ELSE 0 END), 0.0) FROM orders{}", 
-        orders_where("")
-    );
-    let paid_cargo_fee: (f64,) = sqlx::query_as(&paid_cargo_sql)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 5.2) Unpaid cargo fee
-    let unpaid_cargo_sql = format!(
-        "SELECT COALESCE(SUM(CASE WHEN exclude_cargo_fee != 1 AND (cargo_fee_paid = 0 OR cargo_fee_paid IS NULL) THEN cargo_fee ELSE 0 END), 0.0) FROM orders{}", 
-        orders_where("")
-    );
-    let unpaid_cargo_fee: (f64,) = sqlx::query_as(&unpaid_cargo_sql)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 6) Recent orders
-    let recent_where = orders_where("o");
     let query = format!(
-        "{}{} {} ORDER BY o.created_at DESC LIMIT 5",
-        ORDER_WITH_CUSTOMER_SELECT, recent_where, ORDER_WITH_CUSTOMER_GROUP_BY
+        "{} WHERE o.deleted_at IS NULL {} ORDER BY o.created_at DESC, o.id DESC",
+        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let recent_orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
+    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
         .fetch_all(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
+    let mut total_revenue = 0.0;
+    let mut total_profit = 0.0;
+    let mut total_cargo_fee = 0.0;
+    let mut paid_cargo_fee = 0.0;
+    let mut unpaid_cargo_fee = 0.0;
+    let mut total_orders = 0_i64;
+    let mut unique_customers = HashSet::<i64>::new();
+    let mut recent_orders = Vec::<OrderWithCustomer>::new();
+
+    for order in orders {
+        if let Some(expected_status) = normalized_status.as_deref() {
+            let status_value = order.status.as_deref().unwrap_or("").trim().to_lowercase();
+            if status_value != expected_status {
+                continue;
+            }
+        }
+
+        if !matches_dashboard_date_range(&order, selected_date_field, range_from_opt, range_to_opt) {
+            continue;
+        }
+
+        total_orders += 1;
+        if let Some(customer_id) = order.customer_id {
+            unique_customers.insert(customer_id);
+        }
+
+        let revenue = order.total_price.unwrap_or(0.0);
+        let profit = calculate_dashboard_profit(&order);
+        let cargo_fee = calculate_effective_cargo_fee(&order);
+
+        total_revenue += revenue;
+        total_profit += profit;
+        total_cargo_fee += cargo_fee;
+
+        if cargo_fee > 0.0 {
+            if order.cargo_fee_paid.unwrap_or(false) {
+                paid_cargo_fee += cargo_fee;
+            } else {
+                unpaid_cargo_fee += cargo_fee;
+            }
+        }
+
+        if recent_orders.len() < 5 {
+            recent_orders.push(order);
+        }
+    }
+
     Ok(DashboardStats {
-        total_revenue: total_revenue.0,
-        total_profit: total_profit.0,
-        total_cargo_fee: total_cargo_fee.0,
-        paid_cargo_fee: paid_cargo_fee.0,
-        unpaid_cargo_fee: unpaid_cargo_fee.0,
-        total_orders: total_orders.0,
-        total_customers: total_customers.0,
+        total_revenue,
+        total_profit,
+        total_cargo_fee,
+        paid_cargo_fee,
+        unpaid_cargo_fee,
+        total_orders,
+        total_customers: unique_customers.len() as i64,
         recent_orders,
     })
 }
@@ -840,135 +892,94 @@ pub async fn get_dashboard_detail_records(
     let db = app.state::<AppDb>();
     let pool = db.0.lock().await;
 
-    let col = match date_field.as_deref() {
-        Some("created_at") => "created_at",
-        _ => "order_date",
+    let selected_date_field = normalized_dashboard_date_field(date_field);
+    let df = date_from.unwrap_or_default().trim().to_string();
+    let dt = date_to.unwrap_or_default().trim().to_string();
+    let has_range = !df.is_empty() && !dt.is_empty();
+    let range_from = if has_range {
+        parse_flexible_date(Some(&df)).ok_or_else(|| "Invalid date_from".to_string())?
+    } else {
+        NaiveDate::from_ymd_opt(1970, 1, 1).ok_or_else(|| "Invalid range start".to_string())?
     };
-
-    let has_range = date_from.is_some() && date_to.is_some();
-    let df = date_from.unwrap_or_default();
-    let dt = date_to.unwrap_or_default();
+    let range_to = if has_range {
+        parse_flexible_date(Some(&dt)).ok_or_else(|| "Invalid date_to".to_string())?
+    } else {
+        NaiveDate::from_ymd_opt(2999, 12, 31).ok_or_else(|| "Invalid range end".to_string())?
+    };
+    let range_from_opt = if has_range { Some(range_from) } else { None };
+    let range_to_opt = if has_range { Some(range_to) } else { None };
     let normalized_status = normalize_order_status_filter(status)?;
+    if !matches!(
+        record_type.as_str(),
+        "profit" | "cargo" | "paid_cargo" | "unpaid_cargo"
+    ) {
+        return Err(
+            "Invalid record_type. Must be 'profit', 'cargo', 'paid_cargo', or 'unpaid_cargo'."
+                .to_string(),
+        );
+    }
 
-    let orders_where = |alias: &str| -> String {
-        let column_with_alias = |col_name: &str| -> String {
-            if alias.is_empty() {
-                col_name.to_string()
-            } else {
-                format!("{}.{}", alias, col_name)
-            }
-        };
-
-        let mut conditions = Vec::new();
-        conditions.push(format!("{} IS NULL", column_with_alias("deleted_at")));
-
-        if has_range {
-            let date_value = if col == "order_date" {
-                let order_date_col = column_with_alias("order_date");
-                let created_at_col = column_with_alias("created_at");
-                let normalized_order_date = normalize_sqlite_date_expr(&order_date_col);
-                let normalized_created_at = normalize_sqlite_date_expr(&created_at_col);
-                format!(
-                    "CASE \
-                        WHEN {order_date_col} IS NULL OR trim({order_date_col}) = '' THEN {normalized_created_at} \
-                        WHEN date({normalized_order_date}) IS NULL THEN {normalized_created_at} \
-                        WHEN date({normalized_order_date}) > date('{dt}') THEN {normalized_created_at} \
-                        ELSE {normalized_order_date} \
-                    END"
-                )
-            } else {
-                normalize_sqlite_date_expr(&column_with_alias(col))
-            };
-            conditions.push(format!(
-                "date({}) >= '{}' AND date({}) <= '{}'",
-                date_value, df, date_value, dt
-            ));
-        }
-
-        if let Some(s) = &normalized_status {
-            conditions.push(format!("{} = '{}'", column_with_alias("status"), s));
-        }
-
-        format!(" WHERE {}", conditions.join(" AND "))
-    };
-
-    let where_clause = orders_where("o");
-
-    let sql = match record_type.as_str() {
-        "profit" => format!(
-            r#"
-            SELECT
-                o.order_id,
-                c.name as customer_name,
-                (
-                    CASE
-                        WHEN o.service_fee_type = 'percent' THEN
-                            (SELECT COALESCE(SUM(price * product_qty), 0) FROM order_items WHERE order_id = o.id AND deleted_at IS NULL) * (COALESCE(o.service_fee, 0) / 100.0)
-                        ELSE
-                            COALESCE(o.service_fee, 0)
-                    END
-                    + COALESCE(o.product_discount, 0)
-                    + CASE WHEN o.shipping_fee_by_shop = 1 THEN COALESCE(o.shipping_fee, 0) ELSE 0 END
-                    + CASE WHEN o.delivery_fee_by_shop = 1 THEN COALESCE(o.delivery_fee, 0) ELSE 0 END
-                    + CASE WHEN o.cargo_fee_by_shop = 1 AND o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END
-                ) as amount,
-                o.order_date
-            FROM orders o
-            LEFT JOIN customers c ON o.customer_id = c.id
-            {}
-            ORDER BY o.created_at DESC
-            "#,
-            where_clause
-        ),
-        "cargo" => format!(
-            r#"
-            SELECT
-                o.order_id,
-                c.name as customer_name,
-                COALESCE(o.cargo_fee, 0) as amount,
-                o.order_date
-            FROM orders o
-            LEFT JOIN customers c ON o.customer_id = c.id
-            {} AND o.exclude_cargo_fee != 1 AND COALESCE(o.cargo_fee, 0) > 0
-            ORDER BY o.created_at DESC
-            "#,
-            where_clause
-        ),
-        "paid_cargo" => format!(
-            r#"
-            SELECT
-                o.order_id,
-                c.name as customer_name,
-                COALESCE(o.cargo_fee, 0) as amount,
-                o.order_date
-            FROM orders o
-            LEFT JOIN customers c ON o.customer_id = c.id
-            {} AND o.exclude_cargo_fee != 1 AND o.cargo_fee_paid = 1 AND COALESCE(o.cargo_fee, 0) > 0
-            ORDER BY o.created_at DESC
-            "#,
-            where_clause
-        ),
-        "unpaid_cargo" => format!(
-            r#"
-            SELECT
-                o.order_id,
-                c.name as customer_name,
-                COALESCE(o.cargo_fee, 0) as amount,
-                o.order_date
-            FROM orders o
-            LEFT JOIN customers c ON o.customer_id = c.id
-            {} AND o.exclude_cargo_fee != 1 AND (o.cargo_fee_paid = 0 OR o.cargo_fee_paid IS NULL) AND COALESCE(o.cargo_fee, 0) > 0
-            ORDER BY o.created_at DESC
-            "#,
-            where_clause
-        ),
-        _ => return Err("Invalid record_type. Must be 'profit', 'cargo', 'paid_cargo', or 'unpaid_cargo'.".to_string()),
-    };
-
-    let records = sqlx::query_as::<_, DashboardDetailRecord>(&sql)
+    let query = format!(
+        "{} WHERE o.deleted_at IS NULL {} ORDER BY o.created_at DESC, o.id DESC",
+        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+    );
+    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
         .fetch_all(&*pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    let mut records = Vec::<DashboardDetailRecord>::new();
+
+    for order in orders {
+        if let Some(expected_status) = normalized_status.as_deref() {
+            let status_value = order.status.as_deref().unwrap_or("").trim().to_lowercase();
+            if status_value != expected_status {
+                continue;
+            }
+        }
+
+        if !matches_dashboard_date_range(&order, selected_date_field, range_from_opt, range_to_opt) {
+            continue;
+        }
+
+        let effective_cargo_fee = calculate_effective_cargo_fee(&order);
+        let amount = match record_type.as_str() {
+            "profit" => calculate_dashboard_profit(&order),
+            "cargo" => effective_cargo_fee,
+            "paid_cargo" => {
+                if order.cargo_fee_paid.unwrap_or(false) {
+                    effective_cargo_fee
+                } else {
+                    0.0
+                }
+            }
+            "unpaid_cargo" => {
+                if order.cargo_fee_paid.unwrap_or(false) {
+                    0.0
+                } else {
+                    effective_cargo_fee
+                }
+            }
+            _ => 0.0,
+        };
+
+        if amount <= 0.0 {
+            continue;
+        }
+
+        let display_date = if selected_date_field == "created_at" {
+            order.created_at.clone()
+        } else {
+            order.order_date.clone().or(order.created_at.clone())
+        };
+
+        records.push(DashboardDetailRecord {
+            order_id: order.order_id.clone(),
+            customer_name: order.customer_name.clone(),
+            amount,
+            order_date: display_date,
+        });
+    }
 
     Ok(records)
 }

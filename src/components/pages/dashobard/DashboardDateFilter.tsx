@@ -37,7 +37,6 @@ function computeRange(preset: DatePreset): {
   dateTo: string;
 } {
   const today = new Date();
-  const dateTo = formatDate(today);
 
   switch (preset) {
     case "this_week": {
@@ -45,29 +44,48 @@ function computeRange(preset: DatePreset): {
       const diff = day === 0 ? 6 : day - 1;
       const monday = new Date(today);
       monday.setDate(today.getDate() - diff);
-      return { dateFrom: formatDate(monday), dateTo };
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      return { dateFrom: formatDate(monday), dateTo: formatDate(sunday) };
     }
     case "this_month": {
       const first = new Date(today.getFullYear(), today.getMonth(), 1);
-      return { dateFrom: formatDate(first), dateTo };
+      const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      return { dateFrom: formatDate(first), dateTo: formatDate(last) };
     }
     case "three_months": {
-      const d = new Date(today);
-      d.setMonth(d.getMonth() - 3);
-      return { dateFrom: formatDate(d), dateTo };
+      const first = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+      const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      return { dateFrom: formatDate(first), dateTo: formatDate(last) };
     }
     case "six_months": {
-      const d = new Date(today);
-      d.setMonth(d.getMonth() - 6);
-      return { dateFrom: formatDate(d), dateTo };
+      const first = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+      const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      return { dateFrom: formatDate(first), dateTo: formatDate(last) };
     }
     case "this_year": {
       const first = new Date(today.getFullYear(), 0, 1);
-      return { dateFrom: formatDate(first), dateTo };
+      const last = new Date(today.getFullYear(), 11, 31);
+      return { dateFrom: formatDate(first), dateTo: formatDate(last) };
     }
     default:
       return { dateFrom: "", dateTo: "" };
   }
+}
+
+function normalizeDateRange(dateFrom: string, dateTo: string): {
+  dateFrom: string;
+  dateTo: string;
+} {
+  if (!dateFrom || !dateTo) {
+    return { dateFrom, dateTo };
+  }
+
+  if (dateFrom <= dateTo) {
+    return { dateFrom, dateTo };
+  }
+
+  return { dateFrom: dateTo, dateTo: dateFrom };
 }
 
 const PRESETS: DatePreset[] = [
@@ -102,9 +120,10 @@ export default function DashboardDateFilter({
         return;
       }
       const range = computeRange(preset);
+      const normalizedRange = normalizeDateRange(range.dateFrom, range.dateTo);
       onChange({
-        dateFrom: range.dateFrom,
-        dateTo: range.dateTo,
+        dateFrom: normalizedRange.dateFrom,
+        dateTo: normalizedRange.dateTo,
         dateField: value.dateField,
         preset,
       });
@@ -117,7 +136,8 @@ export default function DashboardDateFilter({
       setFieldOpen(false);
       if (value.preset !== "custom") {
         const range = computeRange(value.preset);
-        onChange({ ...range, dateField: field, preset: value.preset });
+        const normalizedRange = normalizeDateRange(range.dateFrom, range.dateTo);
+        onChange({ ...normalizedRange, dateField: field, preset: value.preset });
       } else {
         onChange({ ...value, dateField: field });
       }
@@ -128,7 +148,14 @@ export default function DashboardDateFilter({
   const handleCustomFrom = useCallback(
     (date: Date | null) => {
       if (!date) return;
-      onChange({ ...value, dateFrom: formatDate(date), preset: "custom" });
+      const nextFrom = formatDate(date);
+      const normalizedRange = normalizeDateRange(nextFrom, value.dateTo);
+      onChange({
+        ...value,
+        dateFrom: normalizedRange.dateFrom,
+        dateTo: normalizedRange.dateTo,
+        preset: "custom",
+      });
     },
     [onChange, value],
   );
@@ -136,7 +163,14 @@ export default function DashboardDateFilter({
   const handleCustomTo = useCallback(
     (date: Date | null) => {
       if (!date) return;
-      onChange({ ...value, dateTo: formatDate(date), preset: "custom" });
+      const nextTo = formatDate(date);
+      const normalizedRange = normalizeDateRange(value.dateFrom, nextTo);
+      onChange({
+        ...value,
+        dateFrom: normalizedRange.dateFrom,
+        dateTo: normalizedRange.dateTo,
+        preset: "custom",
+      });
     },
     [onChange, value],
   );
