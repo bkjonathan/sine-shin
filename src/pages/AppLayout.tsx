@@ -7,6 +7,7 @@ import AppSidebarDragRegion from "../components/app-layout/AppSidebarDragRegion"
 import AppSidebarUser from "../components/app-layout/AppSidebarUser";
 import AppTabRoutes from "../components/app-layout/AppTabRoutes";
 import AppTitleBar from "../components/app-layout/AppTitleBar";
+import { TabPanelActivityProvider } from "../context/TabPanelActivityContext";
 import { useSound } from "../context/SoundContext";
 import { type Tab, useTabStore } from "../stores/tabStore";
 import { getRouteLabel, DEFAULT_TAB_PATH } from "../utils/tabRoutes";
@@ -14,12 +15,14 @@ import { version } from "../../package.json";
 
 function KeepAliveTabPanel({ tab, isActive }: { tab: Tab; isActive: boolean }) {
   return (
-    <div
-      style={{ display: isActive ? "block" : "none" }}
-      className="h-full overflow-y-auto overflow-x-hidden"
-    >
-      <AppTabRoutes locationPath={tab.path} />
-    </div>
+    <TabPanelActivityProvider isActive={isActive}>
+      <div
+        style={{ display: isActive ? "block" : "none" }}
+        className="h-full overflow-y-auto overflow-x-hidden"
+      >
+        <AppTabRoutes locationPath={tab.path} />
+      </div>
+    </TabPanelActivityProvider>
   );
 }
 

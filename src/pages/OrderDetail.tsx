@@ -12,7 +12,6 @@ import { toPng } from "html-to-image";
 import { MYANMAR_FONT_EMBED_CSS } from "../assets/fonts/myanmar-fonts";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
 import { formatDate } from "../utils/date";
 import QRCode from "qrcode";
 import DatePicker from "../components/ui/DatePicker";
@@ -27,6 +26,11 @@ import OrderInvoicePrintLayout from "../components/pages/order-detail/OrderInvoi
 import OrderInvoiceDownloadTemplate from "../components/pages/order-detail/OrderInvoiceDownloadTemplate";
 import { useTabNavigation } from "../hooks/useTabNavigation";
 import { IconCheck, IconCircle, IconEdit, IconX } from "../components/icons";
+import {
+  pageContainerRelaxedVariants,
+  pageItemLargeVariants,
+} from "../constants/animations";
+import { printInvoiceDirect, printWindow } from "../api/printApi";
 
 const ORDER_STATUS_OPTIONS: OrderStatus[] = [
   "pending",
@@ -35,6 +39,55 @@ const ORDER_STATUS_OPTIONS: OrderStatus[] = [
   "completed",
   "cancelled",
 ];
+
+type OrderUpdatePayload = Parameters<typeof updateOrder>[0];
+type OrderUpdateFieldValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | OrderUpdatePayload["items"];
+type MutableOrderUpdatePayload = OrderUpdatePayload &
+  Record<string, OrderUpdateFieldValue>;
+
+const buildOrderUpdatePayload = (
+  detail: OrderDetailType,
+): MutableOrderUpdatePayload => {
+  const { order, items } = detail;
+
+  return {
+    id: order.id,
+    customer_id: order.customer_id,
+    status: order.status || "pending",
+    order_from: order.order_from,
+    items: items.map((item) => ({
+      product_url: item.product_url,
+      product_qty: item.product_qty,
+      price: item.price,
+      product_weight: item.product_weight,
+    })),
+    exchange_rate: order.exchange_rate,
+    shipping_fee: order.shipping_fee,
+    delivery_fee: order.delivery_fee,
+    cargo_fee: order.cargo_fee,
+    order_date: order.order_date,
+    arrived_date: order.arrived_date,
+    shipment_date: order.shipment_date,
+    user_withdraw_date: order.user_withdraw_date,
+    service_fee: order.service_fee,
+    product_discount: order.product_discount,
+    service_fee_type: order.service_fee_type,
+    shipping_fee_paid: order.shipping_fee_paid,
+    delivery_fee_paid: order.delivery_fee_paid,
+    cargo_fee_paid: order.cargo_fee_paid,
+    service_fee_paid: order.service_fee_paid,
+    shipping_fee_by_shop: order.shipping_fee_by_shop,
+    delivery_fee_by_shop: order.delivery_fee_by_shop,
+    cargo_fee_by_shop: order.cargo_fee_by_shop,
+    exclude_cargo_fee: order.exclude_cargo_fee,
+  };
+};
 
 const preloadImage = async (src: string): Promise<void> => {
   await new Promise<void>((resolve) => {
@@ -360,18 +413,17 @@ export default function OrderDetail({ id }: OrderDetailProps) {
 
       if (silent_invoice_print) {
         const bytes = await captureInvoicePngBytes(invoiceRef);
-        await invoke("print_invoice_direct", {
-          bytes: Array.from(bytes),
-          printerName:
-            invoice_printer_name.trim().length > 0
-              ? invoice_printer_name.trim()
-              : null,
-        });
+        await printInvoiceDirect(
+          Array.from(bytes),
+          invoice_printer_name.trim().length > 0
+            ? invoice_printer_name.trim()
+            : null,
+        );
         playSound("success");
         return;
       }
 
-      await invoke("print_window");
+      await printWindow();
     } catch (error) {
       console.error("Failed to print:", error);
       window.print();
@@ -409,7 +461,7 @@ export default function OrderDetail({ id }: OrderDetailProps) {
     try {
       setIsUpdating(true);
 
-      const { order, items } = orderDetail;
+      const { order } = orderDetail;
 
       // Determine field type for update parsing
       const isDateField = [
@@ -437,34 +489,7 @@ export default function OrderDetail({ id }: OrderDetailProps) {
         if (isNaN(newValue)) newValue = 0;
       }
 
-      // Construct the update payload
-      const updatedOrder: any = {
-        id: order.id,
-        customer_id: order.customer_id,
-        status: order.status || "pending",
-        order_from: order.order_from,
-        items: items.map((item) => ({
-          product_url: item.product_url,
-          product_qty: item.product_qty,
-          price: item.price,
-          product_weight: item.product_weight,
-        })),
-        exchange_rate: order.exchange_rate,
-        shipping_fee: order.shipping_fee,
-        delivery_fee: order.delivery_fee,
-        cargo_fee: order.cargo_fee,
-        order_date: order.order_date,
-        arrived_date: order.arrived_date,
-        shipment_date: order.shipment_date,
-        user_withdraw_date: order.user_withdraw_date,
-        service_fee: order.service_fee,
-        product_discount: order.product_discount,
-        service_fee_type: order.service_fee_type,
-        shipping_fee_paid: order.shipping_fee_paid,
-        delivery_fee_paid: order.delivery_fee_paid,
-        cargo_fee_paid: order.cargo_fee_paid,
-        service_fee_paid: order.service_fee_paid,
-      };
+      const updatedOrder = buildOrderUpdatePayload(orderDetail);
 
       // Update the specific field
       updatedOrder[editingField] = newValue;
@@ -493,21 +518,6 @@ export default function OrderDetail({ id }: OrderDetailProps) {
   const handleBack = () => {
     playSound("click");
     navigateInTab("/orders");
-  };
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
   };
 
   if (loading) {
@@ -695,38 +705,8 @@ export default function OrderDetail({ id }: OrderDetailProps) {
     if (!orderDetail) return;
     try {
       setIsUpdating(true);
-      const { order, items } = orderDetail;
-      const updatedOrder: any = {
-        id: order.id,
-        customer_id: order.customer_id,
-        status: order.status || "pending",
-        order_from: order.order_from,
-        items: items.map((item) => ({
-          product_url: item.product_url,
-          product_qty: item.product_qty,
-          price: item.price,
-          product_weight: item.product_weight,
-        })),
-        exchange_rate: order.exchange_rate,
-        shipping_fee: order.shipping_fee,
-        delivery_fee: order.delivery_fee,
-        cargo_fee: order.cargo_fee,
-        order_date: order.order_date,
-        arrived_date: order.arrived_date,
-        shipment_date: order.shipment_date,
-        user_withdraw_date: order.user_withdraw_date,
-        service_fee: order.service_fee,
-        product_discount: order.product_discount,
-        service_fee_type: order.service_fee_type,
-        shipping_fee_paid: order.shipping_fee_paid,
-        delivery_fee_paid: order.delivery_fee_paid,
-        cargo_fee_paid: order.cargo_fee_paid,
-        service_fee_paid: order.service_fee_paid,
-        shipping_fee_by_shop: order.shipping_fee_by_shop,
-        delivery_fee_by_shop: order.delivery_fee_by_shop,
-        cargo_fee_by_shop: order.cargo_fee_by_shop,
-        exclude_cargo_fee: order.exclude_cargo_fee,
-      };
+      const { order } = orderDetail;
+      const updatedOrder = buildOrderUpdatePayload(orderDetail);
       updatedOrder[feePaidField] = !currentValue;
       await updateOrder(updatedOrder);
       await loadData(order.id);
@@ -872,12 +852,12 @@ export default function OrderDetail({ id }: OrderDetailProps) {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <motion.div
-        variants={containerVariants}
+        variants={pageContainerRelaxedVariants}
         initial="hidden"
         animate="visible"
         className="space-y-6"
       >
-        <motion.div variants={itemVariants}>
+        <motion.div variants={pageItemLargeVariants}>
           <OrderDetailHeader
             orderDisplayId={order.order_id || order.id}
             createdAt={order.created_at}
@@ -933,7 +913,7 @@ export default function OrderDetail({ id }: OrderDetailProps) {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <motion.div
-            variants={itemVariants}
+            variants={pageItemLargeVariants}
             className="lg:col-span-2 space-y-6"
           >
             <OrderDetailCustomerCard
@@ -956,7 +936,7 @@ export default function OrderDetail({ id }: OrderDetailProps) {
             />
           </motion.div>
 
-          <motion.div variants={itemVariants} className="space-y-6">
+          <motion.div variants={pageItemLargeVariants} className="space-y-6">
             <OrderDetailStatusCard
               status={order.status}
               renderEditableStatus={renderEditableStatus}

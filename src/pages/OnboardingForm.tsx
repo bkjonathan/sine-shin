@@ -1,9 +1,20 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
+import { registerUser } from "../api/authApi";
+import {
+  restoreDatabase,
+  saveShopSetup,
+  updateAppLanguage,
+  updateOnboardingTheme,
+} from "../api/onboardingApi";
+import {
+  onboardingSlideTransition,
+  onboardingSlideVariants,
+} from "../constants/animations";
 import { useTheme } from "../context/ThemeContext";
 import OnboardingLanguageSwitcher from "../components/pages/onboarding/OnboardingLanguageSwitcher";
 import OnboardingStepIndicators from "../components/pages/onboarding/OnboardingStepIndicators";
@@ -13,11 +24,7 @@ import OnboardingStepDetails from "../components/pages/onboarding/OnboardingStep
 import OnboardingStepLogo from "../components/pages/onboarding/OnboardingStepLogo";
 import OnboardingStepAccount from "../components/pages/onboarding/OnboardingStepAccount";
 import OnboardingStepActions from "../components/pages/onboarding/OnboardingStepActions";
-import {
-  slideTransition,
-  slideVariants,
-} from "../components/pages/onboarding/animations";
-import { OnboardingAppSettings, OnboardingStep } from "../types/onboarding";
+import { OnboardingStep } from "../types/onboarding";
 
 const LAST_STEP: OnboardingStep = 4;
 const USERNAME_REGEX = /^[A-Za-z0-9_.-]+$/;
@@ -54,10 +61,7 @@ export default function OnboardingForm() {
     if (!window.__TAURI_INTERNALS__) return;
 
     try {
-      const currentSettings = await invoke<OnboardingAppSettings>("get_app_settings");
-      await invoke("update_app_settings", {
-        settings: { ...currentSettings, language: newLang },
-      });
+      await updateAppLanguage(newLang);
     } catch (err) {
       console.error("Failed to update language setting:", err);
     }
@@ -75,7 +79,7 @@ export default function OnboardingForm() {
         ],
       });
 
-      if (selected) {
+      if (typeof selected === "string") {
         setLogoPath(selected);
         setLogoPreview(convertFileSrc(selected));
         return;
@@ -126,10 +130,10 @@ export default function OnboardingForm() {
         filters: [{ name: "SQLite Database", extensions: ["db", "sqlite"] }],
       });
 
-      if (!selected) return;
+      if (!selected || typeof selected !== "string") return;
 
       setIsSubmitting(true);
-      await invoke("restore_database", { restorePath: selected });
+      await restoreDatabase(selected);
       window.location.reload();
     } catch (err) {
       console.error("Failed to restore database:", err);
@@ -178,22 +182,19 @@ export default function OnboardingForm() {
 
     try {
       if (window.__TAURI_INTERNALS__) {
-        await invoke("save_shop_setup", {
+        await saveShopSetup({
           name: shopName.trim(),
           phone: phone.trim(),
           address: address.trim(),
           logoFilePath: logoPath,
         });
 
-        await invoke("register_user", {
+        await registerUser({
           name: username.trim(),
           password,
         });
 
-        const currentSettings = await invoke<OnboardingAppSettings>("get_app_settings");
-        await invoke("update_app_settings", {
-          settings: { ...currentSettings, theme },
-        });
+        await updateOnboardingTheme(theme);
       } else {
         localStorage.setItem("browser_onboarded", "true");
         localStorage.setItem("browser_user", JSON.stringify({ name: username }));
@@ -317,11 +318,11 @@ export default function OnboardingForm() {
             <motion.div
               key={`step-${currentStep}`}
               custom={direction}
-              variants={slideVariants}
+              variants={onboardingSlideVariants}
               initial="enter"
               animate="center"
               exit="exit"
-              transition={slideTransition}
+              transition={onboardingSlideTransition}
             >
               {renderCurrentStep()}
             </motion.div>

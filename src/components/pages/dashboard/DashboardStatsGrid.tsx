@@ -7,12 +7,31 @@ import {
   Truck,
   Users,
 } from "lucide-react";
-import { DashboardStats } from "../../../types/dashboard";
+import {
+  DashboardRecordType,
+  DashboardStats,
+} from "../../../types/dashboard";
+
+type DashboardStatCardKey =
+  | "revenue"
+  | "orders"
+  | "customers"
+  | DashboardRecordType;
+
+interface DashboardStatCard {
+  key: DashboardStatCardKey;
+  label: string;
+  value: string;
+  gradient: string;
+  iconGradient: string;
+  icon: typeof DollarSign;
+  clickable: boolean;
+}
 
 interface DashboardStatsGridProps {
   stats: DashboardStats | null;
   formatPrice: (value: number) => string;
-  onCardClick?: (key: string) => void;
+  onCardClick?: (key: DashboardStatCardKey) => void;
 }
 
 export default function DashboardStatsGrid({
@@ -22,7 +41,7 @@ export default function DashboardStatsGrid({
 }: DashboardStatsGridProps) {
   const { t } = useTranslation();
 
-  const statCards = useMemo(
+  const statCards = useMemo<DashboardStatCard[]>(
     () => [
       {
         key: "revenue",

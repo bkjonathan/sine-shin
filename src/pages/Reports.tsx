@@ -31,7 +31,11 @@ import { useTabNavigation } from "../hooks/useTabNavigation";
 import DashboardDateFilter, {
   computeRange,
   type DateFilterValue,
-} from "../components/pages/dashobard/DashboardDateFilter";
+} from "../components/pages/dashboard/DashboardDateFilter";
+import {
+  pageContainerTightVariants,
+  pageItemSoftVariants,
+} from "../constants/animations";
 
 const DEFAULT_RANGE = computeRange("this_month");
 const DEFAULT_FILTER: DateFilterValue = {
@@ -39,23 +43,6 @@ const DEFAULT_FILTER: DateFilterValue = {
   dateTo: DEFAULT_RANGE.dateTo,
   dateField: "order_date",
   preset: "this_month",
-};
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05 },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
-  },
 };
 
 const STATUS_COLORS: Record<OrderStatus | "unknown", string> = {
@@ -175,15 +162,10 @@ export default function Reports() {
     const loadData = async () => {
       try {
         setLoading(true);
-        console.log("Loading reports data...");
         const [orderData, customerData] = await Promise.all([
           getOrders(),
           getCustomers(),
         ]);
-        console.log("Reports data loaded:", {
-          ordersCount: orderData.length,
-          customersCount: customerData.length,
-        });
         setOrders(orderData);
         setCustomers(customerData);
       } catch (error) {
@@ -501,11 +483,11 @@ export default function Reports() {
       key={loading ? "loading" : "loaded"}
       initial="hidden"
       animate="show"
-      variants={containerVariants}
+      variants={pageContainerTightVariants}
       className="max-w-7xl mx-auto space-y-6"
     >
       <motion.div
-        variants={itemVariants}
+        variants={pageItemSoftVariants}
         className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4"
       >
         <div>
@@ -518,11 +500,11 @@ export default function Reports() {
         </div>
       </motion.div>
 
-      <motion.div variants={itemVariants}>
+      <motion.div variants={pageItemSoftVariants}>
         <DashboardDateFilter value={filter} onChange={handleFilterChange} />
       </motion.div>
 
-      <motion.div variants={itemVariants}>
+      <motion.div variants={pageItemSoftVariants}>
         <div className="glass-panel p-4 flex items-center gap-3 text-sm">
           <BarChart3 size={18} className="text-accent-blue shrink-0" />
           <p className="text-text-secondary">
@@ -535,13 +517,13 @@ export default function Reports() {
       </motion.div>
 
       {loading ? (
-        <motion.div variants={itemVariants}>
+        <motion.div variants={pageItemSoftVariants}>
           <div className="glass-panel p-16 flex justify-center">
             <div className="w-10 h-10 border-2 border-glass-border border-t-accent-blue rounded-full animate-spin" />
           </div>
         </motion.div>
       ) : filteredOrders.length === 0 ? (
-        <motion.div variants={itemVariants}>
+        <motion.div variants={pageItemSoftVariants}>
           <div className="glass-panel p-14 text-center">
             <h2 className="text-xl font-semibold text-text-primary">
               {t("reports.no_data")}
@@ -554,7 +536,7 @@ export default function Reports() {
       ) : (
         <>
           <motion.div
-            variants={itemVariants}
+            variants={pageItemSoftVariants}
             className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"
           >
             <ReportMetricCard
@@ -616,7 +598,7 @@ export default function Reports() {
             />
           </motion.div>
 
-          <motion.div variants={itemVariants} className="glass-panel p-5">
+          <motion.div variants={pageItemSoftVariants} className="glass-panel p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-text-primary">
@@ -639,7 +621,7 @@ export default function Reports() {
           </motion.div>
 
           <motion.div
-            variants={itemVariants}
+            variants={pageItemSoftVariants}
             className="grid grid-cols-1 xl:grid-cols-3 gap-4"
           >
             <div className="xl:col-span-1">
@@ -670,7 +652,7 @@ export default function Reports() {
             </div>
           </motion.div>
 
-          <motion.div variants={itemVariants}>
+          <motion.div variants={pageItemSoftVariants}>
             <ReportTopSummaryCards
               topCity={topCity}
               topPlatform={topPlatform}
@@ -679,14 +661,14 @@ export default function Reports() {
             />
           </motion.div>
 
-          <motion.div variants={itemVariants}>
+          <motion.div variants={pageItemSoftVariants}>
             <ReportTopCustomersTable
               customers={customerPerformance}
               formatPrice={formatPrice}
             />
           </motion.div>
 
-          <motion.div variants={itemVariants}>
+          <motion.div variants={pageItemSoftVariants}>
             <ReportTopOrdersTable
               orders={topOrdersByProfit}
               formatPrice={formatPrice}

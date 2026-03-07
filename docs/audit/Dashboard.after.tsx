@@ -2,13 +2,13 @@ import { useCallback } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
-import DashboardFiltersToolbar from "../components/pages/dashboard/DashboardFiltersToolbar";
-import DashboardHeader from "../components/pages/dashboard/DashboardHeader";
-import DashboardQuickActions from "../components/pages/dashboard/DashboardQuickActions";
-import DashboardRecentActivity from "../components/pages/dashboard/DashboardRecentActivity";
-import DashboardRecordsModal from "../components/pages/dashboard/DashboardRecordsModal";
-import DashboardSkeleton from "../components/pages/dashboard/DashboardSkeleton";
-import DashboardStatsGrid from "../components/pages/dashboard/DashboardStatsGrid";
+import DashboardFiltersToolbar from "../components/pages/dashobard/DashboardFiltersToolbar";
+import DashboardHeader from "../components/pages/dashobard/DashboardHeader";
+import DashboardQuickActions from "../components/pages/dashobard/DashboardQuickActions";
+import DashboardRecentActivity from "../components/pages/dashobard/DashboardRecentActivity";
+import DashboardRecordsModal from "../components/pages/dashobard/DashboardRecordsModal";
+import DashboardSkeleton from "../components/pages/dashobard/DashboardSkeleton";
+import DashboardStatsGrid from "../components/pages/dashobard/DashboardStatsGrid";
 import { DASHBOARD_DEFAULT_FILTER, DASHBOARD_RECORD_TYPES } from "../constants/dashboard";
 import {
   pageContainerVariants,

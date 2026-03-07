@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
-import { motion, Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { getAccountSummary } from "../../../api/accountApi";
 import { AccountSummary } from "../../../types/accountBook";
 import { useAppSettings } from "../../../context/AppSettingsContext";
-
-const fadeVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 24 },
-  },
-};
+import {
+  pageContainerWideStaggerVariants,
+  pageItemSoftVariants,
+} from "../../../constants/animations";
 
 const SectionHeader = ({
   title,
@@ -84,13 +79,10 @@ export default function AccountBookSummaryTab({
     <motion.div
       initial="hidden"
       animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: { opacity: 1, transition: { staggerChildren: 0.1 } },
-      }}
+      variants={pageContainerWideStaggerVariants}
       className="max-w-4xl mx-auto w-full"
     >
-      <motion.div variants={fadeVariants} className="text-center mb-8">
+      <motion.div variants={pageItemSoftVariants} className="text-center mb-8">
         <h2 className="text-xl text-text-muted mb-2">
           {t("account_book.net_balance", "Net Balance")}
         </h2>
@@ -104,7 +96,7 @@ export default function AccountBookSummaryTab({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <motion.div
-          variants={fadeVariants}
+          variants={pageItemSoftVariants}
           className="glass-panel p-6 relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10" />
@@ -120,7 +112,7 @@ export default function AccountBookSummaryTab({
         </motion.div>
 
         <motion.div
-          variants={fadeVariants}
+          variants={pageItemSoftVariants}
           className="glass-panel p-6 relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl -mr-10 -mt-10" />
@@ -136,7 +128,7 @@ export default function AccountBookSummaryTab({
         </motion.div>
       </div>
 
-      <motion.div variants={fadeVariants} className="glass-panel p-6">
+      <motion.div variants={pageItemSoftVariants} className="glass-panel p-6">
         <h3 className="text-lg font-bold text-text-primary mb-4">
           {t("account_book.this_month", "This Month")}
         </h3>
@@ -178,7 +170,7 @@ export default function AccountBookSummaryTab({
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-        <motion.div variants={fadeVariants} className="glass-panel p-6">
+        <motion.div variants={pageItemSoftVariants} className="glass-panel p-6">
           <SectionHeader
             title={t("account_book.income_breakdown")}
             subtitle={t("account_book.income_breakdown_hint")}
@@ -211,7 +203,7 @@ export default function AccountBookSummaryTab({
           </div>
         </motion.div>
 
-        <motion.div variants={fadeVariants} className="glass-panel p-6">
+        <motion.div variants={pageItemSoftVariants} className="glass-panel p-6">
           <SectionHeader
             title={t("account_book.averages")}
             subtitle={t("account_book.averages_hint")}

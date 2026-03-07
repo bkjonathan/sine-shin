@@ -16,15 +16,11 @@ import SettingsToggle from "../components/pages/settings/SettingsToggle";
 import SettingsAccountPanel from "../components/pages/settings/SettingsAccountPanel";
 import SettingsSyncPanel from "../components/pages/settings/SettingsSyncPanel";
 import SettingsDataPanel from "../components/pages/settings/SettingsDataPanel";
-
-const fadeVariants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
-  },
-};
+import type { AccentColor, FontSize } from "../types/settings";
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../constants/animations";
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
@@ -65,6 +61,41 @@ export default function Settings() {
     setSilentInvoicePrint,
   } = useAppSettings();
 
+  const accentColorOptions = [
+    { id: "blue", color: "bg-[#5b7fff]" },
+    { id: "purple", color: "bg-[#a855f7]" },
+    { id: "pink", color: "bg-[#ec4899]" },
+    { id: "cyan", color: "bg-[#06b6d4]" },
+    { id: "green", color: "bg-[#10b981]" },
+  ] as const satisfies Array<{ id: AccentColor; color: string }>;
+
+  const fontSizeOptions = [
+    {
+      id: "small",
+      label: t("settings.font_sizes.small"),
+      preview: "text-xs",
+    },
+    {
+      id: "normal",
+      label: t("settings.font_sizes.normal"),
+      preview: "text-sm",
+    },
+    {
+      id: "large",
+      label: t("settings.font_sizes.large"),
+      preview: "text-base",
+    },
+    {
+      id: "extra-large",
+      label: t("settings.font_sizes.extra_large"),
+      preview: "text-lg",
+    },
+  ] as const satisfies Array<{
+    id: FontSize;
+    label: string;
+    preview: string;
+  }>;
+
   const categories = [
     {
       id: "general",
@@ -97,16 +128,10 @@ export default function Settings() {
     <motion.div
       initial="hidden"
       animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: {
-          opacity: 1,
-          transition: { staggerChildren: 0.06 },
-        },
-      }}
+      variants={pageContainerVariants}
       className="max-w-4xl mx-auto"
     >
-      <motion.div variants={fadeVariants} className="mb-6">
+      <motion.div variants={pageItemSoftVariants} className="mb-6">
         <h1 className="text-2xl font-bold text-text-primary tracking-tight">
           {t("settings.title")}
         </h1>
@@ -116,7 +141,7 @@ export default function Settings() {
       </motion.div>
 
       <motion.div
-        variants={fadeVariants}
+        variants={pageItemSoftVariants}
         className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4"
       >
         <div className="glass-panel p-3 h-fit">
@@ -358,28 +383,7 @@ export default function Settings() {
                   {t("settings.font_size_desc")}
                 </p>
                 <div className="flex items-center gap-2">
-                  {[
-                    {
-                      id: "small",
-                      label: t("settings.font_sizes.small"),
-                      preview: "text-xs",
-                    },
-                    {
-                      id: "normal",
-                      label: t("settings.font_sizes.normal"),
-                      preview: "text-sm",
-                    },
-                    {
-                      id: "large",
-                      label: t("settings.font_sizes.large"),
-                      preview: "text-base",
-                    },
-                    {
-                      id: "extra-large",
-                      label: t("settings.font_sizes.extra_large"),
-                      preview: "text-lg",
-                    },
-                  ].map((option) => (
+                  {fontSizeOptions.map((option) => (
                     <button
                       key={option.id}
                       onClick={() => {
@@ -412,17 +416,11 @@ export default function Settings() {
                   {t("settings.accent_color")}
                 </p>
                 <div className="flex items-center gap-3">
-                  {[
-                    { id: "blue", color: "bg-[#5b7fff]" },
-                    { id: "purple", color: "bg-[#a855f7]" },
-                    { id: "pink", color: "bg-[#ec4899]" },
-                    { id: "cyan", color: "bg-[#06b6d4]" },
-                    { id: "green", color: "bg-[#10b981]" },
-                  ].map((themeItem) => (
+                  {accentColorOptions.map((themeItem) => (
                     <button
                       key={themeItem.id}
                       onClick={() => {
-                        setAccentColor(themeItem.id as any);
+                        setAccentColor(themeItem.id);
                         playSound("click");
                       }}
                       className={`

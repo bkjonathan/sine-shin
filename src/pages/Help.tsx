@@ -10,16 +10,11 @@ import {
   IconTriangleAlert,
   IconArrowLeft,
 } from "../components/icons";
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../constants/animations";
 import { useTabNavigation } from "../hooks/useTabNavigation";
-
-const fadeVariants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
-  },
-};
 
 function HelpSection({
   icon,
@@ -34,7 +29,7 @@ function HelpSection({
 }) {
   return (
     <motion.div
-      variants={fadeVariants}
+      variants={pageItemSoftVariants}
       className="p-5 rounded-xl border border-glass-border bg-glass-white"
     >
       <div className="flex items-start gap-4">
@@ -99,17 +94,11 @@ export default function Help() {
     <motion.div
       initial="hidden"
       animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: {
-          opacity: 1,
-          transition: { staggerChildren: 0.06 },
-        },
-      }}
+      variants={pageContainerVariants}
       className="max-w-3xl mx-auto"
     >
       {/* Header */}
-      <motion.div variants={fadeVariants} className="mb-6">
+      <motion.div variants={pageItemSoftVariants} className="mb-6">
         <button
           onClick={() => navigateInTab("/dashboard")}
           className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors mb-3"

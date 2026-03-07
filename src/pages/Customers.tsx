@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   getCustomers,
   getCustomersPaginated,
@@ -20,6 +20,7 @@ import { useSound } from "../context/SoundContext";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Select } from "../components/ui";
 import { createCSVContent, parseCSV } from "../utils/csvUtils";
+import { useIsTabPanelActive } from "../context/TabPanelActivityContext";
 import { useTabNavigation } from "../hooks/useTabNavigation";
 import CustomerDeleteModal from "../components/pages/customers/CustomerDeleteModal";
 import CustomerFormModal from "../components/pages/customers/CustomerFormModal";
@@ -39,16 +40,10 @@ import {
   IconUpload,
   IconUsers,
 } from "../components/icons";
-
-// ── Animation Variants ──
-const fadeVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 24 },
-  },
-};
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../constants/animations";
 
 const getVisiblePages = (currentPage: number, totalPages: number): string[] => {
   if (totalPages <= 0) {
@@ -163,7 +158,9 @@ const toTitleCase = (value: string) => {
 export default function Customers() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
   const { navigateInTab } = useTabNavigation();
+  const isTabPanelActive = useIsTabPanelActive();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -302,6 +299,10 @@ export default function Customers() {
   }, [searchInput]);
 
   useEffect(() => {
+    if (!isTabPanelActive || location.pathname !== "/customers") {
+      return;
+    }
+
     const nextSearchParams = new URLSearchParams(searchParams);
 
     if (currentPage > 1) {
@@ -313,7 +314,8 @@ export default function Customers() {
     if (nextSearchParams.toString() !== searchParams.toString()) {
       setSearchParams(nextSearchParams, { replace: true });
     }
-  }, [currentPage, searchParams, setSearchParams]);
+    // Intentionally not reacting to search param updates to avoid keep-alive tab ping-pong.
+  }, [currentPage, isTabPanelActive, location.pathname, setSearchParams]);
 
   useEffect(() => {
     fetchCustomers(currentPage);
@@ -648,20 +650,11 @@ export default function Customers() {
     <motion.div
       initial="hidden"
       animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: {
-          opacity: 1,
-          transition: { staggerChildren: 0.06 },
-        },
-      }}
+      variants={pageContainerVariants}
       className="max-w-6xl mx-auto h-full flex flex-col"
     >
       {/* ── Header ── */}
-      <motion.div
-        variants={fadeVariants}
-        className="flex items-center justify-between mb-6"
-      >
+      <motion.div variants={pageItemSoftVariants} className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-text-primary tracking-tight">
             {t("customers.title")}
@@ -758,10 +751,7 @@ export default function Customers() {
         </div>
       </motion.div>
 
-      <motion.div
-        variants={fadeVariants}
-        className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-end md:items-center"
-      >
+      <motion.div variants={pageItemSoftVariants} className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-end md:items-center">
         <div className="flex flex-col md:flex-row gap-3 max-w-2xl flex-1">
           <div className="w-full md:w-56">
             <Select
@@ -857,10 +847,7 @@ export default function Customers() {
       </motion.div>
 
       {/* ── Customer List ── */}
-      <motion.div
-        variants={fadeVariants}
-        className="flex-1 min-h-0 flex flex-col"
-      >
+      <motion.div variants={pageItemSoftVariants} className="flex-1 min-h-0 flex flex-col">
         <div className="flex-1 overflow-y-auto pr-1">
           {loading ? (
             <div className="flex justify-center items-center py-20">

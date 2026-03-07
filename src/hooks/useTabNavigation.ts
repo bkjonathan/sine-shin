@@ -8,12 +8,18 @@ interface OpenTabOptions {
   forceDuplicate?: boolean;
 }
 
+interface UseTabNavigationResult {
+  activeTabId: string | null;
+  openTab: (path: string, options?: OpenTabOptions) => string;
+  navigateInTab: (path: string) => void;
+}
+
 /**
  * Hook for tab-aware navigation.
  * Does NOT use React Router's navigate() — the tab store is the single source of truth.
  * AppLayout handles the one-way sync from tab store → URL bar.
  */
-export function useTabNavigation() {
+export function useTabNavigation(): UseTabNavigationResult {
   const { t } = useTranslation();
 
   const activeTabId = useTabStore((state) => state.activeTabId);

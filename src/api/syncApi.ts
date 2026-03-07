@@ -48,7 +48,7 @@ export async function saveSyncConfig(
   url: string,
   anonKey: string,
   serviceKey: string,
-) {
+): Promise<void> {
   return invoke("save_sync_config", {
     url,
     anonKey,
@@ -122,7 +122,7 @@ export async function cleanSyncData(): Promise<number> {
 export async function setMasterPassword(
   currentPassword: string,
   newMaster: string,
-) {
+): Promise<void> {
   return invoke("set_master_password", { currentPassword, newMaster });
 }
 
@@ -151,7 +151,7 @@ export interface RemoteChange {
   record_id: number;
   record_uuid?: string | null;
   change_type: "new" | "modified" | "deleted";
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
 }
 
 export async function fetchRemoteChanges(): Promise<RemoteChange[]> {

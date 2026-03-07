@@ -24,9 +24,12 @@ interface OpenTabOptions {
   forceDuplicate?: boolean;
 }
 
-interface TabStore {
+export interface TabStoreState {
   tabs: Tab[];
   activeTabId: string | null;
+}
+
+export interface TabStoreActions {
   openTab: (path: string, title: string, options?: OpenTabOptions) => string;
   setActiveTab: (id: string) => void;
   closeTab: (id: string) => void;
@@ -38,6 +41,13 @@ interface TabStore {
   navigateInTab: (id: string, path: string, title?: string) => void;
   updateTabTitles: (titleResolver: (path: string) => string) => void;
 }
+
+export type TabStore = TabStoreState & TabStoreActions;
+
+const createTabStateSlice = (): TabStoreState => ({
+  tabs: [],
+  activeTabId: null,
+});
 
 const TAB_STORE_KEY = "app_route_tabs_v2";
 const MAX_OPEN_TABS = 12;
@@ -175,8 +185,7 @@ const ensureNonEmptyTabs = (tabs: Tab[]): Tab[] => {
 export const useTabStore = create<TabStore>()(
   persist(
     (set, get) => ({
-      tabs: [],
-      activeTabId: null,
+      ...createTabStateSlice(),
 
       openTab: (path, title, options = {}) => {
         const normalizedPath = normalizeTabPath(path);

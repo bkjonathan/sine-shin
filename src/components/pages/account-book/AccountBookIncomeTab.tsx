@@ -1,22 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion, Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { getOrders } from "../../../api/orderApi";
 import { OrderWithCustomer } from "../../../types/order";
 import { AccountBookRow, AccountBookTotals } from "../../../types/accountBook";
 import { useAppSettings } from "../../../context/AppSettingsContext";
 import { useTabNavigation } from "../../../hooks/useTabNavigation";
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../../../constants/animations";
 import AccountBookHeader from "./AccountBookHeader";
 import AccountBookSummaryCards from "./AccountBookSummaryCards";
 import AccountBookTable from "./AccountBookTable";
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 24 },
-  },
-};
 
 const calculateServiceFeeAmount = (order: OrderWithCustomer) => {
   if (order.service_fee_type === "percent") {
@@ -140,17 +135,14 @@ export default function AccountBookIncomeTab({
     <motion.div
       initial="hidden"
       animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-      }}
+      variants={pageContainerVariants}
       className="h-full flex flex-col"
     >
-      <motion.div variants={itemVariants}>
+      <motion.div variants={pageItemSoftVariants}>
         <AccountBookHeader search={search} onSearchChange={setSearch} />
       </motion.div>
 
-      <motion.div variants={itemVariants}>
+      <motion.div variants={pageItemSoftVariants}>
         <AccountBookSummaryCards
           totalRows={rows.length}
           totals={totals}
@@ -159,7 +151,7 @@ export default function AccountBookIncomeTab({
       </motion.div>
 
       <motion.div
-        variants={itemVariants}
+        variants={pageItemSoftVariants}
         className="glass-panel p-4 flex-1 min-h-[400px] overflow-hidden"
       >
         <AccountBookTable
