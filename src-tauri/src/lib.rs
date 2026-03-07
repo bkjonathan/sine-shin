@@ -1,7 +1,9 @@
 mod commands;
 mod db;
+mod error;
 mod models;
 pub mod scheduler;
+mod services;
 mod state;
 pub mod sync;
 
@@ -10,6 +12,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use reqwest::Client;
 use sqlx::sqlite::SqlitePoolOptions;
 use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
@@ -48,7 +51,7 @@ use crate::commands::system::{
 };
 use crate::db::init_db;
 use crate::scheduler::{reload_scheduler, setup_scheduler};
-use crate::state::AppDb;
+use crate::state::{AppDb, AppState};
 use crate::sync::{
     apply_remote_changes, clean_sync_data, clear_synced_items, fetch_remote_changes,
     get_migration_sql, get_sync_config, get_sync_queue_items, get_sync_queue_stats,
@@ -217,7 +220,9 @@ pub fn run() {
                 pool
             });
 
-            app.manage(AppDb(Arc::new(Mutex::new(pool))));
+            let shared_pool = Arc::new(Mutex::new(pool));
+            app.manage(AppDb(shared_pool.clone()));
+            app.manage(Arc::new(AppState::new(shared_pool, Client::new())));
 
             let app_handle = app.handle().clone();
             let scheduler_state =
