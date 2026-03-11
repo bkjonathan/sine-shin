@@ -157,7 +157,7 @@ const toTitleCase = (value: string) => {
 
 export default function Customers() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
-  const { navigateInTab } = useTabNavigation();
+  const { openTab } = useTabNavigation();
   const isTabPanelActive = useIsTabPanelActive();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -893,9 +893,7 @@ export default function Customers() {
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.95 }}
-                          onClick={() =>
-                            navigateInTab(`/customers/${customer.id}`)
-                          }
+                          onClick={() => openTab(`/customers/${customer.id}`)}
                           className="glass-panel p-5 group hover:border-accent-blue/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent-blue/5 relative overflow-hidden cursor-pointer"
                         >
                           {/* Decorative background gradient on hover */}
@@ -1082,9 +1080,7 @@ export default function Customers() {
                               initial={{ opacity: 0 }}
                               animate={{ opacity: 1 }}
                               exit={{ opacity: 0 }}
-                              onClick={() =>
-                                navigateInTab(`/customers/${customer.id}`)
-                              }
+                              onClick={() => openTab(`/customers/${customer.id}`)}
                               className="group border-b border-glass-border/50 last:border-0 hover:bg-glass-white-hover cursor-pointer transition-colors"
                             >
                               <td className="px-4 py-3 text-text-muted font-mono text-xs">
