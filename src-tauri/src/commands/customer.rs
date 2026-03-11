@@ -1,17 +1,20 @@
-use tauri::{AppHandle, Manager};
+use std::sync::Arc;
 
-use crate::db::DEFAULT_CUSTOMER_ID_PREFIX;
+use tauri::{AppHandle, State};
+use tracing::instrument;
+
+use crate::error::AppError;
 use crate::models::{Customer, PaginatedCustomers};
-use crate::state::AppDb;
-use crate::sync::enqueue_sync;
+use crate::services::customer;
+use crate::state::AppState;
 
-const DEFAULT_CUSTOMERS_PAGE_SIZE: i64 = 5;
-const MIN_CUSTOMERS_PAGE_SIZE: i64 = 5;
-const MAX_CUSTOMERS_PAGE_SIZE: i64 = 100;
-
+/// Creates a customer record.
 #[tauri::command]
+#[instrument(skip(state, app))]
+#[allow(clippy::too_many_arguments)]
 pub async fn create_customer(
     app: AppHandle,
+    state: State<'_, Arc<AppState>>,
     uuid: Option<String>,
     name: String,
     phone: Option<String>,
@@ -24,261 +27,71 @@ pub async fn create_customer(
     created_at: Option<String>,
     updated_at: Option<String>,
     deleted_at: Option<String>,
-) -> Result<i64, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-    let normalized_customer_id = customer_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-
-    let inserted_id = if let Some(provided_id) = id {
-        sqlx::query(
-            "INSERT INTO customers (id, uuid, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
-        )
-        .bind(provided_id)
-        .bind(&uuid)
-        .bind(&normalized_customer_id)
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&city)
-        .bind(&social_media_url)
-        .bind(&platform)
-        .bind(&created_at)
-        .bind(&updated_at)
-        .bind(&deleted_at)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .last_insert_rowid()
-    } else {
-        sqlx::query(
-            "INSERT INTO customers (uuid, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
-        )
-        .bind(&uuid)
-        .bind(&normalized_customer_id)
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&city)
-        .bind(&social_media_url)
-        .bind(&platform)
-        .bind(&created_at)
-        .bind(&updated_at)
-        .bind(&deleted_at)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .last_insert_rowid()
-    };
-
-    // If a customer_id was provided efficiently, we can use it.
-    // If not, we generate it.
-
-    if normalized_customer_id.is_none() {
-        // Generate new one
-        let prefix: Option<String> = sqlx::query_scalar(
-            "SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1",
-        )
-        .fetch_optional(&*pool)
-        .await
-        .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
-
-        let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
-        let new_customer_id = format!("{}{:05}", prefix_str, inserted_id);
-
-        let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
-            .bind(new_customer_id)
-            .bind(inserted_id)
-            .execute(&*pool)
-            .await;
-    }
-
-    // Enqueue sync: fetch the full record
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(inserted_id)
-        .fetch_one(&*pool)
-        .await
-    {
-        enqueue_sync(
-            &pool,
-            &app,
-            "customers",
-            "INSERT",
-            inserted_id,
-            serde_json::json!(record),
-        )
-        .await;
-    }
-
-    Ok(inserted_id)
+) -> Result<i64, AppError> {
+    customer::create_customer(
+        state.inner().clone(),
+        &app,
+        uuid,
+        name,
+        phone,
+        address,
+        city,
+        social_media_url,
+        platform,
+        id,
+        customer_id,
+        created_at,
+        updated_at,
+        deleted_at,
+    )
+    .await
 }
 
+/// Loads all customers.
 #[tauri::command]
-pub async fn get_customers(app: AppHandle) -> Result<Vec<Customer>, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-
-    let customers =
-        sqlx::query_as::<_, Customer>("SELECT * FROM customers ORDER BY created_at DESC")
-            .fetch_all(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-    Ok(customers)
+#[instrument(skip(state))]
+pub async fn get_customers(state: State<'_, Arc<AppState>>) -> Result<Vec<Customer>, AppError> {
+    customer::get_customers(state.inner().clone()).await
 }
 
+/// Loads customers with pagination and filtering.
 #[tauri::command]
+#[instrument(skip(state))]
 pub async fn get_customers_paginated(
-    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
     page: Option<i64>,
     page_size: Option<i64>,
     search_key: Option<String>,
     search_term: Option<String>,
     sort_by: Option<String>,
     sort_order: Option<String>,
-) -> Result<PaginatedCustomers, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-
-    let requested_page_size = page_size.unwrap_or(DEFAULT_CUSTOMERS_PAGE_SIZE);
-    let no_limit = requested_page_size <= 0;
-    let page_size = if no_limit {
-        DEFAULT_CUSTOMERS_PAGE_SIZE
-    } else {
-        requested_page_size.clamp(MIN_CUSTOMERS_PAGE_SIZE, MAX_CUSTOMERS_PAGE_SIZE)
-    };
-    let page = if no_limit {
-        1
-    } else {
-        page.unwrap_or(1).max(1)
-    };
-    let offset = if no_limit { 0 } else { (page - 1) * page_size };
-
-    let raw_search = search_term.unwrap_or_default().trim().to_string();
-    let has_search = !raw_search.is_empty();
-    let search_pattern = format!("%{}%", raw_search);
-
-    let search_column = match search_key.as_deref().unwrap_or("name") {
-        "name" => "name",
-        "customerId" => "customer_id",
-        "phone" => "phone",
-        _ => return Err("Invalid search key".to_string()),
-    };
-
-    let sort_column = match sort_by.as_deref().unwrap_or("customer_id") {
-        "name" => "name",
-        "customer_id" => "customer_id",
-        "created_at" => "created_at",
-        _ => "customer_id", // Default fallback should be safe
-    };
-
-    let sort_direction = match sort_order.as_deref().unwrap_or("desc") {
-        "asc" => "ASC",
-        "desc" => "DESC",
-        _ => "DESC",
-    };
-
-    let order_clause = format!("ORDER BY {} {}", sort_column, sort_direction);
-
-    let (total, customers) = if has_search {
-        let count_query = format!(
-            "SELECT COUNT(*) FROM customers WHERE COALESCE({}, '') LIKE ?",
-            search_column
-        );
-        let total: i64 = sqlx::query_scalar(&count_query)
-            .bind(&search_pattern)
-            .fetch_one(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let customers = if no_limit {
-            let data_query = format!(
-                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {}",
-                search_column, order_clause
-            );
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(&search_pattern)
-                .fetch_all(&*pool)
-                .await
-                .map_err(|e| e.to_string())?
-        } else {
-            let data_query = format!(
-                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {} LIMIT ? OFFSET ?",
-                search_column, order_clause
-            );
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(&search_pattern)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await
-                .map_err(|e| e.to_string())?
-        };
-
-        (total, customers)
-    } else {
-        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM customers")
-            .fetch_one(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let customers = if no_limit {
-            let data_query = format!("SELECT * FROM customers {}", order_clause);
-            sqlx::query_as::<_, Customer>(&data_query)
-                .fetch_all(&*pool)
-                .await
-                .map_err(|e| e.to_string())?
-        } else {
-            let data_query = format!("SELECT * FROM customers {} LIMIT ? OFFSET ?", order_clause);
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await
-                .map_err(|e| e.to_string())?
-        };
-
-        (total, customers)
-    };
-
-    let response_page_size = if no_limit { total.max(0) } else { page_size };
-
-    let total_pages = if total == 0 {
-        0
-    } else if no_limit {
-        1
-    } else {
-        (total + page_size - 1) / page_size
-    };
-
-    Ok(PaginatedCustomers {
-        customers,
-        total,
+) -> Result<PaginatedCustomers, AppError> {
+    customer::get_customers_paginated(
+        state.inner().clone(),
         page,
-        page_size: response_page_size,
-        total_pages,
-    })
+        page_size,
+        search_key,
+        search_term,
+        sort_by,
+        sort_order,
+    )
+    .await
 }
 
+/// Loads a customer by id.
 #[tauri::command]
-pub async fn get_customer(app: AppHandle, id: i64) -> Result<Customer, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-
-    let customer = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or("Customer not found".to_string())?;
-
-    Ok(customer)
+#[instrument(skip(state))]
+pub async fn get_customer(state: State<'_, Arc<AppState>>, id: i64) -> Result<Customer, AppError> {
+    customer::get_customer(state.inner().clone(), id).await
 }
 
+/// Updates a customer record by id.
 #[tauri::command]
+#[instrument(skip(state, app))]
+#[allow(clippy::too_many_arguments)]
 pub async fn update_customer(
     app: AppHandle,
+    state: State<'_, Arc<AppState>>,
     id: i64,
     uuid: Option<String>,
     customer_id: Option<String>,
@@ -291,81 +104,33 @@ pub async fn update_customer(
     created_at: Option<String>,
     updated_at: Option<String>,
     deleted_at: Option<String>,
-) -> Result<(), String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-
-    let normalized_customer_id = customer_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-
-    sqlx::query(
-        "UPDATE customers SET uuid = COALESCE(?, uuid), customer_id = ?, name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, created_at = COALESCE(?, created_at), updated_at = COALESCE(?, datetime('now')), deleted_at = ? WHERE id = ?",
+) -> Result<(), AppError> {
+    customer::update_customer(
+        state.inner().clone(),
+        &app,
+        id,
+        uuid,
+        customer_id,
+        name,
+        phone,
+        address,
+        city,
+        social_media_url,
+        platform,
+        created_at,
+        updated_at,
+        deleted_at,
     )
-    .bind(&uuid)
-    .bind(&normalized_customer_id)
-    .bind(&name)
-    .bind(&phone)
-    .bind(&address)
-    .bind(&city)
-    .bind(&social_media_url)
-    .bind(&platform)
-    .bind(&created_at)
-    .bind(&updated_at)
-    .bind(&deleted_at)
-    .bind(id)
-    .execute(&*pool)
     .await
-    .map_err(|e| e.to_string())?;
-
-    // Enqueue sync
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
-    {
-        enqueue_sync(
-            &pool,
-            &app,
-            "customers",
-            "UPDATE",
-            id,
-            serde_json::json!(record),
-        )
-        .await;
-    }
-
-    Ok(())
 }
 
+/// Soft-deletes a customer by id.
 #[tauri::command]
-pub async fn delete_customer(app: AppHandle, id: i64) -> Result<(), String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-
-    // Soft delete: set deleted_at instead of hard delete
-    sqlx::query("UPDATE customers SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
-        .bind(id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Enqueue sync as DELETE
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
-        .fetch_one(&*pool)
-        .await
-    {
-        enqueue_sync(
-            &pool,
-            &app,
-            "customers",
-            "DELETE",
-            id,
-            serde_json::json!(record),
-        )
-        .await;
-    }
-
-    Ok(())
+#[instrument(skip(state, app))]
+pub async fn delete_customer(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    id: i64,
+) -> Result<(), AppError> {
+    customer::delete_customer(state.inner().clone(), &app, id).await
 }

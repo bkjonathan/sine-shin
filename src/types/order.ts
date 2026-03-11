@@ -136,6 +136,8 @@ export const createEmptyOrderFormData = (): OrderFormData => ({
 
 export interface OrderWithCustomer extends Order {
   customer_name?: string;
+  customer_phone?: string;
+  customer_address?: string;
   total_price?: number;
   total_qty?: number;
   total_weight?: number;

@@ -36,3 +36,9 @@ export interface DashboardDetailRecord {
   amount: number;
   order_date: string | null;
 }
+
+export type DashboardRecordType =
+  | "profit"
+  | "cargo"
+  | "paid_cargo"
+  | "unpaid_cargo";

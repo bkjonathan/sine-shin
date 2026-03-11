@@ -1,19 +1,51 @@
-import { forwardRef } from "react";
+import { forwardRef, type ComponentProps, type ReactNode } from "react";
 import ReactDatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 
+type ReactDatePickerComponentProps = ComponentProps<typeof ReactDatePicker>;
+type DatePickerPlacement = ReactDatePickerComponentProps["popperPlacement"];
+type DatePickerDropdownMode = ReactDatePickerComponentProps["dropdownMode"];
+
 interface DatePickerProps {
+  selected?: Date | null;
   onChange: (date: Date | null) => void;
-  label?: string;
-  error?: string;
+  dateFormat?: string;
+  placeholderText?: string;
+  minDate?: Date;
+  maxDate?: Date;
+  label?: ReactNode;
+  error?: ReactNode;
   className?: string;
   required?: boolean;
-  [key: string]: any;
+  autoFocus?: boolean;
+  placement?: DatePickerPlacement;
+  showMonthDropdown?: boolean;
+  showYearDropdown?: boolean;
+  dropdownMode?: DatePickerDropdownMode;
 }
 
 const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
-  ({ label, error, className, required, ...props }, _ref) => {
+  (
+    {
+      label,
+      error,
+      className,
+      required,
+      selected,
+      onChange,
+      dateFormat,
+      placeholderText,
+      minDate,
+      maxDate,
+      autoFocus,
+      placement,
+      showMonthDropdown,
+      showYearDropdown,
+      dropdownMode,
+    },
+    _ref,
+  ) => {
     return (
       <div className="w-full">
         {label && (
@@ -91,7 +123,19 @@ const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
           `}
           </style>
           <ReactDatePicker
-            {...props}
+            selected={selected}
+            onChange={(value: Date | Date[] | [Date | null, Date | null] | null) =>
+              onChange(Array.isArray(value) ? value[0] ?? null : value)
+            }
+            dateFormat={dateFormat}
+            placeholderText={placeholderText}
+            minDate={minDate}
+            maxDate={maxDate}
+            autoFocus={autoFocus}
+            popperPlacement={placement}
+            showMonthDropdown={showMonthDropdown}
+            showYearDropdown={showYearDropdown}
+            dropdownMode={dropdownMode}
             wrapperClassName="w-full"
             className={`
             input-liquid w-full pr-10

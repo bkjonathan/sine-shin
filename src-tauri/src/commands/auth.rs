@@ -1,62 +1,38 @@
-use tauri::{AppHandle, Manager};
+use std::sync::Arc;
 
+use tauri::State;
+use tracing::instrument;
+
+use crate::error::AppError;
 use crate::models::User;
-use crate::state::AppDb;
+use crate::services::auth;
+use crate::state::AppState;
 
+/// Registers a new local user.
 #[tauri::command]
-pub async fn register_user(app: AppHandle, name: String, password: String) -> Result<(), String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-
-    let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST).map_err(|e| e.to_string())?;
-
-    sqlx::query("INSERT INTO users (name, password_hash) VALUES (?, ?)")
-        .bind(name)
-        .bind(password_hash)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(())
+#[instrument(skip(state, password), fields(username = %name))]
+pub async fn register_user(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+    password: String,
+) -> Result<(), AppError> {
+    auth::register_user(state.inner().clone(), name, password).await
 }
 
+/// Logs in a local user by name and password.
 #[tauri::command]
-pub async fn login_user(app: AppHandle, name: String, password: String) -> Result<User, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-
-    let user: Option<User> = sqlx::query_as("SELECT * FROM users WHERE name = ?")
-        .bind(&name)
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if let Some(user) = user {
-        let valid = bcrypt::verify(password, &user.password_hash).map_err(|e| e.to_string())?;
-        if valid {
-            Ok(user)
-        } else {
-            Err("Invalid password".to_string())
-        }
-    } else {
-        Err("User not found".to_string())
-    }
+#[instrument(skip(state, password), fields(username = %name))]
+pub async fn login_user(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+    password: String,
+) -> Result<User, AppError> {
+    auth::login_user(state.inner().clone(), name, password).await
 }
 
+/// Returns whether the app onboarding has completed.
 #[tauri::command]
-pub async fn check_is_onboarded(app: AppHandle) -> Result<bool, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
-
-    let shop_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM shop_settings")
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let user_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(shop_count.0 > 0 && user_count.0 > 0)
+#[instrument(skip(state))]
+pub async fn check_is_onboarded(state: State<'_, Arc<AppState>>) -> Result<bool, AppError> {
+    auth::check_is_onboarded(state.inner().clone()).await
 }

@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Manager};
 
+pub mod helpers;
+
 pub type AppResult<T> = Result<T, String>;
 
 pub const DEFAULT_CUSTOMER_ID_PREFIX: &str = "SSC-";

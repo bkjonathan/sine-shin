@@ -5178,7 +5178,7 @@ checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
 
 [[package]]
 name = "sine-shin"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "argon2",
  "aws-config",
@@ -5200,8 +5200,10 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-opener",
  "tauri-plugin-sql",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-cron-scheduler",
+ "tracing",
  "url",
  "uuid",
  "zip",

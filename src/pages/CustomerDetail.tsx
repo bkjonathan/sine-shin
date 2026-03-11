@@ -10,19 +10,14 @@ import { formatDate } from "../utils/date";
 import { useTabNavigation } from "../hooks/useTabNavigation";
 import { IconArrowLeft, IconExternalLink } from "../components/icons";
 import { Button } from "../components/ui";
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../constants/animations";
 
 interface CustomerDetailProps {
   id: string;
 }
-
-const fadeVariants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
-  },
-};
 
 export default function CustomerDetail({ id }: CustomerDetailProps) {
   const { navigateInTab } = useTabNavigation();
@@ -52,7 +47,7 @@ export default function CustomerDetail({ id }: CustomerDetailProps) {
       setOrders(ordersData);
     } catch (err) {
       console.error("Failed to fetch customer details:", err);
-      setError("Failed to load customer details");
+      setError(t("customers.detail.error_load", "Failed to load customer details"));
     } finally {
       setLoading(false);
     }
@@ -74,7 +69,7 @@ export default function CustomerDetail({ id }: CustomerDetailProps) {
   if (error || !customer) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-muted">
-        <p>{error || "Customer not found"}</p>
+        <p>{error || t("customers.detail.error_not_found", "Customer not found")}</p>
         <Button onClick={handleBack} variant="ghost" className="mt-4">
           {t("customers.detail.back_to_list")}
         </Button>
@@ -86,17 +81,11 @@ export default function CustomerDetail({ id }: CustomerDetailProps) {
     <motion.div
       initial="hidden"
       animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: {
-          opacity: 1,
-          transition: { staggerChildren: 0.06 },
-        },
-      }}
+      variants={pageContainerVariants}
       className="max-w-6xl mx-auto h-full flex flex-col space-y-6"
     >
       {/* Header with Back Button */}
-      <motion.div variants={fadeVariants} className="flex items-center gap-4">
+      <motion.div variants={pageItemSoftVariants} className="flex items-center gap-4">
         <button
           onClick={handleBack}
           className="p-2 hover:bg-glass-white-hover rounded-lg transition-colors text-text-muted hover:text-text-primary"
@@ -113,7 +102,7 @@ export default function CustomerDetail({ id }: CustomerDetailProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Customer Info Card */}
-        <motion.div variants={fadeVariants} className="lg:col-span-1 space-y-6">
+        <motion.div variants={pageItemSoftVariants} className="lg:col-span-1 space-y-6">
           <div className="glass-panel p-6 space-y-4">
             <h2 className="text-lg font-semibold text-text-primary mb-4">
               {t("customers.detail.title")}
@@ -170,7 +159,7 @@ export default function CustomerDetail({ id }: CustomerDetailProps) {
         </motion.div>
 
         {/* Orders List */}
-        <motion.div variants={fadeVariants} className="lg:col-span-2">
+        <motion.div variants={pageItemSoftVariants} className="lg:col-span-2">
           <div className="glass-panel p-6 h-full flex flex-col">
             <h2 className="text-lg font-semibold text-text-primary mb-4">
               {t("customers.detail.order_history")} ({orders.length})

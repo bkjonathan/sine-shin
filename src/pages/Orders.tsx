@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { invoke } from "@tauri-apps/api/core";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import { MYANMAR_FONT_EMBED_CSS } from "../assets/fonts/myanmar-fonts";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   getOrders,
   getOrdersPaginated,
@@ -15,6 +14,7 @@ import {
 } from "../api/orderApi";
 import { formatDate } from "../utils/date";
 import { getCustomers, getCustomerById } from "../api/customerApi";
+import { printInvoiceDirect } from "../api/printApi";
 import {
   createEmptyOrderFormData,
   createEmptyOrderFormItem,
@@ -32,6 +32,7 @@ import { Button, Input, Select } from "../components/ui";
 import { createCSVContent, parseCSV } from "../utils/csvUtils";
 import { ORDER_CSV_HEADERS, processOrderCSV } from "../utils/orderImportUtils";
 import { useAppSettings } from "../context/AppSettingsContext";
+import { useIsTabPanelActive } from "../context/TabPanelActivityContext";
 import { useTabNavigation } from "../hooks/useTabNavigation";
 import OrderDeleteModal from "../components/pages/orders/OrderDeleteModal";
 import OrderFormModal from "../components/pages/orders/OrderFormModal";
@@ -52,16 +53,10 @@ import {
 import ParcelPrintModal from "../components/pages/orders/ParcelPrintModal";
 import ParcelPrintLayout from "../components/pages/orders/ParcelPrintLayout";
 import { ParcelPrintOptions } from "../components/pages/orders/ParcelPrintLayout";
-
-// ── Animation Variants ──
-const fadeVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 24 },
-  },
-};
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../constants/animations";
 
 const ORDER_STATUS_OPTIONS: Array<{ value: OrderStatus; labelKey: string }> = [
   { value: "pending", labelKey: "orders.status_pending" },
@@ -201,7 +196,9 @@ const hasOrderFormErrors = (errors: OrderFormErrors): boolean => {
 export default function Orders() {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
   const { openTab } = useTabNavigation();
+  const isTabPanelActive = useIsTabPanelActive();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [orders, setOrders] = useState<OrderWithCustomer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -327,7 +324,7 @@ export default function Orders() {
             customer_address: customer?.address || undefined,
             customer_phone:
               customer?.phone ||
-              (detail.order as any).customer_phone ||
+              detail.order.customer_phone ||
               undefined,
           },
         };
@@ -370,22 +367,20 @@ export default function Orders() {
       // 5. Print via Rust command
       if (window.__TAURI_INTERNALS__) {
         if (silent_invoice_print) {
-          await invoke("print_invoice_direct", {
-            bytes: Array.from(bytes),
-            printerName:
-              invoice_printer_name.trim().length > 0
-                ? invoice_printer_name.trim()
-                : null,
-          });
+          await printInvoiceDirect(
+            Array.from(bytes),
+            invoice_printer_name.trim().length > 0
+              ? invoice_printer_name.trim()
+              : null,
+          );
         } else {
           // Save to temp, then use print_window as fallback
-          await invoke("print_invoice_direct", {
-            bytes: Array.from(bytes),
-            printerName:
-              invoice_printer_name.trim().length > 0
-                ? invoice_printer_name.trim()
-                : null,
-          });
+          await printInvoiceDirect(
+            Array.from(bytes),
+            invoice_printer_name.trim().length > 0
+              ? invoice_printer_name.trim()
+              : null,
+          );
         }
       } else {
         // Browser fallback: open image in new tab for printing
@@ -421,6 +416,10 @@ export default function Orders() {
   }, [searchInput]);
 
   useEffect(() => {
+    if (!isTabPanelActive || location.pathname !== "/orders") {
+      return;
+    }
+
     const nextSearchParams = new URLSearchParams(searchParams);
 
     if (currentPage > 1) {
@@ -432,7 +431,8 @@ export default function Orders() {
     if (nextSearchParams.toString() !== searchParams.toString()) {
       setSearchParams(nextSearchParams, { replace: true });
     }
-  }, [currentPage, searchParams, setSearchParams]);
+    // Intentionally not reacting to search param updates to avoid keep-alive tab ping-pong.
+  }, [currentPage, isTabPanelActive, location.pathname, setSearchParams]);
 
   const [sortBy, setSortBy] = useState<
     "customer_name" | "order_id" | "created_at"
@@ -1310,20 +1310,11 @@ export default function Orders() {
       <motion.div
         initial="hidden"
         animate="show"
-        variants={{
-          hidden: { opacity: 0 },
-          show: {
-            opacity: 1,
-            transition: { staggerChildren: 0.06 },
-          },
-        }}
+        variants={pageContainerVariants}
         className="max-w-6xl mx-auto h-full flex flex-col"
       >
         {/* ── Header ── */}
-        <motion.div
-          variants={fadeVariants}
-          className="flex items-center justify-between mb-6"
-        >
+        <motion.div variants={pageItemSoftVariants} className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-text-primary tracking-tight">
               {t("orders.title")}
@@ -1382,7 +1373,7 @@ export default function Orders() {
           </div>
         </motion.div>
         {/* ── Search Bar ── */}
-        <motion.div variants={fadeVariants} className="mb-6">
+        <motion.div variants={pageItemSoftVariants} className="mb-6">
           <div className="flex flex-col lg:flex-row gap-3">
             <div className="flex flex-col md:flex-row gap-3 flex-1">
               <div className="w-full md:w-48">
@@ -1534,7 +1525,7 @@ export default function Orders() {
 
         {/* ── Order List ── */}
         <motion.div
-          variants={fadeVariants}
+          variants={pageItemSoftVariants}
           className="flex-1 min-h-0 flex flex-col"
         >
           <div className="flex-1 overflow-y-auto pr-1">

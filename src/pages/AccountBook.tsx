@@ -6,29 +6,19 @@ import AccountBookTabs from "../components/pages/account-book/AccountBookTabs";
 import AccountBookIncomeTab from "../components/pages/account-book/AccountBookIncomeTab";
 import AccountBookExpenseTab from "../components/pages/account-book/AccountBookExpenseTab";
 import AccountBookSummaryTab from "../components/pages/account-book/AccountBookSummaryTab";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { useIsTabPanelActive } from "../context/TabPanelActivityContext";
 import DatePicker from "../components/ui/DatePicker";
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06 },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
-  },
-};
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../constants/animations";
 
 export default function AccountBook() {
   const { t } = useTranslation();
+  const isTabPanelActive = useIsTabPanelActive();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
   const [dateFrom, setDateFrom] = useState<Date | null>(null);
   const [dateTo, setDateTo] = useState<Date | null>(null);
@@ -46,14 +36,22 @@ export default function AccountBook() {
   });
 
   useEffect(() => {
+    if (!isTabPanelActive || location.pathname !== "/account-book") {
+      return;
+    }
+
     const newParams = new URLSearchParams(searchParams);
     if (activeTab === "income") {
       newParams.delete("tab");
     } else {
       newParams.set("tab", activeTab);
     }
-    setSearchParams(newParams, { replace: true });
-  }, [activeTab, searchParams, setSearchParams]);
+
+    if (newParams.toString() !== searchParams.toString()) {
+      setSearchParams(newParams, { replace: true });
+    }
+    // Intentionally not reacting to search param updates to avoid keep-alive tab ping-pong.
+  }, [activeTab, isTabPanelActive, location.pathname, setSearchParams]);
 
   const handleTabChange = (tab: AccountTabType) => {
     setActiveTab(tab);
@@ -63,11 +61,11 @@ export default function AccountBook() {
     <motion.div
       initial="hidden"
       animate="show"
-      variants={containerVariants}
+      variants={pageContainerVariants}
       className="max-w-6xl mx-auto h-full flex flex-col"
     >
       <motion.div
-        variants={itemVariants}
+        variants={pageItemSoftVariants}
         className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4"
       >
         <div className="text-left">
@@ -100,7 +98,7 @@ export default function AccountBook() {
         </div>
       </motion.div>
 
-      <motion.div variants={itemVariants}>
+      <motion.div variants={pageItemSoftVariants}>
         <AccountBookTabs activeTab={activeTab} onTabChange={handleTabChange} />
       </motion.div>
 

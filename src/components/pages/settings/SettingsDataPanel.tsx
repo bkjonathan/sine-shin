@@ -1,8 +1,23 @@
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
+
+import {
+  backupDatabase,
+  disconnectGoogleDrive,
+  getDbStatus,
+  getDriveConnectionStatus,
+  resetAppData,
+  resetTableSequence,
+  restoreDatabase,
+  startGoogleOauth,
+  triggerDriveBackup,
+} from "../../../api/dataApi";
+import {
+  getAwsS3ConnectionStatus,
+  testAwsS3Connection,
+} from "../../../api/shopApi";
 import { Button, Input, Select } from "../../ui";
 import { useSound } from "../../../context/SoundContext";
 import { RESET_APP_CODE } from "../../../cheapcode";
@@ -17,11 +32,6 @@ import {
 import { useAppSettings } from "../../../context/AppSettingsContext";
 import SettingsToggle from "./SettingsToggle";
 import { cleanSyncData } from "../../../api/syncApi";
-
-type AwsS3ConnectionStatus = {
-  connected: boolean;
-  message: string;
-};
 
 function SettingsDbStatus() {
   const [status, setStatus] = useState<{
@@ -42,11 +52,7 @@ function SettingsDbStatus() {
 
   const fetchStatus = async () => {
     try {
-      const data = await invoke<{
-        total_tables: number;
-        tables: Array<{ name: string; row_count: number }>;
-        size_bytes: number | null;
-      }>("get_db_status");
+      const data = await getDbStatus();
       setStatus(data);
     } catch (err) {
       console.error("Failed to fetch DB status:", err);
@@ -76,11 +82,7 @@ function SettingsDbStatus() {
     try {
       setResettingTable(tableName);
       setCleanMsg(null);
-      const result = await invoke<{
-        table_name: string;
-        max_id: number;
-        sequence_value: number;
-      }>("reset_table_sequence", { tableName });
+      const result = await resetTableSequence(tableName);
       playSound("success");
       setCleanMsg(
         t("settings.data_mgmt.sequence_reset_done", {
@@ -271,9 +273,7 @@ export default function SettingsDataPanel() {
 
   const checkDriveStatus = async () => {
     try {
-      const status = await invoke<{ connected: boolean; email: string | null }>(
-        "get_drive_connection_status",
-      );
+      const status = await getDriveConnectionStatus();
       setDriveConnected(status.connected);
       setDriveEmail(status.email);
     } catch (err) {
@@ -286,9 +286,7 @@ export default function SettingsDataPanel() {
   const handleConnectDrive = async () => {
     try {
       setDriveConnecting(true);
-      const status = await invoke<{ connected: boolean; email: string | null }>(
-        "start_google_oauth",
-      );
+      const status = await startGoogleOauth();
       setDriveConnected(status.connected);
       setDriveEmail(status.email);
       playSound("success");
@@ -303,7 +301,7 @@ export default function SettingsDataPanel() {
 
   const handleDisconnectDrive = async () => {
     try {
-      await invoke("disconnect_google_drive");
+      await disconnectGoogleDrive();
       setDriveConnected(false);
       setDriveEmail(null);
       playSound("click");
@@ -317,7 +315,7 @@ export default function SettingsDataPanel() {
       setTriggeringBackup(true);
       setError(null);
       setSuccessMsg(null);
-      await invoke("trigger_drive_backup");
+      await triggerDriveBackup();
       playSound("success");
       setSuccessMsg("Backup successfully uploaded to Google Drive");
       setTimeout(() => setSuccessMsg(null), 3000);
@@ -351,9 +349,7 @@ export default function SettingsDataPanel() {
   const checkAwsStatus = async () => {
     try {
       setCheckingAws(true);
-      const status = await invoke<AwsS3ConnectionStatus>(
-        "get_aws_s3_connection_status",
-      );
+      const status = await getAwsS3ConnectionStatus();
       setAwsConnected(status.connected);
       setAwsStatusMessage(status.message);
     } catch (err) {
@@ -384,9 +380,7 @@ export default function SettingsDataPanel() {
       setTestingAws(true);
       setAwsErrorMsg(null);
       setAwsSuccessMsg(null);
-      const status = await invoke<AwsS3ConnectionStatus>("test_aws_s3_connection", {
-        config,
-      });
+      const status = await testAwsS3Connection(config);
       setAwsConnected(status.connected);
       setAwsStatusMessage(status.message);
 
@@ -436,9 +430,7 @@ export default function SettingsDataPanel() {
         imagekit_base_url: imagekitBaseUrl.trim(),
       });
 
-      const status = await invoke<AwsS3ConnectionStatus>("test_aws_s3_connection", {
-        config,
-      });
+      const status = await testAwsS3Connection(config);
       setAwsConnected(status.connected);
       setAwsStatusMessage(status.message);
 
@@ -501,7 +493,7 @@ export default function SettingsDataPanel() {
 
     try {
       setResetting(true);
-      await invoke("reset_app_data");
+      await resetAppData();
       localStorage.clear();
       playSound("success");
       window.location.reload();
@@ -531,7 +523,7 @@ export default function SettingsDataPanel() {
       setSuccessMsg(null);
       setError(null);
 
-      await invoke("backup_database", { destPath: filePath });
+      await backupDatabase(filePath);
 
       playSound("success");
       setSuccessMsg(t("settings.data_mgmt.backup_success"));
@@ -565,13 +557,13 @@ export default function SettingsDataPanel() {
         ],
       });
 
-      if (!selected) return;
+      if (!selected || typeof selected !== "string") return;
 
       setRestoring(true);
       setError(null);
       setSuccessMsg(null);
 
-      await invoke("restore_database", { restorePath: selected });
+      await restoreDatabase(selected);
 
       playSound("success");
       window.location.reload();

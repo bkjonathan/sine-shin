@@ -1,40 +1,31 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
-export interface AppSettings {
-  language: string;
-  sound_effect: boolean;
-  theme: string;
-  accent_color: string;
-  currency: string;
-  currency_symbol: string;
-  exchange_currency: string;
-  exchange_currency_symbol: string;
-  invoice_printer_name: string;
-  silent_invoice_print: boolean;
-  auto_backup: boolean;
-  backup_frequency: string;
-  backup_time: string;
-  font_size: string;
-  aws_access_key_id: string;
-  aws_secret_access_key: string;
-  aws_region: string;
-  aws_bucket_name: string;
-  imagekit_base_url: string;
-}
+import {
+  getAppSettings,
+  reloadScheduler,
+  updateAppSettings,
+} from "../api/appApi";
+import type { AppSettings } from "../types/settings";
 
 interface AppSettingsContextType extends AppSettings {
-  setLanguage: (language: string) => void;
-  setCurrency: (currency: string) => void;
-  setCurrencySymbol: (symbol: string) => void;
-  setExchangeCurrency: (currency: string) => void;
-  setExchangeCurrencySymbol: (symbol: string) => void;
-  setInvoicePrinterName: (name: string) => void;
-  setSilentInvoicePrint: (enabled: boolean) => void;
-  setAutoBackup: (enabled: boolean) => void;
-  setBackupFrequency: (frequency: string) => void;
-  setBackupTime: (time: string) => void;
-  setFontSize: (size: string) => void;
+  setLanguage: (language: string) => Promise<void>;
+  setCurrency: (currency: string) => Promise<void>;
+  setCurrencySymbol: (symbol: string) => Promise<void>;
+  setExchangeCurrency: (currency: string) => Promise<void>;
+  setExchangeCurrencySymbol: (symbol: string) => Promise<void>;
+  setInvoicePrinterName: (name: string) => Promise<void>;
+  setSilentInvoicePrint: (enabled: boolean) => Promise<void>;
+  setAutoBackup: (enabled: boolean) => Promise<void>;
+  setBackupFrequency: (frequency: string) => Promise<void>;
+  setBackupTime: (time: string) => Promise<void>;
+  setFontSize: (size: string) => Promise<void>;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   formatPrice: (amount: number) => string;
 }
@@ -43,7 +34,7 @@ const AppSettingsContext = createContext<AppSettingsContextType | undefined>(
   undefined,
 );
 
-const DEFAULT_SETTINGS: AppSettings = {
+const DEFAULT_SETTINGS = {
   language: "en",
   sound_effect: true,
   theme: "dark",
@@ -63,7 +54,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   aws_region: "",
   aws_bucket_name: "",
   imagekit_base_url: "",
-};
+} satisfies AppSettings;
 
 export function AppSettingsProvider({
   children,
@@ -71,80 +62,144 @@ export function AppSettingsProvider({
   children: React.ReactNode;
 }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const settingsRef = useRef<AppSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
+    settingsRef.current = settings;
+  }, [settings]);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async (): Promise<void> => {
     try {
-      if (window.__TAURI_INTERNALS__) {
-        const data = await invoke<AppSettings>("get_app_settings");
-        // Ensure defaults if backend returns missing fields (though Rust struct has defaults)
-        setSettings({ ...DEFAULT_SETTINGS, ...data });
+      if (!window.__TAURI_INTERNALS__) {
+        return;
       }
+
+      const data = await getAppSettings();
+      setSettings({ ...DEFAULT_SETTINGS, ...data });
     } catch (err) {
       console.error("Failed to fetch app settings:", err);
     }
-  };
+  }, []);
 
-  const updateSettings = async (newSettings: Partial<AppSettings>) => {
-    try {
-      if (window.__TAURI_INTERNALS__) {
-        const updated = { ...settings, ...newSettings };
-        setSettings(updated);
+  useEffect(() => {
+    void fetchSettings();
+  }, [fetchSettings]);
 
-        await invoke("update_app_settings", { settings: updated });
-        await invoke("reload_scheduler");
+  const persistSettings = useCallback(async (nextSettings: AppSettings) => {
+    await updateAppSettings(nextSettings);
+    await reloadScheduler();
+  }, []);
+
+  const updateSettings = useCallback(
+    async (newSettings: Partial<AppSettings>): Promise<void> => {
+      if (!window.__TAURI_INTERNALS__) {
+        setSettings((prev) => ({ ...prev, ...newSettings }));
+        return;
       }
-    } catch (err) {
-      console.error("Failed to update settings:", err);
-      // Revert or fetch on error? strict adherence might imply revert, but for now log error
-      fetchSettings();
-    }
-  };
 
-  const setLanguage = (language: string) => updateSettings({ language });
-  const setCurrency = (currency: string) => updateSettings({ currency });
-  const setCurrencySymbol = (symbol: string) =>
-    updateSettings({ currency_symbol: symbol });
-  const setExchangeCurrency = (currency: string) =>
-    updateSettings({ exchange_currency: currency });
-  const setExchangeCurrencySymbol = (symbol: string) =>
-    updateSettings({ exchange_currency_symbol: symbol });
-  const setInvoicePrinterName = (name: string) =>
-    updateSettings({ invoice_printer_name: name });
-  const setSilentInvoicePrint = (enabled: boolean) =>
-    updateSettings({ silent_invoice_print: enabled });
-  const setAutoBackup = (enabled: boolean) =>
-    updateSettings({ auto_backup: enabled });
-  const setBackupFrequency = (frequency: string) =>
-    updateSettings({ backup_frequency: frequency });
-  const setBackupTime = (time: string) => updateSettings({ backup_time: time });
-  const setFontSize = (size: string) => updateSettings({ font_size: size });
+      const updatedSettings = { ...settingsRef.current, ...newSettings };
+      setSettings(updatedSettings);
 
-  const formatPrice = (amount: number) => {
-    // If currency symbol is provided, use custom formatting
-    // Otherwise fall back to Intl
-    // For now simple implementations:
-    // e.g. "$ 1,000.00" or "1,000 Ks" depending on locale preferences
-    // But since we have a custom symbol, we can just prepend/append it.
-    // Let's stick to a standard format: Symbol + Amount (formatted)
+      try {
+        await persistSettings(updatedSettings);
+      } catch (err) {
+        console.error("Failed to update settings:", err);
+        await fetchSettings();
+      }
+    },
+    [fetchSettings, persistSettings],
+  );
 
-    // Check if we want symbol suffix or prefix? Usually prefix for $, suffix for Ks potentially?
-    // For simplicity, let's look at the symbol. if it's "Ks", maybe suffix.
-    // Actually standard Intl might be safer if we map currency code to locale.
-    // But user wants custom symbol.
+  const setLanguage = useCallback(
+    async (language: string): Promise<void> => {
+      await updateSettings({ language });
+    },
+    [updateSettings],
+  );
 
-    const formattedNumber = new Intl.NumberFormat("en-US", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(amount);
+  const setCurrency = useCallback(
+    async (currency: string): Promise<void> => {
+      await updateSettings({ currency });
+    },
+    [updateSettings],
+  );
 
-    return `${settings.currency_symbol} ${formattedNumber}`;
-  };
+  const setCurrencySymbol = useCallback(
+    async (currency_symbol: string): Promise<void> => {
+      await updateSettings({ currency_symbol });
+    },
+    [updateSettings],
+  );
 
-  const value = {
+  const setExchangeCurrency = useCallback(
+    async (exchange_currency: string): Promise<void> => {
+      await updateSettings({ exchange_currency });
+    },
+    [updateSettings],
+  );
+
+  const setExchangeCurrencySymbol = useCallback(
+    async (exchange_currency_symbol: string): Promise<void> => {
+      await updateSettings({ exchange_currency_symbol });
+    },
+    [updateSettings],
+  );
+
+  const setInvoicePrinterName = useCallback(
+    async (invoice_printer_name: string): Promise<void> => {
+      await updateSettings({ invoice_printer_name });
+    },
+    [updateSettings],
+  );
+
+  const setSilentInvoicePrint = useCallback(
+    async (silent_invoice_print: boolean): Promise<void> => {
+      await updateSettings({ silent_invoice_print });
+    },
+    [updateSettings],
+  );
+
+  const setAutoBackup = useCallback(
+    async (auto_backup: boolean): Promise<void> => {
+      await updateSettings({ auto_backup });
+    },
+    [updateSettings],
+  );
+
+  const setBackupFrequency = useCallback(
+    async (backup_frequency: string): Promise<void> => {
+      await updateSettings({ backup_frequency });
+    },
+    [updateSettings],
+  );
+
+  const setBackupTime = useCallback(
+    async (backup_time: string): Promise<void> => {
+      await updateSettings({ backup_time });
+    },
+    [updateSettings],
+  );
+
+  const setFontSize = useCallback(
+    async (font_size: string): Promise<void> => {
+      await updateSettings({ font_size: font_size as AppSettings["font_size"] });
+    },
+    [updateSettings],
+  );
+
+  const formatPrice = useCallback(
+    (amount: number): string => {
+      const formattedNumber = new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(amount);
+
+      return `${settings.currency_symbol} ${formattedNumber}`;
+    },
+    [settings.currency_symbol],
+  );
+
+  const value: AppSettingsContextType = {
     ...settings,
     setLanguage,
     setCurrency,
@@ -168,10 +223,14 @@ export function AppSettingsProvider({
   );
 }
 
-export function useAppSettings() {
+/**
+ * Provides strongly typed read/write access to persisted app settings.
+ */
+export function useAppSettings(): AppSettingsContextType {
   const context = useContext(AppSettingsContext);
   if (context === undefined) {
     throw new Error("useAppSettings must be used within a AppSettingsProvider");
   }
+
   return context;
 }

@@ -1,16 +1,11 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 import { IconLogIn } from "../components/icons";
 import { Button, Input } from "../components/ui";
-
-interface LoginUserResponse {
-  name: string;
-  role: string;
-}
+import { loginUser } from "../api/authApi";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -28,10 +23,7 @@ export default function Login() {
 
     try {
       if (window.__TAURI_INTERNALS__) {
-        const user = await invoke<LoginUserResponse>("login_user", {
-          name,
-          password,
-        });
+        const user = await loginUser(name, password);
         await login({ name: user.name, role: user.role });
         navigate("/dashboard", { replace: true });
       } else {

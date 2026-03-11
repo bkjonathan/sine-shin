@@ -1,3 +1,5 @@
+pub mod client;
+
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use std::time::Duration;
@@ -158,15 +160,15 @@ fn remote_order_item_signature(row: &serde_json::Value) -> Option<String> {
 
 async fn local_record_is_active(pool: &Pool<Sqlite>, table: &str, record_id: i64) -> bool {
     let exists = match table {
-        "shop_settings" => sqlx::query_scalar::<_, i64>(
-            "SELECT 1 FROM shop_settings WHERE id = ? LIMIT 1",
-        )
-        .bind(record_id)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .is_some(),
+        "shop_settings" => {
+            sqlx::query_scalar::<_, i64>("SELECT 1 FROM shop_settings WHERE id = ? LIMIT 1")
+                .bind(record_id)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        }
         "customers" | "orders" | "order_items" | "expenses" => {
             let query = format!(
                 "SELECT 1 FROM {} WHERE id = ? AND deleted_at IS NULL LIMIT 1",
@@ -1270,14 +1272,15 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                         > = std::collections::HashMap::new();
 
                         for row in deduped_rows.into_values() {
-                            let signature = remote_order_item_signature(&row).unwrap_or_else(|| {
-                                format!(
-                                    "raw:{}",
-                                    row.get("uuid")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or_default()
-                                )
-                            });
+                            let signature =
+                                remote_order_item_signature(&row).unwrap_or_else(|| {
+                                    format!(
+                                        "raw:{}",
+                                        row.get("uuid")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or_default()
+                                    )
+                                });
 
                             let should_replace =
                                 if let Some(existing) = deduped_by_signature.get(&signature) {
@@ -1361,10 +1364,14 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("")
                                             .to_string();
-                                        let remote_product_qty =
-                                            row.get("product_qty").and_then(|v| v.as_i64()).unwrap_or(0);
-                                        let remote_price =
-                                            row.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                        let remote_product_qty = row
+                                            .get("product_qty")
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or(0);
+                                        let remote_price = row
+                                            .get("price")
+                                            .and_then(|v| v.as_f64())
+                                            .unwrap_or(0.0);
                                         let remote_weight = row
                                             .get("product_weight")
                                             .and_then(|v| v.as_f64())
@@ -1389,10 +1396,13 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                     parse_timestamp_millis(&remote_created_at);
                                                 let local_updated_ms =
                                                     parse_timestamp_millis(local_updated);
-                                                if let (Some(remote_created_ms), Some(local_updated_ms)) =
-                                                    (remote_created_ms, local_updated_ms)
+                                                if let (
+                                                    Some(remote_created_ms),
+                                                    Some(local_updated_ms),
+                                                ) = (remote_created_ms, local_updated_ms)
                                                 {
-                                                    if remote_created_ms <= local_updated_ms + 1000 {
+                                                    if remote_created_ms <= local_updated_ms + 1000
+                                                    {
                                                         continue;
                                                     }
                                                 }
@@ -1418,9 +1428,11 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                 .await
                                                 .unwrap_or(None);
 
-                                            if let Some((existing_id, existing_uuid)) = existing_match
+                                            if let Some((existing_id, existing_uuid)) =
+                                                existing_match
                                             {
-                                                if existing_uuid.is_none() || !remote_updated_at.is_empty()
+                                                if existing_uuid.is_none()
+                                                    || !remote_updated_at.is_empty()
                                                 {
                                                     let _ = sqlx::query(
                                                         "UPDATE order_items

@@ -1,17 +1,19 @@
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
+
+import {
+  getAwsS3ConnectionStatus,
+  getShopSettings,
+  updateShopSettings,
+  uploadShopLogoToS3,
+} from "../../../api/shopApi";
 import { Button, Input } from "../../ui";
 import { useSound } from "../../../context/SoundContext";
 import { IconImage } from "../../icons";
-
-type AwsS3ConnectionStatus = {
-  connected: boolean;
-  message: string;
-};
 
 function getMimeType(filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase() || "";
@@ -56,17 +58,10 @@ export default function SettingsAccountPanel() {
   const { playSound } = useSound();
   const { t } = useTranslation();
 
-  useEffect(() => {
-    fetchSettings();
-    checkAwsConnectionStatus();
-  }, []);
-
-  const checkAwsConnectionStatus = async () => {
+  const checkAwsConnectionStatus = useCallback(async () => {
     try {
       setCheckingAws(true);
-      const status = await invoke<AwsS3ConnectionStatus>(
-        "get_aws_s3_connection_status",
-      );
+      const status = await getAwsS3ConnectionStatus();
       setAwsConnected(status.connected);
     } catch (err) {
       console.error("Failed to check AWS connection status:", err);
@@ -74,40 +69,40 @@ export default function SettingsAccountPanel() {
     } finally {
       setCheckingAws(false);
     }
-  };
+  }, []);
 
-  const fetchSettings = async (showLoading = true) => {
-    try {
-      if (showLoading) setLoading(true);
-      const settings = await invoke<{
-        shop_name: string;
-        phone: string | null;
-        address: string | null;
-        logo_path: string | null;
-        logo_cloud_url: string | null;
-        customer_id_prefix: string | null;
-        order_id_prefix: string | null;
-      }>("get_shop_settings");
-      setShopName(settings.shop_name);
-      setPhone(settings.phone || "");
-      setAddress(settings.address || "");
-      setCurrentLogoPath(settings.logo_path || null);
-      setLogoCloudUrl(settings.logo_cloud_url || null);
-      setCustomerIdPrefix(settings.customer_id_prefix || "SSC-");
-      setOrderIdPrefix(settings.order_id_prefix || "SSO-");
+  const fetchSettings = useCallback(
+    async (showLoading = true) => {
+      try {
+        if (showLoading) setLoading(true);
+        const settings = await getShopSettings();
+        setShopName(settings.shop_name);
+        setPhone(settings.phone || "");
+        setAddress(settings.address || "");
+        setCurrentLogoPath(settings.logo_path || null);
+        setLogoCloudUrl(settings.logo_cloud_url || null);
+        setCustomerIdPrefix(settings.customer_id_prefix || "SSC-");
+        setOrderIdPrefix(settings.order_id_prefix || "SSO-");
 
-      if (settings.logo_path) {
-        setPreviewSrc(convertFileSrc(settings.logo_path));
-      } else {
-        setPreviewSrc(null);
+        if (settings.logo_path) {
+          setPreviewSrc(convertFileSrc(settings.logo_path));
+        } else {
+          setPreviewSrc(null);
+        }
+      } catch (err) {
+        console.error("Failed to fetch settings:", err);
+        setMessage({ type: "error", text: t("settings.error_load") });
+      } finally {
+        if (showLoading) setLoading(false);
       }
-    } catch (err) {
-      console.error("Failed to fetch settings:", err);
-      setMessage({ type: "error", text: t("settings.error_load") });
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  };
+    },
+    [t],
+  );
+
+  useEffect(() => {
+    void fetchSettings();
+    void checkAwsConnectionStatus();
+  }, [checkAwsConnectionStatus, fetchSettings]);
 
   const handlePickLogo = async () => {
     try {
@@ -120,7 +115,7 @@ export default function SettingsAccountPanel() {
           },
         ],
       });
-      if (selected) {
+      if (typeof selected === "string") {
         setNewLogoPath(selected);
         try {
           const blobUrl = await loadPickedFilePreview(selected);
@@ -142,7 +137,7 @@ export default function SettingsAccountPanel() {
     try {
       setSaving(true);
       setMessage(null);
-      await invoke("update_shop_settings", {
+      await updateShopSettings({
         shopName,
         phone,
         address,
@@ -187,9 +182,7 @@ export default function SettingsAccountPanel() {
     try {
       setUploadingCloud(true);
       setMessage(null);
-      const cloudUrl = await invoke<string>("upload_shop_logo_to_s3", {
-        logoPath: sourceLogoPath,
-      });
+      const cloudUrl = await uploadShopLogoToS3(sourceLogoPath);
 
       setLogoCloudUrl(cloudUrl);
       setMessage({

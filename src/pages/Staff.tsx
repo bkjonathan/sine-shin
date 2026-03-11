@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSound } from "../context/SoundContext";
 import { Button, Input } from "../components/ui";
@@ -15,15 +15,10 @@ import {
 import { StaffUser, getStaffUsers, deleteStaffUser } from "../api/staffApi";
 import StaffFormModal from "../components/pages/staff/StaffFormModal";
 import StaffDeleteModal from "../components/pages/staff/StaffDeleteModal";
-
-const fadeVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 24 },
-  },
-};
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../constants/animations";
 
 export default function Staff() {
   const { t } = useTranslation();
@@ -56,10 +51,8 @@ export default function Staff() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const data: any = await getStaffUsers();
-      // Supabase returns an array of users, or an object, let's assume it returns an array.
-      // Sometimes it returns { users: [...] }. Let's handle both.
-      const userList = Array.isArray(data) ? data : data.users || [];
+      const data = await getStaffUsers();
+      const userList = Array.isArray(data) ? data : data.users;
       setUsers(userList);
     } catch (e) {
       console.error("Failed to load staff users:", e);
@@ -115,17 +108,11 @@ export default function Staff() {
     <motion.div
       initial="hidden"
       animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: {
-          opacity: 1,
-          transition: { staggerChildren: 0.06 },
-        },
-      }}
+      variants={pageContainerVariants}
       className="max-w-6xl mx-auto h-full flex flex-col"
     >
       <motion.div
-        variants={fadeVariants}
+        variants={pageItemSoftVariants}
         className="flex items-center justify-between mb-6"
       >
         <div>
@@ -150,7 +137,7 @@ export default function Staff() {
       </motion.div>
 
       <motion.div
-        variants={fadeVariants}
+        variants={pageItemSoftVariants}
         className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-end md:items-center"
       >
         <div className="relative flex-1 max-w-md">
@@ -198,7 +185,7 @@ export default function Staff() {
       </motion.div>
 
       <motion.div
-        variants={fadeVariants}
+        variants={pageItemSoftVariants}
         className="flex-1 min-h-0 flex flex-col"
       >
         <div className="flex-1 overflow-y-auto pr-1">

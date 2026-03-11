@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence, Variants } from "framer-motion";
-import { useSearchParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { useLocation, useSearchParams } from "react-router-dom";
 import {
   createExpense,
   deleteExpense,
@@ -20,6 +20,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useSound } from "../../../context/SoundContext";
 import { useAppSettings } from "../../../context/AppSettingsContext";
+import { useIsTabPanelActive } from "../../../context/TabPanelActivityContext";
 import { formatDate } from "../../../utils/date";
 import { Button, Select } from "../../ui";
 import ExpenseDeleteModal from "../expenses/ExpenseDeleteModal";
@@ -36,15 +37,10 @@ import {
   IconLayoutGrid,
   IconList,
 } from "../../icons";
-
-const fadeVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 24 },
-  },
-};
+import {
+  pageContainerVariants,
+  pageItemSoftVariants,
+} from "../../../constants/animations";
 
 const EXPENSE_CATEGORIES = [
   "operation",
@@ -150,7 +146,9 @@ export default function AccountBookExpenseTab({
   dateTo,
 }: AccountBookExpenseTabProps) {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
+  const isTabPanelActive = useIsTabPanelActive();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const { t } = useTranslation();
   const { playSound } = useSound();
   const { formatPrice } = useAppSettings();
@@ -216,6 +214,10 @@ export default function AccountBookExpenseTab({
   }, [searchInput]);
 
   useEffect(() => {
+    if (!isTabPanelActive || location.pathname !== "/account-book") {
+      return;
+    }
+
     const nextSearchParams = new URLSearchParams(searchParams);
 
     if (currentPage > 1) {
@@ -227,7 +229,8 @@ export default function AccountBookExpenseTab({
     if (nextSearchParams.toString() !== searchParams.toString()) {
       setSearchParams(nextSearchParams, { replace: true });
     }
-  }, [currentPage, searchParams, setSearchParams]);
+    // Intentionally not reacting to search param updates to avoid keep-alive tab ping-pong.
+  }, [currentPage, isTabPanelActive, location.pathname, setSearchParams]);
 
   useEffect(() => {
     fetchExpenses(currentPage);
@@ -592,17 +595,11 @@ export default function AccountBookExpenseTab({
     <motion.div
       initial="hidden"
       animate="show"
-      variants={{
-        hidden: { opacity: 0 },
-        show: {
-          opacity: 1,
-          transition: { staggerChildren: 0.06 },
-        },
-      }}
+      variants={pageContainerVariants}
       className="max-w-6xl mx-auto h-full flex flex-col"
     >
       <motion.div
-        variants={fadeVariants}
+        variants={pageItemSoftVariants}
         className="flex items-center justify-between mb-6"
       >
         <div>
@@ -658,7 +655,7 @@ export default function AccountBookExpenseTab({
       </motion.div>
 
       <motion.div
-        variants={fadeVariants}
+        variants={pageItemSoftVariants}
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
       >
         <div className="glass-panel p-4">
@@ -695,7 +692,7 @@ export default function AccountBookExpenseTab({
         </div>
       </motion.div>
 
-      <motion.div variants={fadeVariants} className="mb-6">
+      <motion.div variants={pageItemSoftVariants} className="mb-6">
         <div className="glass-panel p-4 border border-glass-border-light relative z-20">
           <div className="flex flex-col gap-3">
             {/* Top Row: Search & Sort */}
@@ -830,7 +827,7 @@ export default function AccountBookExpenseTab({
       </motion.div>
 
       <motion.div
-        variants={fadeVariants}
+        variants={pageItemSoftVariants}
         className="flex-1 min-h-0 flex flex-col"
       >
         <div className="flex-1 overflow-y-auto pr-1">

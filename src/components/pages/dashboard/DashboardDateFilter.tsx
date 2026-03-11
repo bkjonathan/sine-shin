@@ -275,7 +275,7 @@ export default function DashboardDateFilter({
                   selected={customFromDate}
                   onChange={handleCustomFrom}
                   dateFormat="yyyy-MM-dd"
-                  placeholderText="From"
+                  placeholderText={t("dashboard.date_from")}
                   maxDate={customToDate || new Date()}
                   className="py-1! px-2! text-xs! rounded-lg!"
                 />
@@ -286,7 +286,7 @@ export default function DashboardDateFilter({
                   selected={customToDate}
                   onChange={handleCustomTo}
                   dateFormat="yyyy-MM-dd"
-                  placeholderText="To"
+                  placeholderText={t("dashboard.date_to")}
                   minDate={customFromDate || undefined}
                   maxDate={new Date()}
                   className="py-1! px-2! text-xs! rounded-lg!"

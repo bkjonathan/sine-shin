@@ -1,14 +1,12 @@
-import { AnimatePresence, motion, Variants } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui";
 import { IconTrash } from "../../icons";
 import { Expense } from "../../../types/expense";
-
-const modalVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95, y: 10 },
-  visible: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.95, y: 10 },
-};
+import {
+  modalScaleVariants,
+  overlayFadeMotionProps,
+} from "../../../constants/animations";
 
 interface ExpenseDeleteModalProps {
   isOpen: boolean;
@@ -30,14 +28,12 @@ export default function ExpenseDeleteModal({
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            {...overlayFadeMotionProps}
             onClick={onClose}
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           />
           <motion.div
-            variants={modalVariants}
+            variants={modalScaleVariants}
             initial="hidden"
             animate="visible"
             exit="exit"

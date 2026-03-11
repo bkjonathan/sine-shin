@@ -42,7 +42,6 @@ export interface PaginatedCustomers {
   page: number;
   page_size: number;
   total_pages: number;
-  // ... other fields if any
 }
 
 export const getCustomersPaginated = async (
@@ -104,7 +103,6 @@ export const getCustomerById = async (id: number): Promise<Customer> => {
   return await invoke("get_customer", { id });
 };
 
-// We import Order here to avoid circular dependency if possible, or just use any/Order interface
 import { Order } from "../types/order";
 
 export const getCustomerOrders = async (
