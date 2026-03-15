@@ -10,6 +10,7 @@ import {
   IconHelpCircle,
   IconHome,
   IconList,
+  IconPrinter,
   IconSettings,
   IconUsers,
 } from "../icons";
@@ -45,6 +46,7 @@ export default function AppNavigation() {
     { to: "/dashboard", label: "nav.dashboard", icon: IconHome },
     { to: "/customers", label: "nav.customers", icon: IconUsers },
     { to: "/orders", label: "nav.orders", icon: IconList },
+    { to: "/label-print", label: "nav.label_print", icon: IconPrinter },
     { to: "/account-book", label: "nav.account_book", icon: IconBookOpen },
     { to: "/reports", label: "nav.reports", icon: IconChartColumn },
     ...(showStaff

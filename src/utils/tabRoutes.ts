@@ -3,6 +3,7 @@ export const DEFAULT_TAB_PATH = "/dashboard";
 const STATIC_TAB_PATHS = new Set([
   "/dashboard",
   "/orders",
+  "/label-print",
   "/expenses",
   "/account-book",
   "/staff",
@@ -67,6 +68,8 @@ export const getRouteLabel = (
       return t("nav.dashboard");
     case "/orders":
       return t("nav.orders");
+    case "/label-print":
+      return t("nav.label_print");
     case "/expenses":
       return t("nav.expenses");
     case "/account-book":

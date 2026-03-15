@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
-import { toPng } from "html-to-image";
-import { MYANMAR_FONT_EMBED_CSS } from "../assets/fonts/myanmar-fonts";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   getOrders,
@@ -14,7 +12,6 @@ import {
 } from "../api/orderApi";
 import { formatDate } from "../utils/date";
 import { getCustomers, getCustomerById } from "../api/customerApi";
-import { printInvoiceDirect } from "../api/printApi";
 import {
   createEmptyOrderFormData,
   createEmptyOrderFormItem,
@@ -23,7 +20,6 @@ import {
   OrderFormItemData,
   OrderStatus,
   OrderWithCustomer,
-  OrderDetail,
 } from "../types/order";
 import { Customer } from "../types/customer";
 import { useSound } from "../context/SoundContext";
@@ -50,9 +46,6 @@ import {
   IconTrash,
   IconUpload,
 } from "../components/icons";
-import ParcelPrintModal from "../components/pages/orders/ParcelPrintModal";
-import ParcelPrintLayout from "../components/pages/orders/ParcelPrintLayout";
-import { ParcelPrintOptions } from "../components/pages/orders/ParcelPrintLayout";
 import {
   pageContainerVariants,
   pageItemSoftVariants,
@@ -221,8 +214,7 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const { playSound } = useSound();
   const { t } = useTranslation();
-  const { formatPrice, invoice_printer_name, silent_invoice_print } =
-    useAppSettings();
+  const { formatPrice } = useAppSettings();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -235,7 +227,6 @@ export default function Orders() {
   // Import State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const latestFetchIdRef = useRef(0);
-  const parcelPrintRef = useRef<HTMLDivElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const visiblePages = getVisiblePages(currentPage, totalPages);
   const displayPages = visiblePages.length > 0 ? visiblePages : ["1"];
@@ -268,21 +259,6 @@ export default function Orders() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(
     new Set(),
   );
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [printOrders, setPrintOrders] = useState<
-    (OrderDetail & {
-      order: { customer_address?: string; customer_phone?: string };
-    })[]
-  >([]);
-  const [printOptions, setPrintOptions] = useState<ParcelPrintOptions>({
-    showCustomerName: true,
-    showCustomerId: false,
-    showCustomerPhone: true,
-    showCustomerAddress: true,
-    showProductDetails: true,
-    showOrderId: true,
-    showShopName: true,
-  });
 
   const handleToggleOrderSelection = (id: number) => {
     setSelectedOrderIds((prev) => {
@@ -304,103 +280,17 @@ export default function Orders() {
     }
   };
 
-  const handleExecutePrint = async (options: ParcelPrintOptions) => {
-    try {
-      // 1. Fetch full order details
-      const detailedOrders = await Promise.all(
-        Array.from(selectedOrderIds).map((id) => getOrderById(id)),
-      );
-
-      const formattedOrders = detailedOrders.map((detail) => {
-        const customer = customers.find(
-          (c) =>
-            c.id === detail.order.customer_id ||
-            c.customer_id === detail.order.customer_id?.toString(),
-        );
-        return {
-          ...detail,
-          order: {
-            ...detail.order,
-            customer_address: customer?.address || undefined,
-            customer_phone:
-              customer?.phone ||
-              detail.order.customer_phone ||
-              undefined,
-          },
-        };
-      });
-
-      // 2. Set state and wait for React to render the layout
-      setPrintOptions(options);
-      setPrintOrders(formattedOrders);
-
-      // Wait for React render + browser paint
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => {
-          setTimeout(resolve, 300);
-        });
-      });
-
-      // 3. Capture the rendered layout as PNG using html-to-image
-      if (!parcelPrintRef.current) {
-        throw new Error("Parcel print layout ref not available");
-      }
-
-      await document.fonts.ready;
-      await new Promise((r) => setTimeout(r, 150));
-
-      const dataUrl = await toPng(parcelPrintRef.current, {
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        skipFonts: true,
-        fontEmbedCSS: MYANMAR_FONT_EMBED_CSS,
-      });
-
-      // 4. Convert base64 data URL → Uint8Array
-      const base64 = dataUrl.split(",")[1];
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-
-      // 5. Print via Rust command
-      if (window.__TAURI_INTERNALS__) {
-        if (silent_invoice_print) {
-          await printInvoiceDirect(
-            Array.from(bytes),
-            invoice_printer_name.trim().length > 0
-              ? invoice_printer_name.trim()
-              : null,
-          );
-        } else {
-          // Save to temp, then use print_window as fallback
-          await printInvoiceDirect(
-            Array.from(bytes),
-            invoice_printer_name.trim().length > 0
-              ? invoice_printer_name.trim()
-              : null,
-          );
-        }
-      } else {
-        // Browser fallback: open image in new tab for printing
-        const win = window.open("");
-        if (win) {
-          win.document.write(
-            `<img src="${dataUrl}" onload="window.print();window.close()" />`,
-          );
-        }
-      }
-
-      playSound("success");
-    } catch (err) {
-      console.error("Failed to print parcels:", err);
-      playSound("error");
-    } finally {
-      setPrintOrders([]);
-      setIsPrintModalOpen(false);
-      setSelectedOrderIds(new Set());
+  const openLabelPrintPage = (ids: number[]) => {
+    if (ids.length === 0) {
+      return;
     }
+
+    const params = new URLSearchParams({
+      source: "orders",
+      ids: ids.join(","),
+    });
+    openTab(`/label-print?${params.toString()}`);
+    playSound("click");
   };
 
   useEffect(() => {
@@ -1300,14 +1190,7 @@ export default function Orders() {
   };
 
   return (
-    <>
-      <ParcelPrintLayout
-        ref={parcelPrintRef}
-        orders={printOrders}
-        options={printOptions}
-        shopName={t("app.name", "Thai Htay")}
-      />
-      <motion.div
+    <motion.div
         initial="hidden"
         animate="show"
         variants={pageContainerVariants}
@@ -1353,13 +1236,13 @@ export default function Orders() {
               {t("orders.export_csv")}
             </Button>
             <Button
-              onClick={() => setIsPrintModalOpen(true)}
+              onClick={() => openLabelPrintPage(Array.from(selectedOrderIds))}
               variant={selectedOrderIds.size > 0 ? "primary" : "default"}
               disabled={selectedOrderIds.size === 0}
               className="px-4 py-2 text-sm flex items-center gap-2"
             >
               <IconPrinter size={16} strokeWidth={2} />
-              {t("orders.print_parcels", "Print Parcels")}{" "}
+              {t("nav.label_print", "Label Print")}{" "}
               {selectedOrderIds.size > 0 && `(${selectedOrderIds.size})`}
             </Button>
             <Button
@@ -1604,6 +1487,15 @@ export default function Orders() {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        openLabelPrintPage([order.id]);
+                                      }}
+                                      className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                    >
+                                      <IconPrinter size={16} strokeWidth={2} />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         handleOpenModal(order);
                                       }}
                                       className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
@@ -1807,6 +1699,16 @@ export default function Orders() {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          openLabelPrintPage([order.id]);
+                                        }}
+                                        className="p-1.5 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                        title="Print label"
+                                      >
+                                        <IconPrinter size={15} strokeWidth={2} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           handleOpenModal(order);
                                         }}
                                         className="p-1.5 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
@@ -1981,13 +1883,6 @@ export default function Orders() {
           onConfirm={handleConfirmDelete}
         />
 
-        <ParcelPrintModal
-          isOpen={isPrintModalOpen}
-          onClose={() => setIsPrintModalOpen(false)}
-          selectedOrders={orders.filter((o) => selectedOrderIds.has(o.id))}
-          onPrint={handleExecutePrint}
-        />
       </motion.div>
-    </>
   );
 }

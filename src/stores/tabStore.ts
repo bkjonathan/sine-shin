@@ -210,10 +210,39 @@ export const useTabStore = create<TabStore>()(
 
           if (targetTab) {
             const nextPinned = options.pinned ?? targetTab.pinned;
+            const currentHistory = targetTab.history.length
+              ? [...targetTab.history]
+              : [targetTab.path];
+            let nextHistory = currentHistory;
+            let nextHistoryIndex = Math.min(
+              targetTab.historyIndex,
+              Math.max(0, currentHistory.length - 1),
+            );
+
+            const currentPath = currentHistory[nextHistoryIndex];
+            if (currentPath !== normalizedPath) {
+              nextHistory = [...currentHistory];
+              if (nextHistory[nextHistoryIndex + 1] === normalizedPath) {
+                nextHistoryIndex += 1;
+              } else if (nextHistory[nextHistoryIndex - 1] === normalizedPath) {
+                nextHistoryIndex -= 1;
+              } else {
+                nextHistory.splice(nextHistoryIndex + 1);
+                nextHistory.push(normalizedPath);
+                nextHistoryIndex = nextHistory.length - 1;
+              }
+            }
+
             const shouldUpdate =
+              targetTab.path !== normalizedPath ||
               targetTab.title !== title ||
               targetTab.icon !== options.icon ||
-              targetTab.pinned !== nextPinned;
+              targetTab.pinned !== nextPinned ||
+              targetTab.historyIndex !== nextHistoryIndex ||
+              nextHistory.length !== targetTab.history.length ||
+              nextHistory.some(
+                (entry, index) => entry !== targetTab.history[index],
+              );
 
             if (shouldUpdate) {
               const nextTabs = partitionPinnedTabs(
@@ -221,9 +250,12 @@ export const useTabStore = create<TabStore>()(
                   tab.id === targetTab.id
                     ? {
                         ...tab,
+                        path: normalizedPath,
                         title,
                         icon: options.icon ?? tab.icon,
                         pinned: nextPinned,
+                        history: nextHistory,
+                        historyIndex: nextHistoryIndex,
                       }
                     : tab,
                 ),

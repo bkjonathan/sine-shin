@@ -1,49 +1,54 @@
 import { forwardRef } from "react";
-import { OrderDetail } from "../../../types/order";
-
-export interface ParcelPrintOptions {
-  showCustomerName: boolean;
-  showCustomerId: boolean;
-  showCustomerPhone: boolean;
-  showCustomerAddress: boolean;
-  showProductDetails: boolean;
-  showOrderId: boolean;
-  showShopName: boolean;
-}
+import {
+  ParcelPrintLabel,
+  ParcelPrintOptions,
+} from "../../../types/labelPrint";
 
 interface ParcelPrintLayoutProps {
-  orders: (OrderDetail & {
-    order: { customer_address?: string; customer_phone?: string };
-  })[];
+  labels: ParcelPrintLabel[];
   options: ParcelPrintOptions;
   shopName?: string;
+  mode?: "preview" | "print";
 }
 
 const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
-  ({ orders, options, shopName }, ref) => {
+  ({ labels, options, shopName, mode = "print" }, ref) => {
+    const isPreview = mode === "preview";
+
+    const wrapperStyle = isPreview
+      ? undefined
+      : { position: "fixed" as const, left: "-9999px", top: "-9999px" };
+
     return (
-      <div style={{ position: "fixed", left: "-9999px", top: "-9999px" }}>
+      <div style={wrapperStyle}>
         <div
           ref={ref}
           style={{
-            width: "800px",
+            width: isPreview ? "100%" : "800px",
             backgroundColor: "#ffffff",
             color: "#111827",
             fontFamily: "'Noto Sans Myanmar', 'Inter', sans-serif",
             padding: "28px",
             boxSizing: "border-box",
+            borderRadius: isPreview ? "20px" : undefined,
+            border: isPreview ? "1px solid #e5e7eb" : undefined,
+            boxShadow: isPreview
+              ? "0 18px 40px rgba(15, 23, 42, 0.08)"
+              : undefined,
           }}
         >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: isPreview
+                ? "repeat(auto-fit, minmax(260px, 1fr))"
+                : "1fr 1fr",
               gap: "20px",
             }}
           >
-            {orders.map(({ order, items }) => (
+            {labels.map((label) => (
               <div
-                key={order.id}
+                key={label.key}
                 style={{
                   border: "2px dashed #9ca3af",
                   borderRadius: "8px",
@@ -62,6 +67,7 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "flex-start",
+                    gap: "12px",
                   }}
                 >
                   <div>
@@ -77,7 +83,7 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                         {shopName}
                       </p>
                     )}
-                    {options.showOrderId && (
+                    {options.showOrderId && label.orderId && (
                       <p
                         style={{
                           fontSize: "11px",
@@ -86,10 +92,22 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                           margin: "2px 0 0",
                         }}
                       >
-                        #{order.order_id || order.id}
+                        #{label.orderId}
                       </p>
                     )}
                   </div>
+                  <span
+                    style={{
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      color: "#6b7280",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {label.kind}
+                  </span>
                 </div>
 
                 {/* Ship To */}
@@ -124,11 +142,11 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                         fontFamily: "'Noto Sans Myanmar', 'Inter', sans-serif",
                       }}
                     >
-                      {order.customer_name || "N/A"}
+                      {label.customerName || "N/A"}
                     </p>
                   )}
 
-                  {options.showCustomerId && order.customer_id && (
+                  {options.showCustomerId && label.customerId && (
                     <p
                       style={{
                         fontSize: "12px",
@@ -136,11 +154,11 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                         margin: 0,
                       }}
                     >
-                      ID: {order.customer_id}
+                      ID: {label.customerId}
                     </p>
                   )}
 
-                  {options.showCustomerPhone && order.customer_phone && (
+                  {options.showCustomerPhone && label.customerPhone && (
                     <p
                       style={{
                         fontSize: "13px",
@@ -149,7 +167,7 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                         margin: 0,
                       }}
                     >
-                      📞 {order.customer_phone}
+                      📞 {label.customerPhone}
                     </p>
                   )}
 
@@ -163,13 +181,19 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                         fontFamily: "'Noto Sans Myanmar', 'Inter', sans-serif",
                       }}
                     >
-                      📍 {order.customer_address || "—"}
+                      📍{" "}
+                      {[label.customerAddress, label.customerCity]
+                        .filter(Boolean)
+                        .join(", ") || "—"}
                     </p>
                   )}
                 </div>
 
                 {/* Product Details */}
-                {options.showProductDetails && items && items.length > 0 && (
+                {options.showProductDetails &&
+                  label.kind === "order" &&
+                  label.items &&
+                  label.items.length > 0 && (
                   <div
                     style={{
                       borderTop: "1px solid #e5e7eb",
@@ -189,7 +213,7 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                       ITEMS
                     </p>
                     <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-                      {items.map((item, idx) => (
+                      {label.items.map((item, idx) => (
                         <li
                           key={idx}
                           style={{
@@ -210,11 +234,11 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                               paddingRight: "8px",
                             }}
                           >
-                            {item.product_url || "Product"}
+                            {item.label || "Product"}
                           </span>
-                          {(item.product_qty || 1) > 0 && (
+                          {(item.qty || 1) > 0 && (
                             <span style={{ fontWeight: 600, flexShrink: 0 }}>
-                              ×{item.product_qty}
+                              ×{item.qty}
                             </span>
                           )}
                         </li>
@@ -232,8 +256,8 @@ const ParcelPrintLayout = forwardRef<HTMLDivElement, ParcelPrintLayoutProps>(
                         marginTop: "4px",
                       }}
                     >
-                      <span>Qty: {order.total_qty || 0}</span>
-                      <span>Wt: {order.total_weight || 0} kg</span>
+                      <span>Qty: {label.totalQty || 0}</span>
+                      <span>Wt: {label.totalWeight || 0} kg</span>
                     </div>
                   </div>
                 )}

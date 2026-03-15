@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "../../ui";
 import { OrderWithCustomer } from "../../../types/order";
+import { ParcelPrintOptions } from "../../../types/labelPrint";
 import { IconPrinter, IconX } from "../../icons";
-import { ParcelPrintOptions } from "./ParcelPrintLayout";
 
 interface ParcelPrintModalProps {
   isOpen: boolean;

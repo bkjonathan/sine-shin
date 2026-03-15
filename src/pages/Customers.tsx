@@ -32,6 +32,7 @@ import {
   IconMapPin,
   IconPhone,
   IconPlus,
+  IconPrinter,
   IconSearch,
   IconSortAsc,
   IconSortDesc,
@@ -646,6 +647,16 @@ export default function Customers() {
     }
   };
 
+  const openLabelPrintPage = (customerId?: number) => {
+    const params = new URLSearchParams({ source: "customers" });
+    if (customerId) {
+      params.set("ids", String(customerId));
+    }
+
+    openTab(`/label-print?${params.toString()}`);
+    playSound("click");
+  };
+
   return (
     <motion.div
       initial="hidden"
@@ -739,6 +750,14 @@ export default function Customers() {
           >
             <IconDownload size={16} strokeWidth={2} />
             {t("customers.export_csv")}
+          </Button>
+          <Button
+            onClick={() => openLabelPrintPage()}
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <IconPrinter size={16} strokeWidth={2} />
+            {t("nav.label_print", "Label Print")}
           </Button>
           <Button
             onClick={() => handleOpenModal()}
@@ -930,6 +949,16 @@ export default function Customers() {
 
                               {/* Actions */}
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-2 -mt-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openLabelPrintPage(customer.id);
+                                  }}
+                                  className="p-2 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                  title="Print label"
+                                >
+                                  <IconPrinter size={16} strokeWidth={2} />
+                                </button>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1126,6 +1155,16 @@ export default function Customers() {
                               </td>
                               <td className="px-4 py-3 text-right">
                                 <div className="flex gap-1 justify-end">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openLabelPrintPage(customer.id);
+                                    }}
+                                    className="p-1.5 text-text-muted hover:text-accent-blue hover:bg-glass-white-hover rounded-lg transition-colors"
+                                    title="Print label"
+                                  >
+                                    <IconPrinter size={15} strokeWidth={2} />
+                                  </button>
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();

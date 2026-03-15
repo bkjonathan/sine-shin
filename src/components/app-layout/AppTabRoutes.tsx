@@ -12,6 +12,7 @@ const CustomersPage = lazy(() => import("../../pages/Customers"));
 const DashboardPage = lazy(() => import("../../pages/Dashboard"));
 const ExpensesPage = lazy(() => import("../../pages/Expenses"));
 const HelpPage = lazy(() => import("../../pages/Help"));
+const LabelPrintPage = lazy(() => import("../../pages/LabelPrint"));
 const OrderDetailPage = lazy(() => import("../../pages/OrderDetail"));
 const OrdersPage = lazy(() => import("../../pages/Orders"));
 const ReportsPage = lazy(() => import("../../pages/Reports"));
@@ -51,6 +52,8 @@ export default function AppTabRoutes({ locationPath }: AppTabRoutesProps) {
             return <DashboardPage />;
           case "/orders":
             return <OrdersPage />;
+          case "/label-print":
+            return <LabelPrintPage />;
           case "/expenses":
             return <ExpensesPage />;
           case "/account-book":

@@ -7,6 +7,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "orders": "Orders",
+    "label_print": "Label Print",
     "expenses": "Expenses",
     "account_book": "Account Book",
     "reports": "Reports",
