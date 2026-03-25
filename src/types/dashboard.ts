@@ -8,9 +8,9 @@ export interface ShopData {
 }
 
 export interface DashboardOrder {
-  id: number;
+  id: string;
   order_id: string | null;
-  customer_id: number | null;
+  customer_id: string | null;
   customer_name: string | null;
   total_price: number;
   created_at: string | null;

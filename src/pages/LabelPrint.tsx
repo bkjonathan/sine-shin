@@ -64,11 +64,11 @@ const PRINT_OPTION_LABELS: Array<{
 const parseSource = (value: string | null): LabelSource =>
   value === "customers" ? "customers" : "orders";
 
-const parseIds = (value: string | null): number[] =>
+const parseIds = (value: string | null): string[] =>
   (value ?? "")
     .split(",")
-    .map((item) => Number.parseInt(item.trim(), 10))
-    .filter((item) => Number.isFinite(item) && item > 0);
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
 
 const clampCopies = (value: number): number => {
   if (!Number.isFinite(value)) {
@@ -119,7 +119,7 @@ export default function LabelPrint() {
   const [searchParams] = useSearchParams();
   const printRef = useRef<HTMLDivElement>(null);
   const lastPrefillKeyRef = useRef<string>("");
-  const orderDetailsCacheRef = useRef<Map<number, OrderDetail>>(new Map());
+  const orderDetailsCacheRef = useRef<Map<string, OrderDetail>>(new Map());
 
   const [source, setSource] = useState<LabelSource>(() =>
     parseSource(searchParams.get("source")),

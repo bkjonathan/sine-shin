@@ -9,7 +9,7 @@ export interface UseDashboardResult {
   formatPrice: (value: number) => string;
   navigateInTab: (path: string) => void;
   navigateToOrders: () => void;
-  navigateToOrder: (id: number) => void;
+  navigateToOrder: (id: string) => void;
   handleLogout: () => void;
 }
 
@@ -33,7 +33,7 @@ export function useDashboard(): UseDashboardResult {
   }, [navigateInTab]);
 
   const navigateToOrder = useCallback(
-    (id: number) => {
+    (id: string) => {
       navigateInTab(`/orders/${id}`);
     },
     [navigateInTab],

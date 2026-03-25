@@ -2,9 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ShopSettings {
-    pub id: i64,
-    #[sqlx(default)]
-    pub uuid: Option<String>,
+    pub id: String,
     pub shop_name: String,
     pub phone: Option<String>,
     pub address: Option<String>,
@@ -20,9 +18,7 @@ pub struct ShopSettings {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
-    pub id: i64,
-    #[sqlx(default)]
-    pub uuid: Option<String>,
+    pub id: String,
     pub name: String,
     pub password_hash: String,
     pub role: String,
@@ -31,9 +27,7 @@ pub struct User {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Customer {
-    pub id: i64,
-    #[sqlx(default)]
-    pub uuid: Option<String>,
+    pub id: String,
     pub customer_id: Option<String>,
     pub name: String,
     pub phone: Option<String>,
@@ -68,9 +62,7 @@ pub struct PaginatedOrders {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Expense {
-    pub id: i64,
-    #[sqlx(default)]
-    pub uuid: Option<String>,
+    pub id: String,
     pub expense_id: Option<String>,
     pub title: String,
     pub amount: f64,
@@ -96,11 +88,9 @@ pub struct PaginatedExpenses {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Order {
-    pub id: i64,
-    #[sqlx(default)]
-    pub uuid: Option<String>,
+    pub id: String,
     pub order_id: Option<String>,
-    pub customer_id: Option<i64>,
+    pub customer_id: Option<String>,
     pub status: Option<String>,
     pub order_from: Option<String>,
     pub exchange_rate: Option<f64>,
@@ -131,10 +121,8 @@ pub struct Order {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct OrderItem {
-    pub id: i64,
-    #[sqlx(default)]
-    pub uuid: Option<String>,
-    pub order_id: i64,
+    pub id: String,
+    pub order_id: String,
     pub product_url: Option<String>,
     pub product_qty: Option<i64>,
     pub price: Option<f64>,
@@ -156,11 +144,9 @@ pub struct OrderItemPayload {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct OrderWithCustomer {
-    pub id: i64,
-    #[sqlx(default)]
-    pub uuid: Option<String>,
+    pub id: String,
     pub order_id: Option<String>,
-    pub customer_id: Option<i64>,
+    pub customer_id: Option<String>,
     pub status: Option<String>,
     pub customer_name: Option<String>,
     pub order_from: Option<String>,

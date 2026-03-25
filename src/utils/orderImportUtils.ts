@@ -57,10 +57,9 @@ export const ORDER_CSV_HEADERS = [
 type OrderServiceFeeType = (typeof SERVICE_FEE_TYPES)[number];
 
 interface RawGroupedOrder {
-  id?: number;
-  uuid?: string | null;
+  id?: string;
   order_id?: string | null;
-  customer_id?: number;
+  customer_id?: string;
   status?: OrderStatus;
   order_from?: string;
   exchange_rate?: number;
@@ -87,10 +86,9 @@ interface RawGroupedOrder {
 }
 
 export interface ParsedOrderImport {
-  id?: number;
-  uuid?: string | null;
+  id?: string;
   order_id?: string | null;
-  customer_id: number;
+  customer_id: string;
   status?: OrderStatus;
   order_from?: string;
   exchange_rate?: number;
@@ -261,9 +259,9 @@ const isRowEmpty = (record: Record<string, string>): boolean => {
 };
 
 const buildOrderGroupKey = (record: Record<string, string>, rowIndex: number): string => {
-  const localId = parseOptionalInt(record, ORDER_ID_ALIASES);
-  if (localId !== undefined) {
-    return `id:${localId}`;
+  const localId = parseOptionalString(record, ORDER_ID_ALIASES);
+  if (localId) {
+    return `id:${localId.toLowerCase()}`;
   }
 
   const uuid = parseOptionalString(record, ORDER_UUID_ALIASES);
@@ -281,14 +279,13 @@ const buildOrderGroupKey = (record: Record<string, string>, rowIndex: number): s
 
 const resolveCustomerId = (
   record: Record<string, string>,
-  customersById: Map<number, Customer>,
-  customersByUuid: Map<string, Customer>,
+  customersById: Map<string, Customer>,
   customersByCode: Map<string, Customer>,
   customersByName: Map<string, Customer>,
-): number | undefined => {
-  const customerLocalId = parseOptionalInt(record, CUSTOMER_LOCAL_ID_ALIASES);
-  if (customerLocalId !== undefined) {
-    const byLocalId = customersById.get(customerLocalId);
+): string | undefined => {
+  const customerLocalId = parseOptionalString(record, CUSTOMER_LOCAL_ID_ALIASES);
+  if (customerLocalId) {
+    const byLocalId = customersById.get(customerLocalId.toLowerCase());
     if (byLocalId) {
       return byLocalId.id;
     }
@@ -296,7 +293,7 @@ const resolveCustomerId = (
 
   const customerUuid = parseOptionalString(record, CUSTOMER_UUID_ALIASES);
   if (customerUuid) {
-    const byUuid = customersByUuid.get(customerUuid.toLowerCase());
+    const byUuid = customersById.get(customerUuid.toLowerCase());
     if (byUuid) {
       return byUuid.id;
     }
@@ -328,16 +325,12 @@ export const processOrderCSV = (
   const errors: string[] = [];
   const groups = new Map<string, RawGroupedOrder>();
 
-  const customersById = new Map<number, Customer>();
-  const customersByUuid = new Map<string, Customer>();
+  const customersById = new Map<string, Customer>();
   const customersByCode = new Map<string, Customer>();
   const customersByName = new Map<string, Customer>();
 
   for (const customer of customers) {
-    customersById.set(customer.id, customer);
-    if (customer.uuid?.trim()) {
-      customersByUuid.set(customer.uuid.trim().toLowerCase(), customer);
-    }
+    customersById.set(customer.id.toLowerCase(), customer);
     if (customer.customer_id?.trim()) {
       customersByCode.set(customer.customer_id.trim().toLowerCase(), customer);
     }
@@ -382,7 +375,6 @@ export const processOrderCSV = (
     const resolvedCustomerId = resolveCustomerId(
       record,
       customersById,
-      customersByUuid,
       customersByCode,
       customersByName,
     );
@@ -456,11 +448,7 @@ export const processOrderCSV = (
 
     currentGroup.id = mergeIfDefined(
       currentGroup.id,
-      parseOptionalInt(record, ORDER_ID_ALIASES),
-    );
-    currentGroup.uuid = mergeIfDefined(
-      currentGroup.uuid,
-      withNullableString(parseOptionalString(record, ORDER_UUID_ALIASES)),
+      parseOptionalString(record, ORDER_ID_ALIASES) ?? parseOptionalString(record, ORDER_UUID_ALIASES) ?? undefined,
     );
     currentGroup.order_id = mergeIfDefined(
       currentGroup.order_id,
@@ -583,7 +571,6 @@ export const processOrderCSV = (
 
     validOrders.push({
       id: group.id,
-      uuid: group.uuid,
       order_id: group.order_id,
       customer_id: group.customer_id,
       status: group.status,

@@ -8,7 +8,7 @@ interface AccountBookTableProps {
   loading: boolean;
   rows: AccountBookRow[];
   formatPrice: (amount: number) => string;
-  onViewOrder: (orderId: number) => void;
+  onViewOrder: (orderId: string) => void;
 }
 
 export default function AccountBookTable({

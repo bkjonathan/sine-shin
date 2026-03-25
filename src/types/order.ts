@@ -6,10 +6,9 @@ export type OrderStatus =
   | "cancelled";
 
 export interface Order {
-  id: number;
-  uuid?: string | null;
+  id: string;
   order_id?: string;
-  customer_id?: number;
+  customer_id?: string;
   status?: OrderStatus;
   order_from?: string;
   exchange_rate?: number;
@@ -37,9 +36,8 @@ export interface Order {
 }
 
 export interface OrderItem {
-  id: number;
-  uuid?: string | null;
-  order_id: number;
+  id: string;
+  order_id: string;
   product_url?: string;
   product_qty?: number;
   price?: number;

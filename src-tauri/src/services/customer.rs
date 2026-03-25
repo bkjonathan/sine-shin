@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use tauri::AppHandle;
 use tracing::instrument;
+use uuid::Uuid;
 
 use crate::db::DEFAULT_CUSTOMER_ID_PREFIX;
 use crate::error::{AppError, AppResult};
@@ -19,83 +20,62 @@ const MAX_CUSTOMERS_PAGE_SIZE: i64 = 100;
 pub async fn create_customer(
     state: Arc<AppState>,
     app: &AppHandle,
-    uuid: Option<String>,
     name: String,
     phone: Option<String>,
     address: Option<String>,
     city: Option<String>,
     social_media_url: Option<String>,
     platform: Option<String>,
-    id: Option<i64>,
+    id: Option<String>,
     customer_id: Option<String>,
     created_at: Option<String>,
     updated_at: Option<String>,
     deleted_at: Option<String>,
-) -> AppResult<i64> {
+) -> AppResult<String> {
     let pool = state.db.lock().await;
+    let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let normalized_customer_id = customer_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    let inserted_id = if let Some(provided_id) = id {
-        sqlx::query(
-            "INSERT INTO customers (id, uuid, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
-        )
-        .bind(provided_id)
-        .bind(&uuid)
-        .bind(&normalized_customer_id)
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&city)
-        .bind(&social_media_url)
-        .bind(&platform)
-        .bind(&created_at)
-        .bind(&updated_at)
-        .bind(&deleted_at)
-        .execute(&*pool)
-        .await?
-        .last_insert_rowid()
-    } else {
-        sqlx::query(
-            "INSERT INTO customers (uuid, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
-        )
-        .bind(&uuid)
-        .bind(&normalized_customer_id)
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&city)
-        .bind(&social_media_url)
-        .bind(&platform)
-        .bind(&created_at)
-        .bind(&updated_at)
-        .bind(&deleted_at)
-        .execute(&*pool)
-        .await?
-        .last_insert_rowid()
-    };
+    let rowid = sqlx::query(
+        "INSERT INTO customers (id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
+    )
+    .bind(&record_id)
+    .bind(&normalized_customer_id)
+    .bind(&name)
+    .bind(&phone)
+    .bind(&address)
+    .bind(&city)
+    .bind(&social_media_url)
+    .bind(&platform)
+    .bind(&created_at)
+    .bind(&updated_at)
+    .bind(&deleted_at)
+    .execute(&*pool)
+    .await?
+    .last_insert_rowid();
 
     if normalized_customer_id.is_none() {
         let prefix: Option<String> = sqlx::query_scalar(
-            "SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1",
+            "SELECT customer_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1",
         )
         .fetch_optional(&*pool)
         .await
         .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
 
         let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
-        let new_customer_id = format!("{prefix_str}{inserted_id:05}");
+        let new_customer_id = format!("{prefix_str}{rowid:05}");
 
         let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
             .bind(new_customer_id)
-            .bind(inserted_id)
+            .bind(&record_id)
             .execute(&*pool)
             .await;
     }
 
     if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(inserted_id)
+        .bind(&record_id)
         .fetch_one(&*pool)
         .await
     {
@@ -104,13 +84,13 @@ pub async fn create_customer(
             app,
             "customers",
             "INSERT",
-            inserted_id,
+            &record_id,
             serde_json::json!(record),
         )
         .await;
     }
 
-    Ok(inserted_id)
+    Ok(record_id)
 }
 
 /// Loads all customers in reverse creation order.
@@ -253,10 +233,10 @@ pub async fn get_customers_paginated(
 
 /// Loads a single customer by id.
 #[instrument(skip(state))]
-pub async fn get_customer(state: Arc<AppState>, id: i64) -> AppResult<Customer> {
+pub async fn get_customer(state: Arc<AppState>, id: String) -> AppResult<Customer> {
     let pool = state.db.lock().await;
     let customer = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
+        .bind(&id)
         .fetch_optional(&*pool)
         .await?
         .ok_or_else(|| AppError::not_found("Customer not found"))?;
@@ -270,8 +250,7 @@ pub async fn get_customer(state: Arc<AppState>, id: i64) -> AppResult<Customer> 
 pub async fn update_customer(
     state: Arc<AppState>,
     app: &AppHandle,
-    id: i64,
-    uuid: Option<String>,
+    id: String,
     customer_id: Option<String>,
     name: String,
     phone: Option<String>,
@@ -289,9 +268,8 @@ pub async fn update_customer(
         .filter(|value| !value.is_empty());
 
     sqlx::query(
-        "UPDATE customers SET uuid = COALESCE(?, uuid), customer_id = ?, name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, created_at = COALESCE(?, created_at), updated_at = COALESCE(?, datetime('now')), deleted_at = ? WHERE id = ?",
+        "UPDATE customers SET customer_id = ?, name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, created_at = COALESCE(?, created_at), updated_at = COALESCE(?, datetime('now')), deleted_at = ? WHERE id = ?",
     )
-    .bind(&uuid)
     .bind(&normalized_customer_id)
     .bind(&name)
     .bind(&phone)
@@ -302,12 +280,12 @@ pub async fn update_customer(
     .bind(&created_at)
     .bind(&updated_at)
     .bind(&deleted_at)
-    .bind(id)
+    .bind(&id)
     .execute(&*pool)
     .await?;
 
     if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
+        .bind(&id)
         .fetch_one(&*pool)
         .await
     {
@@ -316,7 +294,7 @@ pub async fn update_customer(
             app,
             "customers",
             "UPDATE",
-            id,
+            &id,
             serde_json::json!(record),
         )
         .await;
@@ -327,18 +305,18 @@ pub async fn update_customer(
 
 /// Soft-deletes a customer and enqueues sync payload.
 #[instrument(skip(state, app))]
-pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: i64) -> AppResult<()> {
+pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
     let pool = state.db.lock().await;
 
     sqlx::query(
         "UPDATE customers SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
     )
-    .bind(id)
+    .bind(&id)
     .execute(&*pool)
     .await?;
 
     if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(id)
+        .bind(&id)
         .fetch_one(&*pool)
         .await
     {
@@ -347,7 +325,7 @@ pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: i64) -> 
             app,
             "customers",
             "DELETE",
-            id,
+            &id,
             serde_json::json!(record),
         )
         .await;

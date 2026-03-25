@@ -15,23 +15,21 @@ use crate::state::AppState;
 pub async fn create_customer(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    uuid: Option<String>,
     name: String,
     phone: Option<String>,
     address: Option<String>,
     city: Option<String>,
     social_media_url: Option<String>,
     platform: Option<String>,
-    id: Option<i64>,
+    id: Option<String>,
     customer_id: Option<String>,
     created_at: Option<String>,
     updated_at: Option<String>,
     deleted_at: Option<String>,
-) -> Result<i64, AppError> {
+) -> Result<String, AppError> {
     customer::create_customer(
         state.inner().clone(),
         &app,
-        uuid,
         name,
         phone,
         address,
@@ -81,7 +79,10 @@ pub async fn get_customers_paginated(
 /// Loads a customer by id.
 #[tauri::command]
 #[instrument(skip(state))]
-pub async fn get_customer(state: State<'_, Arc<AppState>>, id: i64) -> Result<Customer, AppError> {
+pub async fn get_customer(
+    state: State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<Customer, AppError> {
     customer::get_customer(state.inner().clone(), id).await
 }
 
@@ -92,8 +93,7 @@ pub async fn get_customer(state: State<'_, Arc<AppState>>, id: i64) -> Result<Cu
 pub async fn update_customer(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    id: i64,
-    uuid: Option<String>,
+    id: String,
     customer_id: Option<String>,
     name: String,
     phone: Option<String>,
@@ -109,7 +109,6 @@ pub async fn update_customer(
         state.inner().clone(),
         &app,
         id,
-        uuid,
         customer_id,
         name,
         phone,
@@ -130,7 +129,7 @@ pub async fn update_customer(
 pub async fn delete_customer(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    id: i64,
+    id: String,
 ) -> Result<(), AppError> {
     customer::delete_customer(state.inner().clone(), &app, id).await
 }

@@ -32,11 +32,11 @@ export default function CustomerDetail({ id }: CustomerDetailProps) {
 
   useEffect(() => {
     if (id) {
-      fetchData(parseInt(id));
+      fetchData(id);
     }
   }, [id]);
 
-  const fetchData = async (customerId: number) => {
+  const fetchData = async (customerId: string) => {
     try {
       setLoading(true);
       const [customerData, ordersData] = await Promise.all([

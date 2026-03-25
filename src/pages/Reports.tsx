@@ -179,7 +179,7 @@ export default function Reports() {
   }, []);
 
   const customerIndex = useMemo(() => {
-    const map = new Map<number, Customer>();
+    const map = new Map<string, Customer>();
     for (const customer of customers) {
       map.set(customer.id, customer);
     }
@@ -265,7 +265,7 @@ export default function Reports() {
       if (aTime !== bTime) {
         return bTime - aTime;
       }
-      return b.id - a.id;
+      return b.id.localeCompare(a.id);
     });
   }, [filteredOrders]);
 

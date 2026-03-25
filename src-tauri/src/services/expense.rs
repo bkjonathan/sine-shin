@@ -3,6 +3,7 @@ use std::sync::Arc;
 use sqlx::{QueryBuilder, Sqlite};
 use tauri::AppHandle;
 use tracing::instrument;
+use uuid::Uuid;
 
 use crate::db::DEFAULT_EXPENSE_ID_PREFIX;
 use crate::error::{AppError, AppResult};
@@ -32,9 +33,9 @@ pub async fn create_expense(
     expense_date: Option<String>,
     payment_method: Option<String>,
     notes: Option<String>,
-    id: Option<i64>,
+    id: Option<String>,
     expense_id: Option<String>,
-) -> AppResult<i64> {
+) -> AppResult<String> {
     let trimmed_title = title.trim();
     if trimmed_title.is_empty() {
         return Err(AppError::invalid_input("Expense title is required"));
@@ -46,6 +47,7 @@ pub async fn create_expense(
     }
 
     let pool = state.db.lock().await;
+    let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
 
     let sanitized_category = sanitize_optional(category);
     let sanitized_expense_date = sanitize_optional(expense_date);
@@ -53,46 +55,31 @@ pub async fn create_expense(
     let sanitized_notes = sanitize_optional(notes);
     let sanitized_expense_id = sanitize_optional(expense_id);
 
-    let inserted_id = if let Some(provided_id) = id {
-        sqlx::query(
-            "INSERT INTO expenses (id, title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(provided_id)
-        .bind(trimmed_title)
-        .bind(amount)
-        .bind(sanitized_category.clone())
-        .bind(sanitized_expense_date.clone())
-        .bind(sanitized_payment_method.clone())
-        .bind(sanitized_notes.clone())
-        .execute(&*pool)
-        .await?
-        .last_insert_rowid()
-    } else {
-        sqlx::query(
-            "INSERT INTO expenses (title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(trimmed_title)
-        .bind(amount)
-        .bind(sanitized_category)
-        .bind(sanitized_expense_date)
-        .bind(sanitized_payment_method)
-        .bind(sanitized_notes)
-        .execute(&*pool)
-        .await?
-        .last_insert_rowid()
-    };
+    let rowid = sqlx::query(
+        "INSERT INTO expenses (id, title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&record_id)
+    .bind(trimmed_title)
+    .bind(amount)
+    .bind(sanitized_category)
+    .bind(sanitized_expense_date)
+    .bind(sanitized_payment_method)
+    .bind(sanitized_notes)
+    .execute(&*pool)
+    .await?
+    .last_insert_rowid();
 
     let final_expense_id = sanitized_expense_id
-        .unwrap_or_else(|| format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, inserted_id));
+        .unwrap_or_else(|| format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, rowid));
 
     sqlx::query("UPDATE expenses SET expense_id = ? WHERE id = ?")
         .bind(final_expense_id)
-        .bind(inserted_id)
+        .bind(&record_id)
         .execute(&*pool)
         .await?;
 
     if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
-        .bind(inserted_id)
+        .bind(&record_id)
         .fetch_one(&*pool)
         .await
     {
@@ -101,22 +88,22 @@ pub async fn create_expense(
             app,
             "expenses",
             "INSERT",
-            inserted_id,
+            &record_id,
             serde_json::json!(record),
         )
         .await;
     }
 
-    Ok(inserted_id)
+    Ok(record_id)
 }
 
-/// Loads all expenses sorted by date and id.
+/// Loads all expenses sorted by date and created_at.
 #[instrument(skip(state))]
 pub async fn get_expenses(state: Arc<AppState>) -> AppResult<Vec<Expense>> {
     let pool = state.db.lock().await;
 
     let expenses =
-        sqlx::query_as::<_, Expense>("SELECT * FROM expenses ORDER BY created_at DESC, id DESC")
+        sqlx::query_as::<_, Expense>("SELECT * FROM expenses ORDER BY created_at DESC")
             .fetch_all(&*pool)
             .await?;
 
@@ -180,7 +167,7 @@ pub async fn get_expenses_paginated(
         "amount" => "amount",
         "expense_date" => "COALESCE(expense_date, created_at)",
         "created_at" => "created_at",
-        "expense_id" => "id",
+        "expense_id" => "expense_id",
         _ => "COALESCE(expense_date, created_at)",
     };
 
@@ -249,8 +236,6 @@ pub async fn get_expenses_paginated(
     data_query.push(sort_column);
     data_query.push(" ");
     data_query.push(sort_direction);
-    data_query.push(", id ");
-    data_query.push(sort_direction);
 
     if !no_limit {
         data_query.push(" LIMIT ");
@@ -284,10 +269,10 @@ pub async fn get_expenses_paginated(
 
 /// Loads one expense by id.
 #[instrument(skip(state))]
-pub async fn get_expense(state: Arc<AppState>, id: i64) -> AppResult<Expense> {
+pub async fn get_expense(state: Arc<AppState>, id: String) -> AppResult<Expense> {
     let pool = state.db.lock().await;
     let expense = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
-        .bind(id)
+        .bind(&id)
         .fetch_optional(&*pool)
         .await?
         .ok_or_else(|| AppError::not_found("Expense not found"))?;
@@ -301,7 +286,7 @@ pub async fn get_expense(state: Arc<AppState>, id: i64) -> AppResult<Expense> {
 pub async fn update_expense(
     state: Arc<AppState>,
     app: &AppHandle,
-    id: i64,
+    id: String,
     title: String,
     amount: f64,
     category: Option<String>,
@@ -330,12 +315,12 @@ pub async fn update_expense(
     .bind(sanitize_optional(expense_date))
     .bind(sanitize_optional(payment_method))
     .bind(sanitize_optional(notes))
-    .bind(id)
+    .bind(&id)
     .execute(&*pool)
     .await?;
 
     if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
-        .bind(id)
+        .bind(&id)
         .fetch_one(&*pool)
         .await
     {
@@ -344,7 +329,7 @@ pub async fn update_expense(
             app,
             "expenses",
             "UPDATE",
-            id,
+            &id,
             serde_json::json!(record),
         )
         .await;
@@ -355,18 +340,18 @@ pub async fn update_expense(
 
 /// Soft-deletes expense row and enqueues sync payload.
 #[instrument(skip(state, app))]
-pub async fn delete_expense(state: Arc<AppState>, app: &AppHandle, id: i64) -> AppResult<()> {
+pub async fn delete_expense(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
     let pool = state.db.lock().await;
 
     sqlx::query(
         "UPDATE expenses SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
     )
-    .bind(id)
+    .bind(&id)
     .execute(&*pool)
     .await?;
 
     if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
-        .bind(id)
+        .bind(&id)
         .fetch_one(&*pool)
         .await
     {
@@ -375,7 +360,7 @@ pub async fn delete_expense(state: Arc<AppState>, app: &AppHandle, id: i64) -> A
             app,
             "expenses",
             "DELETE",
-            id,
+            &id,
             serde_json::json!(record),
         )
         .await;

@@ -225,11 +225,11 @@ export default function OrderDetail({ id }: OrderDetailProps) {
 
   useEffect(() => {
     if (id) {
-      loadData(parseInt(id));
+      loadData(id);
     }
   }, [id]);
 
-  const loadData = async (orderId: number) => {
+  const loadData = async (orderId: string) => {
     try {
       setLoading(true);
       setCustomerDetail(null);
