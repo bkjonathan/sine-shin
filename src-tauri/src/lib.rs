@@ -93,30 +93,7 @@ fn print_invoice_direct(
         .filter(|name| !name.is_empty());
 
     let print_result = (|| -> Result<(), String> {
-        #[cfg(target_os = "macos")]
-        {
-            let mut command = Command::new("lp");
-            if let Some(printer) = sanitized_printer {
-                command.arg("-d").arg(printer);
-            }
-            let output = command
-                .arg(&temp_path)
-                .output()
-                .map_err(|e| e.to_string())?;
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                let details = if !stderr.is_empty() { stderr } else { stdout };
-                return Err(if details.is_empty() {
-                    "Failed to print invoice".to_string()
-                } else {
-                    details
-                });
-            }
-            Ok(())
-        }
-
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let mut command = Command::new("lp");
             if let Some(printer) = sanitized_printer {

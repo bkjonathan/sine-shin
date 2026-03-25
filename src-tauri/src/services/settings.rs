@@ -128,7 +128,7 @@ pub struct AwsS3ConnectionStatus {
     pub message: String,
 }
 
-fn normalize_s3_bucket_name(bucket_name: &str) -> String {
+pub(crate) fn normalize_s3_bucket_name(bucket_name: &str) -> String {
     bucket_name
         .trim()
         .trim_start_matches("s3://")

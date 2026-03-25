@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager};
 
 pub mod helpers;
 
-pub type AppResult<T> = Result<T, String>;
+use crate::error::{AppError, AppResult};
 
 pub const DEFAULT_CUSTOMER_ID_PREFIX: &str = "SSC-";
 pub const DEFAULT_ORDER_ID_PREFIX: &str = "SSO-";
@@ -96,30 +96,13 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         }
     }
 
-    sqlx::query("UPDATE orders SET shipping_fee_paid = 0 WHERE shipping_fee_paid IS NULL")
+    for col in fee_paid_columns {
+        sqlx::query(&format!(
+            "UPDATE orders SET {col} = 0 WHERE {col} IS NULL"
+        ))
         .execute(pool)
         .await?;
-    sqlx::query("UPDATE orders SET delivery_fee_paid = 0 WHERE delivery_fee_paid IS NULL")
-        .execute(pool)
-        .await?;
-    sqlx::query("UPDATE orders SET cargo_fee_paid = 0 WHERE cargo_fee_paid IS NULL")
-        .execute(pool)
-        .await?;
-    sqlx::query("UPDATE orders SET service_fee_paid = 0 WHERE service_fee_paid IS NULL")
-        .execute(pool)
-        .await?;
-    sqlx::query("UPDATE orders SET shipping_fee_by_shop = 0 WHERE shipping_fee_by_shop IS NULL")
-        .execute(pool)
-        .await?;
-    sqlx::query("UPDATE orders SET delivery_fee_by_shop = 0 WHERE delivery_fee_by_shop IS NULL")
-        .execute(pool)
-        .await?;
-    sqlx::query("UPDATE orders SET cargo_fee_by_shop = 0 WHERE cargo_fee_by_shop IS NULL")
-        .execute(pool)
-        .await?;
-    sqlx::query("UPDATE orders SET exclude_cargo_fee = 0 WHERE exclude_cargo_fee IS NULL")
-        .execute(pool)
-        .await?;
+    }
 
     // ── Sync tables ──────────────────────────────────────────────────
     sqlx::query(
@@ -268,28 +251,31 @@ pub fn copy_logo_to_app_data(app: &AppHandle, logo_file_path: &str) -> AppResult
         return Ok(None);
     }
 
-    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = app.path().app_data_dir()?;
     let logos_dir = app_data_dir.join("logos");
-    fs::create_dir_all(&logos_dir).map_err(|e| format!("Failed to create logos dir: {}", e))?;
+    fs::create_dir_all(&logos_dir)?;
 
     let source = PathBuf::from(logo_file_path);
     if !source.exists() {
-        return Err(format!("Logo file not found: {}", logo_file_path));
+        return Err(AppError::not_found(format!(
+            "Logo file not found: {}",
+            logo_file_path
+        )));
     }
 
     let file_name = source
         .file_name()
-        .ok_or("Invalid file name")?
+        .ok_or_else(|| AppError::internal("Invalid file name"))?
         .to_string_lossy()
         .to_string();
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
+        .map_err(|e| AppError::internal(e.to_string()))?
         .as_millis();
     let dest_name = format!("{}_{}", timestamp, file_name);
     let dest = logos_dir.join(dest_name);
 
-    fs::copy(&source, &dest).map_err(|e| format!("Failed to copy logo: {}", e))?;
+    fs::copy(&source, &dest)?;
     Ok(Some(dest.to_string_lossy().to_string()))
 }

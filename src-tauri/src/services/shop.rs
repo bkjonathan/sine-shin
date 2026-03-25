@@ -13,7 +13,7 @@ use tracing::instrument;
 use crate::db::copy_logo_to_app_data;
 use crate::error::{AppError, AppResult};
 use crate::models::ShopSettings;
-use crate::services::settings::get_app_settings;
+use crate::services::settings::{get_app_settings, normalize_s3_bucket_name};
 use crate::state::AppState;
 use crate::sync::enqueue_sync;
 
@@ -27,7 +27,7 @@ pub async fn save_shop_setup(
     address: String,
     logo_file_path: String,
 ) -> AppResult<()> {
-    let internal_logo_path = copy_logo_to_app_data(app, &logo_file_path).map_err(AppError::from)?;
+    let internal_logo_path = copy_logo_to_app_data(app, &logo_file_path)?;
     let pool = state.db.lock().await;
 
     sqlx::query(
@@ -91,7 +91,7 @@ pub async fn update_shop_settings(
 
     if let Some(id) = latest_id {
         let new_internal_logo_path = match logo_path {
-            Some(path) => copy_logo_to_app_data(app, &path).map_err(AppError::from)?,
+            Some(path) => copy_logo_to_app_data(app, &path)?,
             None => None,
         };
 
@@ -138,14 +138,6 @@ pub async fn update_shop_settings(
     }
 
     Ok(())
-}
-
-fn normalize_s3_bucket_name(bucket_name: &str) -> String {
-    bucket_name
-        .trim()
-        .trim_start_matches("s3://")
-        .trim_end_matches('/')
-        .to_string()
 }
 
 fn normalize_base_url(url: &str) -> String {
@@ -196,7 +188,7 @@ pub async fn upload_shop_logo_to_s3(
         .map(|path| path.trim().to_string())
         .filter(|path| !path.is_empty());
     let new_internal_logo_path = match maybe_new_logo_path {
-        Some(path) => copy_logo_to_app_data(app, &path).map_err(AppError::from)?,
+        Some(path) => copy_logo_to_app_data(app, &path)?,
         None => None,
     };
 
