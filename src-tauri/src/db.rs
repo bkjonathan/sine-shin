@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Manager};
+use tracing::warn;
 
 pub mod helpers;
 
@@ -27,6 +28,8 @@ pub const ORDER_WITH_CUSTOMER_GROUP_BY: &str = " GROUP BY o.id ";
 
 pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error>> {
     const INIT_SQL: &str = include_str!("../migrations/001_init.sql");
+
+    rebuild_empty_legacy_core_tables(pool).await?;
 
     for statement in INIT_SQL.split(';') {
         if !statement.trim().is_empty() {
@@ -221,6 +224,77 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         .await?;
     }
 
+
+    Ok(())
+}
+
+async fn rebuild_empty_legacy_core_tables(
+    pool: &Pool<Sqlite>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    const CORE_TABLES: [&str; 6] = [
+        "shop_settings",
+        "users",
+        "customers",
+        "orders",
+        "order_items",
+        "expenses",
+    ];
+
+    let mut has_legacy_shape = false;
+    let mut total_rows = 0_i64;
+
+    for table in CORE_TABLES {
+        let id_type = sqlx::query_scalar::<_, String>(&format!(
+            "SELECT lower(type) FROM pragma_table_info('{table}') WHERE name = 'id' LIMIT 1"
+        ))
+        .fetch_optional(pool)
+        .await?;
+        let has_uuid_column = sqlx::query_scalar::<_, i64>(&format!(
+            "SELECT 1 FROM pragma_table_info('{table}') WHERE name = 'uuid' LIMIT 1"
+        ))
+        .fetch_optional(pool)
+        .await?
+        .is_some();
+
+        if matches!(id_type.as_deref(), Some("integer")) && has_uuid_column {
+            has_legacy_shape = true;
+        }
+
+        let table_exists = id_type.is_some() || has_uuid_column;
+        if table_exists {
+            total_rows +=
+                sqlx::query_scalar::<_, i64>(&format!("SELECT COUNT(*) FROM {table}"))
+                    .fetch_one(pool)
+                    .await?;
+        }
+    }
+
+    if !has_legacy_shape {
+        return Ok(());
+    }
+
+    if total_rows > 0 {
+        warn!(
+            total_rows,
+            "detected legacy integer/uuid schema with existing data; automatic reset skipped"
+        );
+        return Ok(());
+    }
+
+    warn!("detected empty legacy integer/uuid schema; rebuilding core tables");
+
+    for table in [
+        "order_items",
+        "orders",
+        "customers",
+        "expenses",
+        "shop_settings",
+        "users",
+    ] {
+        sqlx::query(&format!("DROP TABLE IF EXISTS {table}"))
+            .execute(pool)
+            .await?;
+    }
 
     Ok(())
 }

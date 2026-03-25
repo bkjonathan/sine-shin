@@ -80,6 +80,7 @@ export default function OnboardingForm() {
       });
 
       if (typeof selected === "string") {
+        setError("");
         setLogoPath(selected);
         setLogoPreview(convertFileSrc(selected));
         return;
@@ -95,7 +96,18 @@ export default function OnboardingForm() {
       const file = input.files?.[0];
       if (!file) return;
 
-      setLogoPath(file.name);
+      if (window.__TAURI_INTERNALS__) {
+        setError(
+          t(
+            "auth.onboarding.error_logo_picker_unavailable",
+            "Could not access the selected file path. Please choose the logo again.",
+          ),
+        );
+        setLogoPath("");
+      } else {
+        setError("");
+        setLogoPath(file.name);
+      }
       const reader = new FileReader();
       reader.onload = (e) => {
         setLogoPreview(e.target?.result as string);
@@ -207,6 +219,11 @@ export default function OnboardingForm() {
           ? err.message
           : typeof err === "string"
             ? err
+            : typeof err === "object" &&
+                err !== null &&
+                "message" in err &&
+                typeof err.message === "string"
+              ? err.message
             : t("auth.onboarding.error_failed");
       setError(message);
       setIsSubmitting(false);

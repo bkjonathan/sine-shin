@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use tracing::{info, instrument};
+use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::models::User;
@@ -10,9 +11,11 @@ use crate::state::AppState;
 #[instrument(skip(state, password), fields(username = %name))]
 pub async fn register_user(state: Arc<AppState>, name: String, password: String) -> AppResult<()> {
     let pool = state.db.lock().await;
+    let user_id = Uuid::new_v4().to_string();
     let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)?;
 
-    sqlx::query("INSERT INTO users (name, password_hash) VALUES (?, ?)")
+    sqlx::query("INSERT INTO users (id, name, password_hash) VALUES (?, ?, ?)")
+        .bind(user_id)
         .bind(name)
         .bind(password_hash)
         .execute(&*pool)
