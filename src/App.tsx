@@ -42,6 +42,10 @@ function AppRoutes() {
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [isOnboarded, setIsOnboarded] = useState(false);
 
+  const handleOnboardingComplete = useCallback(() => {
+    setIsOnboarded(true);
+  }, []);
+
   const loadLanguageSetting = useCallback(async () => {
     try {
       const settings = await getAppLanguageSetting();
@@ -109,7 +113,10 @@ function AppRoutes() {
   return (
     <Suspense fallback={<AppLoadingScreen />}>
       <Routes>
-        <Route path="/onboarding" element={<OnboardingForm />} />
+        <Route
+          path="/onboarding"
+          element={<OnboardingForm onComplete={handleOnboardingComplete} />}
+        />
         <Route path="/login" element={<Login />} />
         <Route
           path="*"

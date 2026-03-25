@@ -4,7 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { registerUser } from "../api/authApi";
+import { loginUser, registerUser } from "../api/authApi";
 import {
   restoreDatabase,
   saveShopSetup,
@@ -24,15 +24,21 @@ import OnboardingStepDetails from "../components/pages/onboarding/OnboardingStep
 import OnboardingStepLogo from "../components/pages/onboarding/OnboardingStepLogo";
 import OnboardingStepAccount from "../components/pages/onboarding/OnboardingStepAccount";
 import OnboardingStepActions from "../components/pages/onboarding/OnboardingStepActions";
+import { useAuth } from "../context/AuthContext";
 import { OnboardingStep } from "../types/onboarding";
 
 const LAST_STEP: OnboardingStep = 4;
 const USERNAME_REGEX = /^[A-Za-z0-9_.-]+$/;
 
-export default function OnboardingForm() {
+interface OnboardingFormProps {
+  onComplete?: () => void;
+}
+
+export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { theme, setTheme, accentColor, setAccentColor } = useTheme();
+  const { login } = useAuth();
 
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(0);
   const [direction, setDirection] = useState(0);
@@ -202,16 +208,20 @@ export default function OnboardingForm() {
         });
 
         await registerUser({
-          name: username.trim(),
+          name: normalizedUsername,
           password,
         });
 
         await updateOnboardingTheme(theme);
+
+        const user = await loginUser(normalizedUsername, password);
+        await login({ name: user.name, role: user.role });
       } else {
         localStorage.setItem("browser_onboarded", "true");
-        localStorage.setItem("browser_user", JSON.stringify({ name: username }));
+        await login({ name: normalizedUsername, role: "admin" });
       }
 
+      onComplete?.();
       navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
       const message =
