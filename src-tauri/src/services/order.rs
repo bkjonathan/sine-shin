@@ -1,5 +1,5 @@
 use chrono::{DateTime, NaiveDate, NaiveDateTime};
-use sqlx::{QueryBuilder, Sqlite};
+use sea_orm::{ConnectionTrait, DatabaseBackend, FromQueryResult, Statement, TransactionTrait};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::db::{
     DEFAULT_ORDER_ID_PREFIX, ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
 };
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::models::{
     DashboardDetailRecord, DashboardStats, OrderDetail, OrderExportRow, OrderItem,
     OrderItemPayload, OrderWithCustomer, PaginatedOrders,
@@ -21,6 +21,16 @@ use crate::sync::enqueue_sync;
 const DEFAULT_ORDERS_PAGE_SIZE: i64 = 5;
 const MIN_ORDERS_PAGE_SIZE: i64 = 5;
 const MAX_ORDERS_PAGE_SIZE: i64 = 100;
+
+#[derive(Debug, FromQueryResult)]
+struct CountRow {
+    cnt: i64,
+}
+
+#[derive(Debug, FromQueryResult)]
+struct PrefixRow {
+    order_id_prefix: Option<String>,
+}
 
 fn normalize_order_status(status: Option<String>) -> AppResult<Option<String>> {
     let normalized = status
@@ -219,116 +229,133 @@ pub async fn create_order(
     cargo_fee_by_shop: Option<bool>,
     exclude_cargo_fee: Option<bool>,
 ) -> AppResult<String> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
     let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let normalized_status =
         normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
 
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let txn = db.begin().await?;
 
-    let rowid = sqlx::query(
-        "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&record_id)
-    .bind(&customer_id)
-    .bind(normalized_status)
-    .bind(order_from)
-    .bind(exchange_rate)
-    .bind(shipping_fee)
-    .bind(delivery_fee)
-    .bind(cargo_fee)
-    .bind(order_date)
-    .bind(arrived_date)
-    .bind(shipment_date)
-    .bind(user_withdraw_date)
-    .bind(service_fee)
-    .bind(product_discount)
-    .bind(service_fee_type)
-    .bind(shipping_fee_paid.unwrap_or(false))
-    .bind(delivery_fee_paid.unwrap_or(false))
-    .bind(cargo_fee_paid.unwrap_or(false))
-    .bind(service_fee_paid.unwrap_or(false))
-    .bind(shipping_fee_by_shop.unwrap_or(false))
-    .bind(delivery_fee_by_shop.unwrap_or(false))
-    .bind(cargo_fee_by_shop.unwrap_or(false))
-    .bind(exclude_cargo_fee.unwrap_or(false))
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?
-    .last_insert_rowid();
+    let exec_result = txn
+        .execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, \
+             shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, \
+             user_withdraw_date, service_fee, product_discount, service_fee_type, \
+             shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, \
+             shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                record_id.clone().into(),
+                customer_id.into(),
+                normalized_status.into(),
+                order_from.into(),
+                exchange_rate.into(),
+                shipping_fee.into(),
+                delivery_fee.into(),
+                cargo_fee.into(),
+                order_date.into(),
+                arrived_date.into(),
+                shipment_date.into(),
+                user_withdraw_date.into(),
+                service_fee.into(),
+                product_discount.into(),
+                service_fee_type.into(),
+                shipping_fee_paid.unwrap_or(false).into(),
+                delivery_fee_paid.unwrap_or(false).into(),
+                cargo_fee_paid.unwrap_or(false).into(),
+                service_fee_paid.unwrap_or(false).into(),
+                shipping_fee_by_shop.unwrap_or(false).into(),
+                delivery_fee_by_shop.unwrap_or(false).into(),
+                cargo_fee_by_shop.unwrap_or(false).into(),
+                exclude_cargo_fee.unwrap_or(false).into(),
+            ],
+        ))
+        .await?;
+
+    let rowid = exec_result.last_insert_id();
 
     for item in items {
         let item_id = Uuid::new_v4().to_string();
-        sqlx::query("INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind(&item_id)
-            .bind(&record_id)
-            .bind(item.product_url)
-            .bind(item.product_qty)
-            .bind(item.price)
-            .bind(item.product_weight)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+        txn.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                item_id.into(),
+                record_id.clone().into(),
+                item.product_url.into(),
+                item.product_qty.into(),
+                item.price.into(),
+                item.product_weight.into(),
+            ],
+        ))
+        .await?;
     }
 
     if let Some(oid) = order_id {
-        let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
-            .bind(oid)
-            .bind(&record_id)
-            .execute(&mut *tx)
+        let _ = txn
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "UPDATE orders SET order_id = ? WHERE id = ?",
+                [oid.into(), record_id.clone().into()],
+            ))
             .await;
     } else {
-        let prefix: Option<String> = sqlx::query_scalar(
+        let prefix_row = PrefixRow::find_by_statement(Statement::from_string(
+            DatabaseBackend::Sqlite,
             "SELECT order_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1",
-        )
-        .fetch_optional(&mut *tx)
+        ))
+        .one(&txn)
         .await
-        .unwrap_or(Some(DEFAULT_ORDER_ID_PREFIX.to_string()));
+        .ok()
+        .flatten();
 
-        let prefix_str = prefix
+        let prefix_str = prefix_row
+            .and_then(|r| r.order_id_prefix)
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
-        let new_order_id = format!("{}{:05}", prefix_str, rowid);
 
-        let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
-            .bind(new_order_id)
-            .bind(&record_id)
-            .execute(&mut *tx)
+        let new_order_id = format!("{}{:05}", prefix_str, rowid);
+        let _ = txn
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "UPDATE orders SET order_id = ? WHERE id = ?",
+                [new_order_id.into(), record_id.clone().into()],
+            ))
             .await;
     }
 
-    tx.commit().await.map_err(|e| e.to_string())?;
+    txn.commit().await?;
 
-    // Enqueue sync for order
-    if let Ok(order) =
-        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-            .bind(&record_id)
-            .fetch_one(&*pool)
-            .await
-    {
-        enqueue_sync(
-            &pool,
-            &app,
-            "orders",
-            "INSERT",
-            &record_id,
-            serde_json::json!(order),
-        )
-        .await;
-    }
-    // Enqueue sync for order items
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>(
-        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
+    let pool = state.pool.lock().await;
+
+    if let Ok(Some(order)) = crate::models::Order::find_by_statement(
+        Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "SELECT * FROM orders WHERE id = ?",
+            [record_id.clone().into()],
+        ),
     )
-    .bind(&record_id)
-    .fetch_all(&*pool)
+    .one(&db)
+    .await
+    {
+        enqueue_sync(&*pool, app, "orders", "INSERT", &record_id, serde_json::json!(order)).await;
+    }
+
+    if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
+        [record_id.clone().into()],
+    ))
+    .all(&db)
     .await
     {
         for item in items_db {
             let item_id = item.id.clone();
             enqueue_sync(
-                &pool,
-                &app,
+                &*pool,
+                app,
                 "order_items",
                 "INSERT",
                 &item_id,
@@ -342,16 +369,18 @@ pub async fn create_order(
 }
 
 pub async fn get_orders(state: Arc<AppState>) -> AppResult<Vec<OrderWithCustomer>> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
     let query = format!(
         "{} {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        query,
+    ))
+    .all(&db)
+    .await?;
 
     Ok(orders)
 }
@@ -366,7 +395,7 @@ pub async fn get_orders_paginated(
     sort_by: Option<String>,
     sort_order: Option<String>,
 ) -> AppResult<PaginatedOrders> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
     let requested_page_size = page_size.unwrap_or(DEFAULT_ORDERS_PAGE_SIZE);
     let no_limit = requested_page_size <= 0;
@@ -386,7 +415,6 @@ pub async fn get_orders_paginated(
     let has_search = !raw_search.is_empty();
     let search_pattern = format!("%{}%", raw_search);
     let normalized_status_filter = normalize_order_status_filter(status_filter)?;
-    let has_status_filter = normalized_status_filter.is_some();
     let search_column = match search_key.as_deref().unwrap_or("customerName") {
         "customerName" => "c.name",
         "orderId" => "o.order_id",
@@ -405,75 +433,71 @@ pub async fn get_orders_paginated(
 
     let sort_direction = match sort_order.as_deref().unwrap_or("desc") {
         "asc" => "ASC",
-        "desc" => "DESC",
         _ => "DESC",
     };
 
     let order_clause = format!("ORDER BY {} {}", sort_column, sort_direction);
 
-    let mut count_query = QueryBuilder::<Sqlite>::new(
-        "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id",
+    let mut conditions: Vec<String> = vec![];
+    let mut params: Vec<sea_orm::Value> = vec![];
+
+    if has_search {
+        conditions.push(format!("COALESCE({}, '') LIKE ?", search_column));
+        params.push(search_pattern.into());
+    }
+    if let Some(status) = normalized_status_filter.as_deref() {
+        conditions.push("o.status = ?".to_string());
+        params.push(status.to_string().into());
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    let count_sql = format!(
+        "SELECT COUNT(*) as cnt FROM orders o LEFT JOIN customers c ON o.customer_id = c.id {}",
+        where_clause
     );
+    let total = CountRow::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        &count_sql,
+        params.clone(),
+    ))
+    .one(&db)
+    .await?
+    .unwrap_or(CountRow { cnt: 0 })
+    .cnt;
 
-    if has_search || has_status_filter {
-        count_query.push(" WHERE ");
+    let data_sql = if no_limit {
+        format!(
+            "{} {} {} {}",
+            ORDER_WITH_CUSTOMER_SELECT, where_clause, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
+        )
+    } else {
+        format!(
+            "{} {} {} {} LIMIT ? OFFSET ?",
+            ORDER_WITH_CUSTOMER_SELECT, where_clause, ORDER_WITH_CUSTOMER_GROUP_BY, order_clause
+        )
+    };
 
-        if has_search {
-            count_query.push(format!("COALESCE({}, '') LIKE ", search_column));
-            count_query.push_bind(&search_pattern);
-        }
+    let data_params: Vec<sea_orm::Value> = if no_limit {
+        params
+    } else {
+        let mut p = params;
+        p.push(page_size.into());
+        p.push(offset.into());
+        p
+    };
 
-        if let Some(status) = normalized_status_filter.as_deref() {
-            if has_search {
-                count_query.push(" AND ");
-            }
-            count_query.push("o.status = ");
-            count_query.push_bind(status);
-        }
-    }
-
-    let total: i64 = count_query
-        .build_query_scalar()
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let mut data_query = QueryBuilder::<Sqlite>::new(ORDER_WITH_CUSTOMER_SELECT);
-
-    if has_search || has_status_filter {
-        data_query.push(" WHERE ");
-
-        if has_search {
-            data_query.push(format!("COALESCE({}, '') LIKE ", search_column));
-            data_query.push_bind(&search_pattern);
-        }
-
-        if let Some(status) = normalized_status_filter.as_deref() {
-            if has_search {
-                data_query.push(" AND ");
-            }
-            data_query.push("o.status = ");
-            data_query.push_bind(status);
-        }
-    }
-
-    data_query.push(" ");
-    data_query.push(ORDER_WITH_CUSTOMER_GROUP_BY);
-    data_query.push(" ");
-    data_query.push(order_clause);
-
-    if !no_limit {
-        data_query.push(" LIMIT ");
-        data_query.push_bind(page_size);
-        data_query.push(" OFFSET ");
-        data_query.push_bind(offset);
-    }
-
-    let orders = data_query
-        .build_query_as::<OrderWithCustomer>()
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let orders = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        &data_sql,
+        data_params,
+    ))
+    .all(&db)
+    .await?;
 
     let response_page_size = if no_limit { total.max(0) } else { page_size };
     let total_pages = if total == 0 {
@@ -497,42 +521,46 @@ pub async fn get_customer_orders(
     state: Arc<AppState>,
     customer_id: String,
 ) -> AppResult<Vec<OrderWithCustomer>> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
     let query = format!(
         "{} WHERE o.customer_id = ? {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .bind(customer_id)
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let orders = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        &query,
+        [customer_id.into()],
+    ))
+    .all(&db)
+    .await?;
 
     Ok(orders)
 }
 
 pub async fn get_order(state: Arc<AppState>, id: String) -> AppResult<OrderDetail> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
     let query = format!(
         "{} WHERE o.id = ? {}",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let order = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .bind(&id)
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or("Order not found".to_string())?;
+    let order = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        &query,
+        [id.clone().into()],
+    ))
+    .one(&db)
+    .await?
+    .ok_or_else(|| AppError::not_found("Order not found"))?;
 
-    let items = sqlx::query_as::<_, OrderItem>(
+    let items = OrderItem::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
-    )
-    .bind(&id)
-    .fetch_all(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
+        [id.into()],
+    ))
+    .all(&db)
+    .await?;
 
     Ok(OrderDetail { order, items })
 }
@@ -565,101 +593,107 @@ pub async fn update_order(
     cargo_fee_by_shop: Option<bool>,
     exclude_cargo_fee: Option<bool>,
 ) -> AppResult<()> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
     let normalized_status =
         normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
 
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let txn = db.begin().await?;
 
-    let old_items = sqlx::query_as::<_, OrderItem>(
+    let old_items = OrderItem::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
-    )
-    .bind(&id)
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+        [id.clone().into()],
+    ))
+    .all(&txn)
+    .await?;
 
-    sqlx::query(
-        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?",
-    )
-    .bind(customer_id)
-    .bind(normalized_status)
-    .bind(order_from)
-    .bind(exchange_rate)
-    .bind(shipping_fee)
-    .bind(delivery_fee)
-    .bind(cargo_fee)
-    .bind(order_date)
-    .bind(arrived_date)
-    .bind(shipment_date)
-    .bind(user_withdraw_date)
-    .bind(service_fee)
-    .bind(product_discount)
-    .bind(service_fee_type)
-    .bind(shipping_fee_paid.unwrap_or(false))
-    .bind(delivery_fee_paid.unwrap_or(false))
-    .bind(cargo_fee_paid.unwrap_or(false))
-    .bind(service_fee_paid.unwrap_or(false))
-    .bind(shipping_fee_by_shop.unwrap_or(false))
-    .bind(delivery_fee_by_shop.unwrap_or(false))
-    .bind(cargo_fee_by_shop.unwrap_or(false))
-    .bind(exclude_cargo_fee.unwrap_or(false))
-    .bind(&id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    txn.execute(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, \
+         shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, \
+         shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, \
+         service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, \
+         cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, \
+         delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?",
+        [
+            customer_id.into(),
+            normalized_status.into(),
+            order_from.into(),
+            exchange_rate.into(),
+            shipping_fee.into(),
+            delivery_fee.into(),
+            cargo_fee.into(),
+            order_date.into(),
+            arrived_date.into(),
+            shipment_date.into(),
+            user_withdraw_date.into(),
+            service_fee.into(),
+            product_discount.into(),
+            service_fee_type.into(),
+            shipping_fee_paid.unwrap_or(false).into(),
+            delivery_fee_paid.unwrap_or(false).into(),
+            cargo_fee_paid.unwrap_or(false).into(),
+            service_fee_paid.unwrap_or(false).into(),
+            shipping_fee_by_shop.unwrap_or(false).into(),
+            delivery_fee_by_shop.unwrap_or(false).into(),
+            cargo_fee_by_shop.unwrap_or(false).into(),
+            exclude_cargo_fee.unwrap_or(false).into(),
+            id.clone().into(),
+        ],
+    ))
+    .await?;
 
-    sqlx::query(
-        "UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ? AND deleted_at IS NULL",
-    )
-        .bind(&id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+    txn.execute(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') \
+         WHERE order_id = ? AND deleted_at IS NULL",
+        [id.clone().into()],
+    ))
+    .await?;
 
     for item in items {
         let item_id = Uuid::new_v4().to_string();
-        sqlx::query("INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind(&item_id)
-            .bind(&id)
-            .bind(item.product_url)
-            .bind(item.product_qty)
-            .bind(item.price)
-            .bind(item.product_weight)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+        txn.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                item_id.into(),
+                id.clone().into(),
+                item.product_url.into(),
+                item.product_qty.into(),
+                item.price.into(),
+                item.product_weight.into(),
+            ],
+        ))
+        .await?;
     }
 
-    tx.commit().await.map_err(|e| e.to_string())?;
+    txn.commit().await?;
 
-    // Enqueue sync for order
-    if let Ok(order) =
-        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-            .bind(&id)
-            .fetch_one(&*pool)
-            .await
+    let pool = state.pool.lock().await;
+
+    if let Ok(Some(order)) = crate::models::Order::find_by_statement(
+        Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "SELECT * FROM orders WHERE id = ?",
+            [id.clone().into()],
+        ),
+    )
+    .one(&db)
+    .await
     {
-        enqueue_sync(
-            &pool,
-            &app,
-            "orders",
-            "UPDATE",
-            &id,
-            serde_json::json!(order),
-        )
-        .await;
+        enqueue_sync(&*pool, app, "orders", "UPDATE", &id, serde_json::json!(order)).await;
     }
 
-    // Enqueue sync for old items (DELETE)
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     for mut old_item in old_items {
         old_item.deleted_at = Some(now.clone());
         old_item.updated_at = Some(now.clone());
         let old_item_id = old_item.id.clone();
         enqueue_sync(
-            &pool,
-            &app,
+            &*pool,
+            app,
             "order_items",
             "DELETE",
             &old_item_id,
@@ -668,19 +702,19 @@ pub async fn update_order(
         .await;
     }
 
-    // Enqueue sync for order items
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>(
+    if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
-    )
-    .bind(&id)
-    .fetch_all(&*pool)
+        [id.clone().into()],
+    ))
+    .all(&db)
     .await
     {
         for item in items_db {
             let item_id = item.id.clone();
             enqueue_sync(
-                &pool,
-                &app,
+                &*pool,
+                app,
                 "order_items",
                 "INSERT",
                 &item_id,
@@ -694,52 +728,50 @@ pub async fn update_order(
 }
 
 pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
-    // Soft delete
-    sqlx::query(
+    db.execute(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
         "UPDATE orders SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+        [id.clone().into()],
+    ))
+    .await?;
+
+    db.execute(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ?",
+        [id.clone().into()],
+    ))
+    .await?;
+
+    let pool = state.pool.lock().await;
+
+    if let Ok(Some(order)) = crate::models::Order::find_by_statement(
+        Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "SELECT * FROM orders WHERE id = ?",
+            [id.clone().into()],
+        ),
     )
-    .bind(&id)
-    .execute(&*pool)
+    .one(&db)
     .await
-    .map_err(|e| e.to_string())?;
-
-    // Also soft delete order items
-    sqlx::query("UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ?")
-        .bind(&id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Enqueue sync
-    if let Ok(order) =
-        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
-            .bind(&id)
-            .fetch_one(&*pool)
-            .await
     {
-        enqueue_sync(
-            &pool,
-            &app,
-            "orders",
-            "DELETE",
-            &id,
-            serde_json::json!(order),
-        )
-        .await;
+        enqueue_sync(&*pool, app, "orders", "DELETE", &id, serde_json::json!(order)).await;
     }
-    if let Ok(items_db) =
-        sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
-            .bind(&id)
-            .fetch_all(&*pool)
-            .await
+
+    if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "SELECT * FROM order_items WHERE order_id = ?",
+        [id.clone().into()],
+    ))
+    .all(&db)
+    .await
     {
         for item in items_db {
             let item_id = item.id.clone();
             enqueue_sync(
-                &pool,
-                &app,
+                &*pool,
+                app,
                 "order_items",
                 "DELETE",
                 &item_id,
@@ -759,7 +791,7 @@ pub async fn get_dashboard_stats(
     date_field: Option<String>,
     status: Option<String>,
 ) -> AppResult<DashboardStats> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
     let selected_date_field = normalized_dashboard_date_field(date_field);
     let df = date_from.unwrap_or_default().trim().to_string();
@@ -778,14 +810,17 @@ pub async fn get_dashboard_stats(
     let range_from_opt = if has_range { Some(range_from) } else { None };
     let range_to_opt = if has_range { Some(range_to) } else { None };
     let normalized_status = normalize_order_status_filter(status)?;
+
     let query = format!(
         "{} WHERE o.deleted_at IS NULL {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        query,
+    ))
+    .all(&db)
+    .await?;
 
     let mut total_revenue = 0.0;
     let mut total_profit = 0.0;
@@ -855,7 +890,7 @@ pub async fn get_dashboard_detail_records(
     date_field: Option<String>,
     status: Option<String>,
 ) -> AppResult<Vec<DashboardDetailRecord>> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
     let selected_date_field = normalized_dashboard_date_field(date_field);
     let df = date_from.unwrap_or_default().trim().to_string();
@@ -874,6 +909,7 @@ pub async fn get_dashboard_detail_records(
     let range_from_opt = if has_range { Some(range_from) } else { None };
     let range_to_opt = if has_range { Some(range_to) } else { None };
     let normalized_status = normalize_order_status_filter(status)?;
+
     if !matches!(
         record_type.as_str(),
         "profit" | "cargo" | "paid_cargo" | "unpaid_cargo"
@@ -888,10 +924,12 @@ pub async fn get_dashboard_detail_records(
         "{} WHERE o.deleted_at IS NULL {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        query,
+    ))
+    .all(&db)
+    .await?;
 
     let mut records = Vec::<DashboardDetailRecord>::new();
 
@@ -951,9 +989,11 @@ pub async fn get_dashboard_detail_records(
 }
 
 pub async fn get_orders_for_export(state: Arc<AppState>) -> AppResult<Vec<OrderExportRow>> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
-    let query = r#"
+    let rows = OrderExportRow::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r#"
         SELECT
             o.order_id,
             c.name as customer_name,
@@ -982,12 +1022,10 @@ pub async fn get_orders_for_export(state: Arc<AppState>) -> AppResult<Vec<OrderE
         LEFT JOIN customers c ON o.customer_id = c.id
         LEFT JOIN order_items oi ON o.id = oi.order_id AND oi.deleted_at IS NULL
         ORDER BY o.id ASC
-    "#;
-
-    let rows = sqlx::query_as::<_, OrderExportRow>(query)
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        "#,
+    ))
+    .all(&db)
+    .await?;
 
     Ok(rows)
 }

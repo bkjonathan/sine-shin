@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{info, instrument};
 
-use crate::db::helpers::load_active_sync_config;
+use crate::entities::sync_config;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
+use crate::sync::SyncConfig;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct StaffUserMetadata {
@@ -68,10 +70,33 @@ struct UpdateStaffUserPayload {
     user_metadata: Option<StaffUserMetadata>,
 }
 
+/// Loads the active sync configuration using the SeaORM entity.
+async fn load_sync_config(state: &AppState) -> AppResult<SyncConfig> {
+    let db = state.db.lock().await.clone();
+    let row = sync_config::Entity::find()
+        .filter(sync_config::Column::IsActive.eq(1))
+        .order_by_desc(sync_config::Column::Id)
+        .one(&db)
+        .await?
+        .ok_or(AppError::SyncConfigNotFound)?;
+
+    let sync_interval = row.sync_interval.unwrap_or(30);
+    let sync_enabled = row.sync_enabled.unwrap_or(1) == 1;
+
+    Ok(SyncConfig {
+        id: Some(row.id),
+        supabase_url: row.supabase_url,
+        supabase_anon_key: row.supabase_anon_key,
+        supabase_service_key: row.supabase_service_key,
+        sync_enabled,
+        sync_interval,
+    })
+}
+
 /// Fetches all staff users from Supabase admin users API.
 #[instrument(skip(state), fields(command = "get_staff_users"))]
 pub async fn get_staff_users(state: Arc<AppState>) -> AppResult<StaffUsersResponse> {
-    let config = load_active_sync_config(&state.db).await?;
+    let config = load_sync_config(&state).await?;
     let url = format!(
         "{}/auth/v1/admin/users",
         config.supabase_url.trim_end_matches('/')
@@ -108,7 +133,7 @@ pub async fn create_staff_user(
         user_metadata: data.normalized(),
     };
 
-    let config = load_active_sync_config(&state.db).await?;
+    let config = load_sync_config(&state).await?;
     let url = format!(
         "{}/auth/v1/admin/users",
         config.supabase_url.trim_end_matches('/')
@@ -116,12 +141,7 @@ pub async fn create_staff_user(
 
     let response: StaffUserApiResponse = state
         .supabase_client
-        .post_json(
-            &url,
-            &config.supabase_service_key,
-            &payload,
-            "create_staff_user",
-        )
+        .post_json(&url, &config.supabase_service_key, &payload, "create_staff_user")
         .await?;
 
     let user = unpack_user(response);
@@ -151,7 +171,7 @@ pub async fn update_staff_user(
         ));
     }
 
-    let config = load_active_sync_config(&state.db).await?;
+    let config = load_sync_config(&state).await?;
     let url = format!(
         "{}/auth/v1/admin/users/{id}",
         config.supabase_url.trim_end_matches('/')
@@ -159,12 +179,7 @@ pub async fn update_staff_user(
 
     let response: StaffUserApiResponse = state
         .supabase_client
-        .put_json(
-            &url,
-            &config.supabase_service_key,
-            &payload,
-            "update_staff_user",
-        )
+        .put_json(&url, &config.supabase_service_key, &payload, "update_staff_user")
         .await?;
 
     let user = unpack_user(response);
@@ -176,7 +191,7 @@ pub async fn update_staff_user(
 #[instrument(skip(state), fields(command = "delete_staff_user", user_id = %id))]
 pub async fn delete_staff_user(state: Arc<AppState>, id: String) -> AppResult<()> {
     let id = normalize_required(&id, "id")?;
-    let config = load_active_sync_config(&state.db).await?;
+    let config = load_sync_config(&state).await?;
     let url = format!(
         "{}/auth/v1/admin/users/{id}",
         config.supabase_url.trim_end_matches('/')
@@ -204,7 +219,6 @@ fn normalize_required(value: &str, field_name: &str) -> AppResult<String> {
             "{field_name} cannot be empty"
         )));
     }
-
     Ok(normalized.to_string())
 }
 
@@ -226,8 +240,8 @@ impl StaffUserMetadata {
 fn trimmed(value: String) -> Option<String> {
     let normalized = value.trim().to_string();
     if normalized.is_empty() {
-        return None;
+        None
+    } else {
+        Some(normalized)
     }
-
-    Some(normalized)
 }

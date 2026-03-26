@@ -7,17 +7,23 @@ use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
+use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, QueryOrder, Set, Statement};
 use tauri::AppHandle;
 use tracing::instrument;
-
 use uuid::Uuid;
 
 use crate::db::copy_logo_to_app_data;
+use crate::entities::shop_settings;
 use crate::error::{AppError, AppResult};
 use crate::models::ShopSettings;
 use crate::services::settings::{get_app_settings, normalize_s3_bucket_name};
 use crate::state::AppState;
 use crate::sync::enqueue_sync;
+
+#[derive(Debug, FromQueryResult)]
+struct IdRow {
+    id: String,
+}
 
 /// Saves initial shop setup row and enqueues sync payload.
 #[instrument(skip(state, app))]
@@ -30,26 +36,28 @@ pub async fn save_shop_setup(
     logo_file_path: String,
 ) -> AppResult<()> {
     let internal_logo_path = copy_logo_to_app_data(app, &logo_file_path)?;
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
     let shop_id = Uuid::new_v4().to_string();
-    sqlx::query(
-        "INSERT INTO shop_settings (id, shop_name, phone, address, logo_path) VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(&shop_id)
-    .bind(&name)
-    .bind(&phone)
-    .bind(&address)
-    .bind(&internal_logo_path)
-    .execute(&*pool)
+    shop_settings::ActiveModel {
+        id: Set(shop_id),
+        shop_name: Set(name),
+        phone: Set(Some(phone)),
+        address: Set(Some(address)),
+        logo_path: Set(internal_logo_path.map(|p| p)),
+        ..Default::default()
+    }
+    .insert(&db)
     .await?;
 
-    if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await
+    if let Ok(Some(record)) = shop_settings::Entity::find()
+        .order_by_desc(shop_settings::Column::CreatedAt)
+        .into_model::<ShopSettings>()
+        .one(&db)
+        .await
     {
         let record_id = record.id.clone();
+        let pool = state.pool.lock().await;
         enqueue_sync(
             &pool,
             app,
@@ -67,12 +75,13 @@ pub async fn save_shop_setup(
 /// Returns latest shop settings row.
 #[instrument(skip(state))]
 pub async fn get_shop_settings(state: Arc<AppState>) -> AppResult<ShopSettings> {
-    let pool = state.db.lock().await;
-    let settings: ShopSettings =
-        sqlx::query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await?;
-    Ok(settings)
+    let db = state.db.lock().await.clone();
+    shop_settings::Entity::find()
+        .order_by_desc(shop_settings::Column::CreatedAt)
+        .into_model::<ShopSettings>()
+        .one(&db)
+        .await?
+        .ok_or_else(|| AppError::not_found("Shop settings not found"))
 }
 
 /// Updates latest shop settings row and enqueues sync payload.
@@ -87,51 +96,63 @@ pub async fn update_shop_settings(
     customer_id_prefix: Option<String>,
     order_id_prefix: Option<String>,
 ) -> AppResult<()> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
-    let latest_id: Option<String> =
-        sqlx::query_scalar("SELECT id FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_optional(&*pool)
-            .await?;
+    let latest_id = IdRow::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "SELECT id FROM shop_settings ORDER BY created_at DESC LIMIT 1".to_string(),
+    ))
+    .one(&db)
+    .await?
+    .ok_or_else(|| AppError::not_found("No shop settings found to update"))?
+    .id;
 
-    if let Some(id) = latest_id {
-        let new_internal_logo_path = match logo_path {
-            Some(path) => copy_logo_to_app_data(app, &path)?,
-            None => None,
-        };
+    let new_internal_logo_path = match logo_path {
+        Some(path) => copy_logo_to_app_data(app, &path)?,
+        None => None,
+    };
 
-        if let Some(internal_path) = new_internal_logo_path {
-            sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ?, customer_id_prefix = ?, order_id_prefix = ? WHERE id = ?")
-                .bind(shop_name)
-                .bind(phone)
-                .bind(address)
-                .bind(internal_path)
-                .bind(customer_id_prefix)
-                .bind(order_id_prefix)
-                .bind(id)
-                .execute(&*pool)
-                .await?;
-        } else {
-            sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, customer_id_prefix = ?, order_id_prefix = ? WHERE id = ?")
-                .bind(shop_name)
-                .bind(phone)
-                .bind(address)
-                .bind(customer_id_prefix)
-                .bind(order_id_prefix)
-                .bind(id)
-                .execute(&*pool)
-                .await?;
-        }
+    if let Some(internal_path) = new_internal_logo_path {
+        db.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ?, \
+             customer_id_prefix = ?, order_id_prefix = ?, updated_at = datetime('now') WHERE id = ?",
+            [
+                shop_name.into(),
+                phone.into(),
+                address.into(),
+                internal_path.into(),
+                customer_id_prefix.into(),
+                order_id_prefix.into(),
+                latest_id.clone().into(),
+            ],
+        ))
+        .await?;
     } else {
-        return Err(AppError::not_found("No shop settings found to update"));
+        db.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, \
+             customer_id_prefix = ?, order_id_prefix = ?, updated_at = datetime('now') WHERE id = ?",
+            [
+                shop_name.into(),
+                phone.into(),
+                address.into(),
+                customer_id_prefix.into(),
+                order_id_prefix.into(),
+                latest_id.clone().into(),
+            ],
+        ))
+        .await?;
     }
 
-    if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await
+    if let Ok(Some(record)) = shop_settings::Entity::find()
+        .order_by_desc(shop_settings::Column::CreatedAt)
+        .into_model::<ShopSettings>()
+        .one(&db)
+        .await
     {
         let record_id = record.id.clone();
+        let pool = state.pool.lock().await;
         enqueue_sync(
             &pool,
             app,
@@ -190,20 +211,20 @@ pub async fn upload_shop_logo_to_s3(
         ));
     }
 
-    let maybe_new_logo_path = logo_path
-        .map(|path| path.trim().to_string())
-        .filter(|path| !path.is_empty());
-    let new_internal_logo_path = match maybe_new_logo_path {
-        Some(path) => copy_logo_to_app_data(app, &path)?,
-        None => None,
-    };
+    let new_internal_logo_path = logo_path
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .map(|p| copy_logo_to_app_data(app, &p))
+        .transpose()?
+        .flatten();
 
-    let pool = state.db.lock().await;
-    let latest: ShopSettings =
-        sqlx::query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await?;
-    drop(pool);
+    let db = state.db.lock().await.clone();
+    let latest = shop_settings::Entity::find()
+        .order_by_desc(shop_settings::Column::CreatedAt)
+        .into_model::<ShopSettings>()
+        .one(&db)
+        .await?
+        .ok_or_else(|| AppError::not_found("No shop settings found"))?;
 
     let logo_to_upload = new_internal_logo_path
         .clone()
@@ -237,7 +258,6 @@ pub async fn upload_shop_logo_to_s3(
         None,
         "thai-htay-shop-logo",
     );
-
     let config = aws_config::defaults(BehaviorVersion::latest())
         .region(Region::new(aws_region.clone()))
         .credentials_provider(SharedCredentialsProvider::new(credentials))
@@ -265,28 +285,30 @@ pub async fn upload_shop_logo_to_s3(
         format!("{}/{}", imagekit_base_url, object_key)
     };
 
-    let pool = state.db.lock().await;
-    if let Some(local_logo_path) = new_internal_logo_path {
-        sqlx::query("UPDATE shop_settings SET logo_path = ?, logo_cloud_url = ? WHERE id = ?")
-            .bind(local_logo_path)
-            .bind(&cloud_url)
-            .bind(&latest.id)
-            .execute(&*pool)
-            .await?;
+    if let Some(local_path) = new_internal_logo_path {
+        db.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "UPDATE shop_settings SET logo_path = ?, logo_cloud_url = ? WHERE id = ?",
+            [local_path.into(), cloud_url.clone().into(), latest.id.clone().into()],
+        ))
+        .await?;
     } else {
-        sqlx::query("UPDATE shop_settings SET logo_cloud_url = ? WHERE id = ?")
-            .bind(&cloud_url)
-            .bind(&latest.id)
-            .execute(&*pool)
-            .await?;
+        db.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "UPDATE shop_settings SET logo_cloud_url = ? WHERE id = ?",
+            [cloud_url.clone().into(), latest.id.clone().into()],
+        ))
+        .await?;
     }
 
-    if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await
+    if let Ok(Some(record)) = shop_settings::Entity::find()
+        .order_by_desc(shop_settings::Column::CreatedAt)
+        .into_model::<ShopSettings>()
+        .one(&db)
+        .await
     {
         let record_id = record.id.clone();
+        let pool = state.pool.lock().await;
         enqueue_sync(
             &pool,
             app,

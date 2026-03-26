@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use chrono::NaiveDate;
+use sea_orm::{DatabaseBackend, FromQueryResult, Statement};
 use tracing::instrument;
 
 use crate::error::{AppError, AppResult};
 use crate::models::AccountSummary;
 use crate::state::AppState;
 
-#[derive(Debug, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, FromQueryResult)]
 struct IncomeRow {
     total_income: f64,
     total_orders: i64,
@@ -16,7 +17,7 @@ struct IncomeRow {
     total_cargo_fee: f64,
 }
 
-#[derive(Debug, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, FromQueryResult)]
 struct ExpenseRow {
     total_expenses: f64,
     total_records: i64,
@@ -29,21 +30,23 @@ pub async fn get_account_summary(
     date_from: Option<String>,
     date_to: Option<String>,
 ) -> AppResult<AccountSummary> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
     let date_range = normalize_date_range(date_from, date_to)?;
 
     let mut orders_date_filter = String::new();
     let mut expenses_date_filter = String::new();
     if let Some((df, dt)) = date_range {
         orders_date_filter = format!(
-            " AND date(COALESCE(o.order_date, o.created_at)) >= '{df}' AND date(COALESCE(o.order_date, o.created_at)) <= '{dt}'",
+            " AND date(COALESCE(o.order_date, o.created_at)) >= '{df}' \
+              AND date(COALESCE(o.order_date, o.created_at)) <= '{dt}'",
         );
         expenses_date_filter = format!(
-            " AND date(COALESCE(expense_date, created_at)) >= '{df}' AND date(COALESCE(expense_date, created_at)) <= '{dt}'",
+            " AND date(COALESCE(expense_date, created_at)) >= '{df}' \
+              AND date(COALESCE(expense_date, created_at)) <= '{dt}'",
         );
     }
 
-    let income_all_query = format!(
+    let income_all_sql = format!(
         r#"
         SELECT
             COALESCE(SUM(
@@ -68,18 +71,29 @@ pub async fn get_account_summary(
         FROM orders o
         LEFT JOIN (
             SELECT order_id, COALESCE(SUM(price * product_qty), 0) as total_price
-            FROM order_items
-            WHERE deleted_at IS NULL
-            GROUP BY order_id
+            FROM order_items WHERE deleted_at IS NULL GROUP BY order_id
         ) agg ON agg.order_id = o.id
         WHERE o.deleted_at IS NULL{}
         "#,
         orders_date_filter
     );
 
-    let income_all: IncomeRow = sqlx::query_as(&income_all_query).fetch_one(&*pool).await?;
+    let income_all = IncomeRow::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        income_all_sql,
+    ))
+    .one(&db)
+    .await?
+    .unwrap_or(IncomeRow {
+        total_income: 0.0,
+        total_orders: 0,
+        total_service_fee: 0.0,
+        total_product_discount: 0.0,
+        total_cargo_fee: 0.0,
+    });
 
-    let income_month: IncomeRow = sqlx::query_as(
+    let income_month = IncomeRow::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
         r#"
         SELECT
             COALESCE(SUM(
@@ -104,42 +118,51 @@ pub async fn get_account_summary(
         FROM orders o
         LEFT JOIN (
             SELECT order_id, COALESCE(SUM(price * product_qty), 0) as total_price
-            FROM order_items
-            WHERE deleted_at IS NULL
-            GROUP BY order_id
+            FROM order_items WHERE deleted_at IS NULL GROUP BY order_id
         ) agg ON agg.order_id = o.id
         WHERE o.deleted_at IS NULL
           AND strftime('%Y-%m', COALESCE(o.order_date, o.created_at)) = strftime('%Y-%m', 'now')
-        "#,
-    )
-    .fetch_one(&*pool)
-    .await?;
+        "#
+        .to_string(),
+    ))
+    .one(&db)
+    .await?
+    .unwrap_or(IncomeRow {
+        total_income: 0.0,
+        total_orders: 0,
+        total_service_fee: 0.0,
+        total_product_discount: 0.0,
+        total_cargo_fee: 0.0,
+    });
 
-    let expense_all_query = format!(
-        r#"
-        SELECT
-            COALESCE(SUM(amount), 0) as total_expenses,
-            COUNT(*) as total_records
-        FROM expenses
-        WHERE deleted_at IS NULL{}
-        "#,
-        expenses_date_filter
-    );
+    let expense_all = ExpenseRow::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        format!(
+            "SELECT COALESCE(SUM(amount), 0) as total_expenses, COUNT(*) as total_records \
+             FROM expenses WHERE deleted_at IS NULL{}",
+            expenses_date_filter
+        ),
+    ))
+    .one(&db)
+    .await?
+    .unwrap_or(ExpenseRow {
+        total_expenses: 0.0,
+        total_records: 0,
+    });
 
-    let expense_all: ExpenseRow = sqlx::query_as(&expense_all_query).fetch_one(&*pool).await?;
-
-    let expense_month: ExpenseRow = sqlx::query_as(
-        r#"
-        SELECT
-            COALESCE(SUM(amount), 0) as total_expenses,
-            COUNT(*) as total_records
-        FROM expenses
-        WHERE deleted_at IS NULL
-          AND strftime('%Y-%m', COALESCE(expense_date, created_at)) = strftime('%Y-%m', 'now')
-        "#,
-    )
-    .fetch_one(&*pool)
-    .await?;
+    let expense_month = ExpenseRow::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "SELECT COALESCE(SUM(amount), 0) as total_expenses, COUNT(*) as total_records \
+         FROM expenses WHERE deleted_at IS NULL \
+         AND strftime('%Y-%m', COALESCE(expense_date, created_at)) = strftime('%Y-%m', 'now')"
+            .to_string(),
+    ))
+    .one(&db)
+    .await?
+    .unwrap_or(ExpenseRow {
+        total_expenses: 0.0,
+        total_records: 0,
+    });
 
     Ok(AccountSummary {
         total_income: income_all.total_income,

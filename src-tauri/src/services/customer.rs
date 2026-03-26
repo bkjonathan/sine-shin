@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, Set, Statement};
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::DEFAULT_CUSTOMER_ID_PREFIX;
+use crate::entities::customers;
 use crate::error::{AppError, AppResult};
 use crate::models::{Customer, PaginatedCustomers};
 use crate::state::AppState;
@@ -13,6 +15,21 @@ use crate::sync::enqueue_sync;
 const DEFAULT_CUSTOMERS_PAGE_SIZE: i64 = 5;
 const MIN_CUSTOMERS_PAGE_SIZE: i64 = 5;
 const MAX_CUSTOMERS_PAGE_SIZE: i64 = 100;
+
+#[derive(Debug, FromQueryResult)]
+struct CountRow {
+    cnt: i64,
+}
+
+#[derive(Debug, FromQueryResult)]
+struct PrefixRow {
+    customer_id_prefix: Option<String>,
+}
+
+#[derive(Debug, FromQueryResult)]
+struct RowIdRow {
+    rowid: i64,
+}
 
 /// Creates a customer and optionally enqueues initial sync payload.
 #[instrument(skip(state, app))]
@@ -32,62 +49,81 @@ pub async fn create_customer(
     updated_at: Option<String>,
     deleted_at: Option<String>,
 ) -> AppResult<String> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
     let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let normalized_customer_id = customer_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
 
-    let rowid = sqlx::query(
-        "INSERT INTO customers (id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
-    )
-    .bind(&record_id)
-    .bind(&normalized_customer_id)
-    .bind(&name)
-    .bind(&phone)
-    .bind(&address)
-    .bind(&city)
-    .bind(&social_media_url)
-    .bind(&platform)
-    .bind(&created_at)
-    .bind(&updated_at)
-    .bind(&deleted_at)
-    .execute(&*pool)
-    .await?
-    .last_insert_rowid();
+    // Use entity insert; created_at defaults to CURRENT_TIMESTAMP when NotSet
+    customers::ActiveModel {
+        id: Set(record_id.clone()),
+        customer_id: Set(normalized_customer_id.clone()),
+        name: Set(name),
+        phone: Set(phone),
+        address: Set(address),
+        city: Set(city),
+        social_media_url: Set(social_media_url),
+        platform: Set(platform),
+        created_at: created_at
+            .map(|v| Set(Some(v)))
+            .unwrap_or(sea_orm::ActiveValue::NotSet),
+        updated_at: Set(updated_at),
+        deleted_at: Set(deleted_at),
+        synced: Set(Some(0)),
+    }
+    .insert(&db)
+    .await?;
+
+    // Get rowid for auto-generating customer_id when none was supplied
+    let rowid = if normalized_customer_id.is_none() {
+        RowIdRow::find_by_statement(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "SELECT last_insert_rowid() as rowid".to_string(),
+        ))
+        .one(&db)
+        .await?
+        .map(|r| r.rowid)
+        .unwrap_or(0)
+    } else {
+        0
+    };
 
     if normalized_customer_id.is_none() {
-        let prefix: Option<String> = sqlx::query_scalar(
-            "SELECT customer_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1",
-        )
-        .fetch_optional(&*pool)
+        let prefix_str = PrefixRow::find_by_statement(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "SELECT customer_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1"
+                .to_string(),
+        ))
+        .one(&db)
         .await
-        .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
+        .unwrap_or(None)
+        .and_then(|r| r.customer_id_prefix)
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
 
-        let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
-        let new_customer_id = format!("{prefix_str}{rowid:05}");
-
-        let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
-            .bind(new_customer_id)
-            .bind(&record_id)
-            .execute(&*pool)
+        let new_customer_id = format!("{}{:05}", prefix_str, rowid);
+        let _ = db
+            .execute(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "UPDATE customers SET customer_id = ? WHERE id = ?",
+                [new_customer_id.into(), record_id.clone().into()],
+            ))
             .await;
     }
 
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(&record_id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(Some(record)) = Customer::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, \
+         created_at, updated_at, deleted_at FROM customers WHERE id = ?",
+        [record_id.clone().into()],
+    ))
+    .one(&db)
+    .await
     {
-        enqueue_sync(
-            &pool,
-            app,
-            "customers",
-            "INSERT",
-            &record_id,
-            serde_json::json!(record),
-        )
-        .await;
+        let pool = state.pool.lock().await;
+        enqueue_sync(&pool, app, "customers", "INSERT", &record_id, serde_json::json!(record))
+            .await;
     }
 
     Ok(record_id)
@@ -96,12 +132,15 @@ pub async fn create_customer(
 /// Loads all customers in reverse creation order.
 #[instrument(skip(state))]
 pub async fn get_customers(state: Arc<AppState>) -> AppResult<Vec<Customer>> {
-    let pool = state.db.lock().await;
-    let customers =
-        sqlx::query_as::<_, Customer>("SELECT * FROM customers ORDER BY created_at DESC")
-            .fetch_all(&*pool)
-            .await?;
-
+    let db = state.db.lock().await.clone();
+    let customers = Customer::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, \
+         created_at, updated_at, deleted_at FROM customers ORDER BY created_at DESC"
+            .to_string(),
+    ))
+    .all(&db)
+    .await?;
     Ok(customers)
 }
 
@@ -116,7 +155,7 @@ pub async fn get_customers_paginated(
     sort_by: Option<String>,
     sort_order: Option<String>,
 ) -> AppResult<PaginatedCustomers> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
     let requested_page_size = page_size.unwrap_or(DEFAULT_CUSTOMERS_PAGE_SIZE);
     let no_limit = requested_page_size <= 0;
@@ -149,68 +188,80 @@ pub async fn get_customers_paginated(
         "created_at" => "created_at",
         _ => "customer_id",
     };
-
-    let sort_direction = match sort_order.as_deref().unwrap_or("desc") {
-        "asc" => "ASC",
-        "desc" => "DESC",
-        _ => "DESC",
+    let sort_dir = if sort_order.as_deref() == Some("asc") {
+        "ASC"
+    } else {
+        "DESC"
     };
 
-    let order_clause = format!("ORDER BY {sort_column} {sort_direction}");
+    let base_select = "SELECT id, customer_id, name, phone, address, city, social_media_url, \
+                       platform, created_at, updated_at, deleted_at FROM customers";
 
     let (total, customers) = if has_search {
-        let count_query = format!(
-            "SELECT COUNT(*) FROM customers WHERE COALESCE({}, '') LIKE ?",
-            search_column
-        );
-        let total: i64 = sqlx::query_scalar(&count_query)
-            .bind(&search_pattern)
-            .fetch_one(&*pool)
-            .await?;
+        let count = CountRow::find_by_statement(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            &format!("SELECT COUNT(*) as cnt FROM customers WHERE COALESCE({}, '') LIKE ?", search_column),
+            [search_pattern.clone().into()],
+        ))
+        .one(&db)
+        .await?
+        .unwrap_or(CountRow { cnt: 0 })
+        .cnt;
 
-        let customers = if no_limit {
-            let data_query = format!(
-                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {}",
-                search_column, order_clause
-            );
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(&search_pattern)
-                .fetch_all(&*pool)
-                .await?
+        let data_sql = if no_limit {
+            format!("{} WHERE COALESCE({}, '') LIKE ? ORDER BY {} {}", base_select, search_column, sort_column, sort_dir)
         } else {
-            let data_query = format!(
-                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {} LIMIT ? OFFSET ?",
-                search_column, order_clause
-            );
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(&search_pattern)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await?
+            format!("{} WHERE COALESCE({}, '') LIKE ? ORDER BY {} {} LIMIT ? OFFSET ?", base_select, search_column, sort_column, sort_dir)
         };
 
-        (total, customers)
+        let rows = if no_limit {
+            Customer::find_by_statement(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                &data_sql,
+                [search_pattern.into()],
+            ))
+            .all(&db)
+            .await?
+        } else {
+            Customer::find_by_statement(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                &data_sql,
+                [search_pattern.into(), page_size.into(), offset.into()],
+            ))
+            .all(&db)
+            .await?
+        };
+        (count, rows)
     } else {
-        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM customers")
-            .fetch_one(&*pool)
-            .await?;
+        let count = CountRow::find_by_statement(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "SELECT COUNT(*) as cnt FROM customers".to_string(),
+        ))
+        .one(&db)
+        .await?
+        .unwrap_or(CountRow { cnt: 0 })
+        .cnt;
 
-        let customers = if no_limit {
-            let data_query = format!("SELECT * FROM customers {order_clause}");
-            sqlx::query_as::<_, Customer>(&data_query)
-                .fetch_all(&*pool)
-                .await?
+        let data_sql = if no_limit {
+            format!("{} ORDER BY {} {}", base_select, sort_column, sort_dir)
         } else {
-            let data_query = format!("SELECT * FROM customers {order_clause} LIMIT ? OFFSET ?");
-            sqlx::query_as::<_, Customer>(&data_query)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await?
+            format!("{} ORDER BY {} {} LIMIT ? OFFSET ?", base_select, sort_column, sort_dir)
         };
 
-        (total, customers)
+        let rows = if no_limit {
+            Customer::find_by_statement(Statement::from_string(DatabaseBackend::Sqlite, data_sql))
+                .all(&db)
+                .await?
+        } else {
+            Customer::find_by_statement(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                &data_sql,
+                [page_size.into(), offset.into()],
+            ))
+            .all(&db)
+            .await?
+        };
+        (count, rows)
     };
 
     let response_page_size = if no_limit { total.max(0) } else { page_size };
@@ -234,14 +285,12 @@ pub async fn get_customers_paginated(
 /// Loads a single customer by id.
 #[instrument(skip(state))]
 pub async fn get_customer(state: Arc<AppState>, id: String) -> AppResult<Customer> {
-    let pool = state.db.lock().await;
-    let customer = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(&id)
-        .fetch_optional(&*pool)
+    let db = state.db.lock().await.clone();
+    customers::Entity::find_by_id(id)
+        .into_model::<Customer>()
+        .one(&db)
         .await?
-        .ok_or_else(|| AppError::not_found("Customer not found"))?;
-
-    Ok(customer)
+        .ok_or_else(|| AppError::not_found("Customer not found"))
 }
 
 /// Updates customer row and enqueues sync payload.
@@ -262,42 +311,41 @@ pub async fn update_customer(
     updated_at: Option<String>,
     deleted_at: Option<String>,
 ) -> AppResult<()> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
     let normalized_customer_id = customer_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
 
-    sqlx::query(
-        "UPDATE customers SET customer_id = ?, name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, created_at = COALESCE(?, created_at), updated_at = COALESCE(?, datetime('now')), deleted_at = ? WHERE id = ?",
-    )
-    .bind(&normalized_customer_id)
-    .bind(&name)
-    .bind(&phone)
-    .bind(&address)
-    .bind(&city)
-    .bind(&social_media_url)
-    .bind(&platform)
-    .bind(&created_at)
-    .bind(&updated_at)
-    .bind(&deleted_at)
-    .bind(&id)
-    .execute(&*pool)
+    db.execute(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "UPDATE customers SET customer_id = ?, name = ?, phone = ?, address = ?, city = ?, \
+         social_media_url = ?, platform = ?, \
+         created_at = COALESCE(?, created_at), \
+         updated_at = COALESCE(?, datetime('now')), \
+         deleted_at = ? WHERE id = ?",
+        [
+            normalized_customer_id.into(),
+            name.into(),
+            phone.into(),
+            address.into(),
+            city.into(),
+            social_media_url.into(),
+            platform.into(),
+            created_at.into(),
+            updated_at.into(),
+            deleted_at.into(),
+            id.clone().into(),
+        ],
+    ))
     .await?;
 
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(&id)
-        .fetch_one(&*pool)
+    if let Ok(Some(record)) = customers::Entity::find_by_id(id.clone())
+        .into_model::<Customer>()
+        .one(&db)
         .await
     {
-        enqueue_sync(
-            &pool,
-            app,
-            "customers",
-            "UPDATE",
-            &id,
-            serde_json::json!(record),
-        )
-        .await;
+        let pool = state.pool.lock().await;
+        enqueue_sync(&pool, app, "customers", "UPDATE", &id, serde_json::json!(record)).await;
     }
 
     Ok(())
@@ -306,29 +354,22 @@ pub async fn update_customer(
 /// Soft-deletes a customer and enqueues sync payload.
 #[instrument(skip(state, app))]
 pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
-    sqlx::query(
+    db.execute(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
         "UPDATE customers SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-    )
-    .bind(&id)
-    .execute(&*pool)
+        [id.clone().into()],
+    ))
     .await?;
 
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
-        .bind(&id)
-        .fetch_one(&*pool)
+    if let Ok(Some(record)) = customers::Entity::find_by_id(id.clone())
+        .into_model::<Customer>()
+        .one(&db)
         .await
     {
-        enqueue_sync(
-            &pool,
-            app,
-            "customers",
-            "DELETE",
-            &id,
-            serde_json::json!(record),
-        )
-        .await;
+        let pool = state.pool.lock().await;
+        enqueue_sync(&pool, app, "customers", "DELETE", &id, serde_json::json!(record)).await;
     }
 
     Ok(())

@@ -7,6 +7,8 @@ use thiserror::Error;
 pub enum AppError {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
+    #[error("Database error: {0}")]
+    SeaOrm(#[from] sea_orm::DbErr),
     #[error("HTTP client error: {0}")]
     Http(#[from] reqwest::Error),
     #[error("IO error: {0}")]
@@ -84,7 +86,7 @@ impl AppError {
     /// Returns a stable error code that frontend code can match on.
     pub fn code(&self) -> &'static str {
         match self {
-            Self::Database(_) => "database_error",
+            Self::Database(_) | Self::SeaOrm(_) => "database_error",
             Self::Http(_) => "http_error",
             Self::Io(_) => "io_error",
             Self::SerdeJson(_) => "serde_json_error",

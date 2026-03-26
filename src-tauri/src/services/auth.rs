@@ -1,8 +1,13 @@
 use std::sync::Arc;
 
+use sea_orm::{
+    ActiveModelTrait, DatabaseBackend, EntityTrait, FromQueryResult, PaginatorTrait, Set,
+    Statement,
+};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
+use crate::entities::{shop_settings, users};
 use crate::error::{AppError, AppResult};
 use crate::models::User;
 use crate::state::AppState;
@@ -10,16 +15,19 @@ use crate::state::AppState;
 /// Registers a user by hashing and storing credentials.
 #[instrument(skip(state, password), fields(username = %name))]
 pub async fn register_user(state: Arc<AppState>, name: String, password: String) -> AppResult<()> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
     let user_id = Uuid::new_v4().to_string();
     let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)?;
 
-    sqlx::query("INSERT INTO users (id, name, password_hash) VALUES (?, ?, ?)")
-        .bind(user_id)
-        .bind(name)
-        .bind(password_hash)
-        .execute(&*pool)
-        .await?;
+    users::ActiveModel {
+        id: Set(user_id),
+        name: Set(name),
+        password_hash: Set(password_hash),
+        role: Set("owner".to_string()),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await?;
 
     info!("user registered");
     Ok(())
@@ -28,12 +36,15 @@ pub async fn register_user(state: Arc<AppState>, name: String, password: String)
 /// Logs in a user by validating password hash.
 #[instrument(skip(state, password), fields(username = %name))]
 pub async fn login_user(state: Arc<AppState>, name: String, password: String) -> AppResult<User> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
-    let user: Option<User> = sqlx::query_as("SELECT * FROM users WHERE name = ?")
-        .bind(&name)
-        .fetch_optional(&*pool)
-        .await?;
+    let user = User::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "SELECT id, name, password_hash, role, created_at FROM users WHERE name = ?",
+        [name.into()],
+    ))
+    .one(&db)
+    .await?;
 
     match user {
         Some(user) => {
@@ -52,15 +63,10 @@ pub async fn login_user(state: Arc<AppState>, name: String, password: String) ->
 /// Checks whether onboarding data exists.
 #[instrument(skip(state))]
 pub async fn check_is_onboarded(state: Arc<AppState>) -> AppResult<bool> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
-    let shop_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM shop_settings")
-        .fetch_one(&*pool)
-        .await?;
+    let shop_count = shop_settings::Entity::find().count(&db).await?;
+    let user_count = users::Entity::find().count(&db).await?;
 
-    let user_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-        .fetch_one(&*pool)
-        .await?;
-
-    Ok(shop_count.0 > 0 && user_count.0 > 0)
+    Ok(shop_count > 0 && user_count > 0)
 }

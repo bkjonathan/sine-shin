@@ -2,40 +2,58 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use sea_orm::{ConnectionTrait, DatabaseBackend, FromQueryResult, Statement};
+use sea_orm::SqlxSqliteConnector;
+use sea_orm_migration::MigratorTrait;
+use sqlx::sqlite::SqlitePoolOptions;
 use tauri::{AppHandle, Manager};
 use tracing::instrument;
 
-use crate::db::init_db;
 use crate::error::{AppError, AppResult};
+use crate::migration::Migrator;
 use crate::models::{DbStatus, TableSequenceResetStatus, TableStatus};
 use crate::state::AppState;
+
+#[derive(Debug, FromQueryResult)]
+struct TableRow {
+    name: String,
+}
+
+#[derive(Debug, FromQueryResult)]
+struct CountRow {
+    cnt: i64,
+}
+
+#[derive(Debug, FromQueryResult)]
+struct MaxIdRow {
+    max_id: i64,
+}
+
+#[derive(Debug, FromQueryResult)]
+struct SeqRow {
+    seq_val: i64,
+}
 
 /// Resets core app data tables and re-initializes schema.
 #[instrument(skip(state, app))]
 pub async fn reset_app_data(state: Arc<AppState>, app: &AppHandle) -> AppResult<()> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
-    sqlx::query("DROP TABLE IF EXISTS shop_settings")
-        .execute(&*pool)
+    for table in [
+        "shop_settings",
+        "users",
+        "orders",
+        "order_items",
+        "customers",
+        "expenses",
+        "seaql_migrations",
+    ] {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            format!("DROP TABLE IF EXISTS {}", table),
+        ))
         .await?;
-    sqlx::query("DROP TABLE IF EXISTS users")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS orders")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS order_items")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS customers")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS expenses")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
-        .execute(&*pool)
-        .await?;
+    }
 
     if let Ok(app_data_dir) = app.path().app_data_dir() {
         let logos_dir = app_data_dir.join("logos");
@@ -44,7 +62,7 @@ pub async fn reset_app_data(state: Arc<AppState>, app: &AppHandle) -> AppResult<
         }
     }
 
-    init_db(&pool)
+    Migrator::up(&db, None)
         .await
         .map_err(|e| AppError::internal(e.to_string()))?;
     Ok(())
@@ -66,69 +84,85 @@ pub async fn backup_database(app: &AppHandle, dest_path: String) -> AppResult<u6
     Ok(bytes_copied)
 }
 
-/// Restores sqlite DB file and reconnects pool.
+/// Restores sqlite DB file, reconnects pool, and runs pending migrations.
 #[instrument(skip(state, app))]
 pub async fn restore_database(
     state: Arc<AppState>,
     app: &AppHandle,
     restore_path: String,
 ) -> AppResult<()> {
-    let mut pool_guard = state.db.lock().await;
-    pool_guard.close().await;
-
-    let app_data_dir = app.path().app_data_dir()?;
-    let db_path = app_data_dir.join("shop.db");
-
     let restore_source = PathBuf::from(&restore_path);
     if !restore_source.exists() {
         return Err(AppError::not_found("Restore file not found"));
     }
 
+    let app_data_dir = app.path().app_data_dir()?;
+    let db_path = app_data_dir.join("shop.db");
+
+    // Hold both locks to atomically swap the connections.
+    let mut db_guard = state.db.lock().await;
+    let mut pool_guard = state.pool.lock().await;
+
+    pool_guard.close().await;
+
     fs::copy(&restore_source, &db_path)
         .map_err(|e| AppError::internal(format!("Failed to restore database: {}", e)))?;
 
     let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
-    let new_pool = sqlx::sqlite::SqlitePoolOptions::new()
+    let new_pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect(&db_url)
         .await
         .map_err(|e| AppError::internal(format!("Failed to reconnect to database: {}", e)))?;
 
+    let new_db = SqlxSqliteConnector::from_sqlx_sqlite_pool(new_pool.clone());
+    Migrator::up(&new_db, None)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+
     *pool_guard = new_pool;
+    *db_guard = new_db;
     Ok(())
 }
 
 /// Returns DB table row counts and DB file size.
 #[instrument(skip(state, app))]
 pub async fn get_db_status(state: Arc<AppState>, app: &AppHandle) -> AppResult<DbStatus> {
-    let pool = state.db.lock().await;
+    let db = state.db.lock().await.clone();
 
-    let tables: Vec<(String,)> = sqlx::query_as(
+    let tables = TableRow::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
         "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-    )
-    .fetch_all(&*pool)
+    ))
+    .all(&db)
     .await?;
 
     let mut table_statuses = Vec::new();
-    for (name,) in &tables {
-        let query = format!("SELECT COUNT(*) FROM {}", name);
-        let count: (i64,) = sqlx::query_as(&query).fetch_one(&*pool).await?;
+    for row in &tables {
+        let count = CountRow::find_by_statement(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            format!(
+                "SELECT COUNT(*) as cnt FROM {}",
+                quote_sqlite_identifier(&row.name)
+            ),
+        ))
+        .one(&db)
+        .await?
+        .unwrap_or(CountRow { cnt: 0 })
+        .cnt;
+
         table_statuses.push(TableStatus {
-            name: name.clone(),
-            row_count: count.0,
+            name: row.name.clone(),
+            row_count: count,
         });
     }
 
-    let size_bytes = if let Ok(app_data_dir) = app.path().app_data_dir() {
-        let db_path = app_data_dir.join("shop.db");
-        if let Ok(metadata) = fs::metadata(db_path) {
-            Some(metadata.len())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let size_bytes = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|dir| fs::metadata(dir.join("shop.db")).ok())
+        .map(|meta| meta.len());
 
     Ok(DbStatus {
         total_tables: tables.len() as i64,
@@ -147,58 +181,75 @@ pub async fn reset_table_sequence(
     state: Arc<AppState>,
     table_name: String,
 ) -> AppResult<TableSequenceResetStatus> {
-    let table_name = table_name.trim();
+    let table_name = table_name.trim().to_string();
     if table_name.is_empty() {
         return Err(AppError::invalid_input("Table name is required"));
     }
 
-    let pool = state.db.lock().await;
-    let table_exists: Option<String> = sqlx::query_scalar(
+    let db = state.db.lock().await.clone();
+
+    let exists = TableRow::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
         "SELECT name FROM sqlite_schema WHERE type='table' AND name = ? AND name NOT LIKE 'sqlite_%' LIMIT 1",
-    )
-    .bind(table_name)
-    .fetch_optional(&*pool)
+        [table_name.clone().into()],
+    ))
+    .one(&db)
     .await?;
 
-    let table_name = table_exists
-        .ok_or_else(|| AppError::not_found(format!("Table not found: {}", table_name)))?;
+    let table_name = exists
+        .ok_or_else(|| AppError::not_found(format!("Table not found: {}", table_name)))?
+        .name;
+
     let quoted_table = quote_sqlite_identifier(&table_name);
 
-    let max_id_query = format!("SELECT COALESCE(MAX(id), 0) FROM {}", quoted_table);
-    let max_id: i64 = sqlx::query_scalar(&max_id_query)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| {
+    let max_id_result = MaxIdRow::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        format!("SELECT COALESCE(MAX(id), 0) as max_id FROM {}", quoted_table),
+    ))
+    .one(&db)
+    .await;
+
+    let max_id = match max_id_result {
+        Ok(Some(row)) => row.max_id,
+        Ok(None) => 0,
+        Err(e) => {
             let msg = e.to_string();
             if msg.contains("no such column: id") {
-                AppError::invalid_input(format!(
+                return Err(AppError::invalid_input(format!(
                     "Table '{}' does not have an 'id' column",
                     table_name
-                ))
-            } else {
-                AppError::internal(msg)
+                )));
             }
-        })?;
+            return Err(e.into());
+        }
+    };
 
-    let update_result = sqlx::query("UPDATE sqlite_sequence SET seq = ? WHERE name = ?")
-        .bind(max_id)
-        .bind(&table_name)
-        .execute(&*pool)
+    let update_result = db
+        .execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "UPDATE sqlite_sequence SET seq = ? WHERE name = ?",
+            [max_id.into(), table_name.clone().into()],
+        ))
         .await?;
 
     if update_result.rows_affected() == 0 {
-        sqlx::query("INSERT INTO sqlite_sequence(name, seq) VALUES(?, ?)")
-            .bind(&table_name)
-            .bind(max_id)
-            .execute(&*pool)
-            .await?;
+        db.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "INSERT INTO sqlite_sequence(name, seq) VALUES(?, ?)",
+            [table_name.clone().into(), max_id.into()],
+        ))
+        .await?;
     }
 
-    let sequence_value: i64 =
-        sqlx::query_scalar("SELECT COALESCE(seq, 0) FROM sqlite_sequence WHERE name = ? LIMIT 1")
-            .bind(&table_name)
-            .fetch_one(&*pool)
-            .await?;
+    let sequence_value = SeqRow::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "SELECT COALESCE(seq, 0) as seq_val FROM sqlite_sequence WHERE name = ? LIMIT 1",
+        [table_name.clone().into()],
+    ))
+    .one(&db)
+    .await?
+    .map(|r| r.seq_val)
+    .unwrap_or(0);
 
     Ok(TableSequenceResetStatus {
         table_name,
