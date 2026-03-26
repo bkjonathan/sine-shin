@@ -58,7 +58,7 @@ pub async fn get_account_summary(
                     ELSE COALESCE(o.service_fee, 0)
                 END
                 + COALESCE(o.product_discount, 0)
-                + CASE WHEN o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END
+                + CASE WHEN o.exclude_cargo_fee IS NOT TRUE THEN COALESCE(o.cargo_fee, 0) ELSE 0 END
             ), 0) as total_income,
             COUNT(DISTINCT o.id) as total_orders,
             COALESCE(SUM(
@@ -69,7 +69,7 @@ pub async fn get_account_summary(
                 END
             ), 0) as total_service_fee,
             COALESCE(SUM(o.product_discount), 0) as total_product_discount,
-            COALESCE(SUM(CASE WHEN o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END), 0) as total_cargo_fee
+            COALESCE(SUM(CASE WHEN o.exclude_cargo_fee IS NOT TRUE THEN COALESCE(o.cargo_fee, 0) ELSE 0 END), 0) as total_cargo_fee
         FROM orders o
         LEFT JOIN (
             SELECT order_id, COALESCE(SUM(price * product_qty), 0) as total_price
@@ -103,7 +103,7 @@ pub async fn get_account_summary(
                     ELSE COALESCE(o.service_fee, 0)
                 END
                 + COALESCE(o.product_discount, 0)
-                + CASE WHEN o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END
+                + CASE WHEN o.exclude_cargo_fee IS NOT TRUE THEN COALESCE(o.cargo_fee, 0) ELSE 0 END
             ), 0) as total_income,
             COUNT(DISTINCT o.id) as total_orders,
             COALESCE(SUM(
@@ -114,7 +114,7 @@ pub async fn get_account_summary(
                 END
             ), 0) as total_service_fee,
             COALESCE(SUM(o.product_discount), 0) as total_product_discount,
-            COALESCE(SUM(CASE WHEN o.exclude_cargo_fee != 1 THEN COALESCE(o.cargo_fee, 0) ELSE 0 END), 0) as total_cargo_fee
+            COALESCE(SUM(CASE WHEN o.exclude_cargo_fee IS NOT TRUE THEN COALESCE(o.cargo_fee, 0) ELSE 0 END), 0) as total_cargo_fee
         FROM orders o
         LEFT JOIN (
             SELECT order_id, COALESCE(SUM(price * product_qty), 0) as total_price
@@ -140,7 +140,7 @@ pub async fn get_account_summary(
     let expense_all = ExpenseRow::find_by_statement(Statement::from_string(
         backend,
         format!(
-            "SELECT CAST(COALESCE(SUM(amount), 0) AS REAL) as total_expenses, COUNT(*) as total_records \
+            "SELECT CAST(COALESCE(SUM(amount), 0) AS DOUBLE PRECISION) as total_expenses, COUNT(*) as total_records \
              FROM expenses WHERE deleted_at IS NULL{}",
             expenses_date_filter
         ),
@@ -155,7 +155,7 @@ pub async fn get_account_summary(
     let expense_month = ExpenseRow::find_by_statement(Statement::from_string(
         backend,
         format!(
-            "SELECT CAST(COALESCE(SUM(amount), 0) AS REAL) as total_expenses, COUNT(*) as total_records \
+            "SELECT CAST(COALESCE(SUM(amount), 0) AS DOUBLE PRECISION) as total_expenses, COUNT(*) as total_records \
          FROM expenses WHERE deleted_at IS NULL \
          AND COALESCE(expense_date, DATE(created_at)) >= '{}' \
          AND COALESCE(expense_date, DATE(created_at)) <= '{}'",
