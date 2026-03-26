@@ -25,6 +25,7 @@ export interface DashboardStats {
   total_cargo_fee: number;
   paid_cargo_fee: number;
   unpaid_cargo_fee: number;
+  excluded_cargo_total: number;
   total_orders: number;
   total_customers: number;
   recent_orders: DashboardOrder[];
@@ -41,4 +42,5 @@ export type DashboardRecordType =
   | "profit"
   | "cargo"
   | "paid_cargo"
-  | "unpaid_cargo";
+  | "unpaid_cargo"
+  | "excluded_cargo";

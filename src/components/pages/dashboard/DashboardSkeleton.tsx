@@ -23,19 +23,47 @@ export default function DashboardSkeleton() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-        {[...Array(5)].map((_, index) => (
-          <div
-            key={index}
-            className="rounded-2xl p-4 bg-glass-white border border-glass-border"
-          >
-            <div className="flex items-center gap-2.5 mb-2.5">
-              <div className="w-8 h-8 rounded-xl bg-glass-white-hover" />
-              <div className="h-3 w-16 bg-glass-white-hover rounded" />
-            </div>
-            <div className="h-6 w-24 bg-glass-white-hover rounded" />
+      <div className="mb-4 space-y-3">
+        <div>
+          <div className="flex items-center gap-2 mb-2.5 px-0.5">
+            <div className="h-2.5 w-28 bg-glass-white-hover rounded" />
+            <div className="flex-1 h-px bg-glass-border" />
           </div>
-        ))}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[...Array(4)].map((_, index) => (
+              <div
+                key={index}
+                className="rounded-2xl p-4 bg-glass-white border border-glass-border"
+              >
+                <div className="flex items-start justify-between mb-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-glass-white-hover" />
+                </div>
+                <div className="h-2 w-16 bg-glass-white-hover rounded mb-2" />
+                <div className="h-6 w-24 bg-glass-white-hover rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center gap-2 mb-2.5 px-0.5">
+            <div className="h-2.5 w-24 bg-glass-white-hover rounded" />
+            <div className="flex-1 h-px bg-glass-border" />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[...Array(6)].map((_, index) => (
+              <div
+                key={index}
+                className="rounded-2xl p-4 bg-glass-white border border-glass-border"
+              >
+                <div className="flex items-start justify-between mb-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-glass-white-hover" />
+                </div>
+                <div className="h-2 w-16 bg-glass-white-hover rounded mb-2" />
+                <div className="h-6 w-24 bg-glass-white-hover rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">

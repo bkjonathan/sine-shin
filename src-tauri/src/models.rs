@@ -184,6 +184,7 @@ pub struct DashboardStats {
     pub total_cargo_fee: f64,
     pub paid_cargo_fee: f64,
     pub unpaid_cargo_fee: f64,
+    pub excluded_cargo_total: f64,
     pub total_orders: i64,
     pub total_customers: i64,
     pub recent_orders: Vec<OrderWithCustomer>,

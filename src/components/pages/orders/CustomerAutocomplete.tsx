@@ -59,17 +59,37 @@ export default function CustomerAutocomplete({
     setIsLoading(true);
 
     try {
-      const data = await getCustomersPaginated({
-        page: 1,
-        pageSize: 20,
-        searchKey: "name",
-        searchTerm: term,
-        sortBy: "name",
-        sortOrder: "asc",
-      });
+      const [byName, byCustomerId] = await Promise.all([
+        getCustomersPaginated({
+          page: 1,
+          pageSize: 20,
+          searchKey: "name",
+          searchTerm: term,
+          sortBy: "name",
+          sortOrder: "asc",
+        }),
+        getCustomersPaginated({
+          page: 1,
+          pageSize: 20,
+          searchKey: "customerId",
+          searchTerm: term,
+          sortBy: "customer_id",
+          sortOrder: "asc",
+        }),
+      ]);
 
       if (fetchId !== abortRef.current) return;
-      setResults(data.customers);
+
+      // Merge and deduplicate by id, customer_id matches first
+      const seen = new Set<string>();
+      const merged: typeof byName.customers = [];
+      for (const c of [...byCustomerId.customers, ...byName.customers]) {
+        if (!seen.has(c.id)) {
+          seen.add(c.id);
+          merged.push(c);
+        }
+      }
+      setResults(merged);
     } catch (err) {
       console.error("Customer search failed:", err);
       if (fetchId !== abortRef.current) return;

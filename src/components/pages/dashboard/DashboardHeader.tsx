@@ -42,6 +42,14 @@ export default function DashboardHeader({
               {shopName ?? t("dashboard.welcome")}
             </span>
           </h1>
+          <p className="text-[11px] text-text-muted mt-0.5">
+            {new Date().toLocaleDateString("en-GB", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </p>
         </div>
       </div>
 

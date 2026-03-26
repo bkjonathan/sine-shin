@@ -843,6 +843,7 @@ pub async fn get_dashboard_stats(
     let mut total_cargo_fee = 0.0;
     let mut paid_cargo_fee = 0.0;
     let mut unpaid_cargo_fee = 0.0;
+    let mut excluded_cargo_total = 0.0;
     let mut total_orders = 0_i64;
     let mut unique_customers = HashSet::<String>::new();
     let mut recent_orders = Vec::<OrderWithCustomer>::new();
@@ -881,6 +882,11 @@ pub async fn get_dashboard_stats(
             }
         }
 
+        let raw_cargo = order.cargo_fee.unwrap_or(0.0);
+        if order.exclude_cargo_fee.unwrap_or(false) && raw_cargo > 0.0 {
+            excluded_cargo_total += raw_cargo;
+        }
+
         if recent_orders.len() < 5 {
             recent_orders.push(order);
         }
@@ -892,6 +898,7 @@ pub async fn get_dashboard_stats(
         total_cargo_fee,
         paid_cargo_fee,
         unpaid_cargo_fee,
+        excluded_cargo_total,
         total_orders,
         total_customers: unique_customers.len() as i64,
         recent_orders,
@@ -928,10 +935,10 @@ pub async fn get_dashboard_detail_records(
 
     if !matches!(
         record_type.as_str(),
-        "profit" | "cargo" | "paid_cargo" | "unpaid_cargo"
+        "profit" | "cargo" | "paid_cargo" | "unpaid_cargo" | "excluded_cargo"
     ) {
         return Err(
-            "Invalid record_type. Must be 'profit', 'cargo', 'paid_cargo', or 'unpaid_cargo'."
+            "Invalid record_type. Must be 'profit', 'cargo', 'paid_cargo', 'unpaid_cargo', or 'excluded_cargo'."
                 .into(),
         );
     }
@@ -978,6 +985,13 @@ pub async fn get_dashboard_detail_records(
                     0.0
                 } else {
                     effective_cargo_fee
+                }
+            }
+            "excluded_cargo" => {
+                if order.exclude_cargo_fee.unwrap_or(false) {
+                    order.cargo_fee.unwrap_or(0.0)
+                } else {
+                    0.0
                 }
             }
             _ => 0.0,

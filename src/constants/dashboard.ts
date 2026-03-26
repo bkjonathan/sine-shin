@@ -15,4 +15,5 @@ export const DASHBOARD_RECORD_TYPES = new Set<DashboardRecordType>([
   "cargo",
   "paid_cargo",
   "unpaid_cargo",
+  "excluded_cargo",
 ]);

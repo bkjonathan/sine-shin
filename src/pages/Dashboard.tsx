@@ -31,6 +31,10 @@ const resolveModalTitleKey = (modalType: DashboardRecordType | null): string => 
     return "dashboard.unpaid_cargo_records_title";
   }
 
+  if (modalType === "excluded_cargo") {
+    return "dashboard.excluded_cargo_records_title";
+  }
+
   return "dashboard.cargo_records_title";
 };
 
