@@ -4,7 +4,7 @@ interface OnboardingStepIndicatorsProps {
   currentStep: OnboardingStep;
 }
 
-const steps: OnboardingStep[] = [0, 1, 2, 3, 4];
+const steps: OnboardingStep[] = [0, 1, 2, 3, 4, 5];
 
 export default function OnboardingStepIndicators({
   currentStep,
@@ -25,7 +25,7 @@ export default function OnboardingStepIndicators({
               }
             `}
           />
-          {step < 4 && (
+          {step < 5 && (
             <div
               className={`w-8 h-px ml-3 transition-all duration-500 ${
                 currentStep > step ? "bg-text-primary/40" : "bg-text-primary/10"

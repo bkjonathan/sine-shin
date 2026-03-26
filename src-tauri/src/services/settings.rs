@@ -46,6 +46,10 @@ pub struct AppSettings {
     pub aws_bucket_name: String,
     #[serde(default)]
     pub imagekit_base_url: String,
+    #[serde(default = "default_database_type")]
+    pub database_type: String,
+    #[serde(default)]
+    pub postgres_url: String,
 }
 
 fn default_accent_color() -> String {
@@ -88,6 +92,10 @@ fn default_font_size() -> String {
     "normal".to_string()
 }
 
+fn default_database_type() -> String {
+    "sqlite".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -110,6 +118,8 @@ impl Default for AppSettings {
             aws_region: String::new(),
             aws_bucket_name: String::new(),
             imagekit_base_url: String::new(),
+            database_type: "sqlite".to_string(),
+            postgres_url: String::new(),
         }
     }
 }

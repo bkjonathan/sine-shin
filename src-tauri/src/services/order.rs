@@ -1,5 +1,5 @@
 use chrono::{DateTime, NaiveDate, NaiveDateTime};
-use sqlx::{QueryBuilder, Sqlite};
+use sqlx::{Any, QueryBuilder};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -220,46 +220,61 @@ pub async fn create_order(
     exclude_cargo_fee: Option<bool>,
 ) -> AppResult<String> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
     let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let normalized_status =
         normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    let rowid = sqlx::query(
-        "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&record_id)
-    .bind(&customer_id)
-    .bind(normalized_status)
-    .bind(order_from)
-    .bind(exchange_rate)
-    .bind(shipping_fee)
-    .bind(delivery_fee)
-    .bind(cargo_fee)
-    .bind(order_date)
-    .bind(arrived_date)
-    .bind(shipment_date)
-    .bind(user_withdraw_date)
-    .bind(service_fee)
-    .bind(product_discount)
-    .bind(service_fee_type)
-    .bind(shipping_fee_paid.unwrap_or(false))
-    .bind(delivery_fee_paid.unwrap_or(false))
-    .bind(cargo_fee_paid.unwrap_or(false))
-    .bind(service_fee_paid.unwrap_or(false))
-    .bind(shipping_fee_by_shop.unwrap_or(false))
-    .bind(delivery_fee_by_shop.unwrap_or(false))
-    .bind(cargo_fee_by_shop.unwrap_or(false))
-    .bind(exclude_cargo_fee.unwrap_or(false))
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?
-    .last_insert_rowid();
+    let order_insert_sql = format!(
+        "INSERT INTO orders \
+         (id, customer_id, status, order_from, exchange_rate, shipping_fee, delivery_fee, \
+          cargo_fee, order_date, arrived_date, shipment_date, user_withdraw_date, service_fee, \
+          product_discount, service_fee_type, shipping_fee_paid, delivery_fee_paid, \
+          cargo_fee_paid, service_fee_paid, shipping_fee_by_shop, delivery_fee_by_shop, \
+          cargo_fee_by_shop, exclude_cargo_fee) \
+         VALUES ({})",
+        d.params_list(1, 23)
+    );
 
+    let rowid = d.query(&order_insert_sql)
+        .bind(&record_id)
+        .bind(&customer_id)
+        .bind(normalized_status)
+        .bind(order_from)
+        .bind(exchange_rate)
+        .bind(shipping_fee)
+        .bind(delivery_fee)
+        .bind(cargo_fee)
+        .bind(order_date)
+        .bind(arrived_date)
+        .bind(shipment_date)
+        .bind(user_withdraw_date)
+        .bind(service_fee)
+        .bind(product_discount)
+        .bind(service_fee_type)
+        .bind(shipping_fee_paid.unwrap_or(false))
+        .bind(delivery_fee_paid.unwrap_or(false))
+        .bind(cargo_fee_paid.unwrap_or(false))
+        .bind(service_fee_paid.unwrap_or(false))
+        .bind(shipping_fee_by_shop.unwrap_or(false))
+        .bind(delivery_fee_by_shop.unwrap_or(false))
+        .bind(cargo_fee_by_shop.unwrap_or(false))
+        .bind(exclude_cargo_fee.unwrap_or(false))
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?
+        .last_insert_id();
+
+    let item_insert_sql = format!(
+        "INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) \
+         VALUES ({})",
+        d.params_list(1, 6)
+    );
     for item in items {
         let item_id = Uuid::new_v4().to_string();
-        sqlx::query("INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?, ?)")
+        d.query(&item_insert_sql)
             .bind(&item_id)
             .bind(&record_id)
             .bind(item.product_url)
@@ -271,14 +286,15 @@ pub async fn create_order(
             .map_err(|e| e.to_string())?;
     }
 
+    let update_order_id_sql = format!("UPDATE orders SET order_id = {} WHERE id = {}", d.p(1), d.p(2));
     if let Some(oid) = order_id {
-        let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
+        let _ = d.query(&update_order_id_sql)
             .bind(oid)
             .bind(&record_id)
             .execute(&mut *tx)
             .await;
     } else {
-        let prefix: Option<String> = sqlx::query_scalar(
+        let prefix: Option<String> = d.query_scalar(
             "SELECT order_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1",
         )
         .fetch_optional(&mut *tx)
@@ -288,9 +304,19 @@ pub async fn create_order(
         let prefix_str = prefix
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
-        let new_order_id = format!("{}{:05}", prefix_str, rowid);
 
-        let _ = sqlx::query("UPDATE orders SET order_id = ? WHERE id = ?")
+        // PostgreSQL doesn't support last_insert_id; use COUNT as sequence fallback
+        let seq_num: i64 = if d.is_postgres() {
+            d.query_scalar("SELECT COUNT(*) FROM orders")
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap_or(1)
+        } else {
+            rowid.unwrap_or(0) as i64
+        };
+        let new_order_id = format!("{}{:05}", prefix_str, seq_num);
+
+        let _ = d.query(&update_order_id_sql)
             .bind(new_order_id)
             .bind(&record_id)
             .execute(&mut *tx)
@@ -300,8 +326,9 @@ pub async fn create_order(
     tx.commit().await.map_err(|e| e.to_string())?;
 
     // Enqueue sync for order
+    let select_order_sql = format!("SELECT * FROM orders WHERE id = {}", d.p(1));
     if let Ok(order) =
-        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+        d.query_as::<crate::models::Order>(&select_order_sql)
             .bind(&record_id)
             .fetch_one(&*pool)
             .await
@@ -317,12 +344,14 @@ pub async fn create_order(
         .await;
     }
     // Enqueue sync for order items
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>(
-        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
-    )
-    .bind(&record_id)
-    .fetch_all(&*pool)
-    .await
+    let select_items_sql = format!(
+        "SELECT * FROM order_items WHERE order_id = {} AND deleted_at IS NULL",
+        d.p(1)
+    );
+    if let Ok(items_db) = d.query_as::<OrderItem>(&select_items_sql)
+        .bind(&record_id)
+        .fetch_all(&*pool)
+        .await
     {
         for item in items_db {
             let item_id = item.id.clone();
@@ -343,12 +372,13 @@ pub async fn create_order(
 
 pub async fn get_orders(state: Arc<AppState>) -> AppResult<Vec<OrderWithCustomer>> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
     let query = format!(
         "{} {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
+    let orders = d.query_as::<OrderWithCustomer>(&query)
         .fetch_all(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -411,7 +441,7 @@ pub async fn get_orders_paginated(
 
     let order_clause = format!("ORDER BY {} {}", sort_column, sort_direction);
 
-    let mut count_query = QueryBuilder::<Sqlite>::new(
+    let mut count_query = QueryBuilder::<Any>::new(
         "SELECT COUNT(*) FROM orders o LEFT JOIN customers c ON o.customer_id = c.id",
     );
 
@@ -438,7 +468,7 @@ pub async fn get_orders_paginated(
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut data_query = QueryBuilder::<Sqlite>::new(ORDER_WITH_CUSTOMER_SELECT);
+    let mut data_query = QueryBuilder::<Any>::new(ORDER_WITH_CUSTOMER_SELECT);
 
     if has_search || has_status_filter {
         data_query.push(" WHERE ");
@@ -498,12 +528,13 @@ pub async fn get_customer_orders(
     customer_id: String,
 ) -> AppResult<Vec<OrderWithCustomer>> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
     let query = format!(
-        "{} WHERE o.customer_id = ? {} ORDER BY o.created_at DESC",
-        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+        "{} WHERE o.customer_id = {} {} ORDER BY o.created_at DESC",
+        ORDER_WITH_CUSTOMER_SELECT, d.p(1), ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
+    let orders = d.query_as::<OrderWithCustomer>(&query)
         .bind(customer_id)
         .fetch_all(&*pool)
         .await
@@ -514,25 +545,28 @@ pub async fn get_customer_orders(
 
 pub async fn get_order(state: Arc<AppState>, id: String) -> AppResult<OrderDetail> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
     let query = format!(
-        "{} WHERE o.id = ? {}",
-        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
+        "{} WHERE o.id = {} {}",
+        ORDER_WITH_CUSTOMER_SELECT, d.p(1), ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let order = sqlx::query_as::<_, OrderWithCustomer>(&query)
+    let order = d.query_as::<OrderWithCustomer>(&query)
         .bind(&id)
         .fetch_optional(&*pool)
         .await
         .map_err(|e| e.to_string())?
         .ok_or("Order not found".to_string())?;
 
-    let items = sqlx::query_as::<_, OrderItem>(
-        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
-    )
-    .bind(&id)
-    .fetch_all(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let items_sql = format!(
+        "SELECT * FROM order_items WHERE order_id = {} AND deleted_at IS NULL",
+        d.p(1)
+    );
+    let items = d.query_as::<OrderItem>(&items_sql)
+        .bind(&id)
+        .fetch_all(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(OrderDetail { order, items })
 }
@@ -566,22 +600,38 @@ pub async fn update_order(
     exclude_cargo_fee: Option<bool>,
 ) -> AppResult<()> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
     let normalized_status =
         normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    let old_items = sqlx::query_as::<_, OrderItem>(
-        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
-    )
-    .bind(&id)
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    let old_items_sql = format!(
+        "SELECT * FROM order_items WHERE order_id = {} AND deleted_at IS NULL",
+        d.p(1)
+    );
+    let old_items = d.query_as::<OrderItem>(&old_items_sql)
+        .bind(&id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    sqlx::query(
-        "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?",
-    )
+    let update_order_sql = format!(
+        "UPDATE orders SET \
+         customer_id = {}, status = {}, order_from = {}, exchange_rate = {}, \
+         shipping_fee = {}, delivery_fee = {}, cargo_fee = {}, order_date = {}, \
+         arrived_date = {}, shipment_date = {}, user_withdraw_date = {}, service_fee = {}, \
+         product_discount = {}, service_fee_type = {}, shipping_fee_paid = {}, \
+         delivery_fee_paid = {}, cargo_fee_paid = {}, service_fee_paid = {}, \
+         shipping_fee_by_shop = {}, delivery_fee_by_shop = {}, cargo_fee_by_shop = {}, \
+         exclude_cargo_fee = {} \
+         WHERE id = {}",
+        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.p(7), d.p(8),
+        d.p(9), d.p(10), d.p(11), d.p(12), d.p(13), d.p(14), d.p(15),
+        d.p(16), d.p(17), d.p(18), d.p(19), d.p(20), d.p(21), d.p(22),
+        d.p(23)
+    );
+    d.query(&update_order_sql)
     .bind(customer_id)
     .bind(normalized_status)
     .bind(order_from)
@@ -609,17 +659,26 @@ pub async fn update_order(
     .await
     .map_err(|e| e.to_string())?;
 
-    sqlx::query(
-        "UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ? AND deleted_at IS NULL",
-    )
+    let delete_old_items_sql = format!(
+        "UPDATE order_items SET deleted_at = {now}, updated_at = {now} \
+         WHERE order_id = {p1} AND deleted_at IS NULL",
+        now = d.now(),
+        p1 = d.p(1)
+    );
+    d.query(&delete_old_items_sql)
         .bind(&id)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
 
+    let item_insert_sql = format!(
+        "INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) \
+         VALUES ({})",
+        d.params_list(1, 6)
+    );
     for item in items {
         let item_id = Uuid::new_v4().to_string();
-        sqlx::query("INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) VALUES (?, ?, ?, ?, ?, ?)")
+        d.query(&item_insert_sql)
             .bind(&item_id)
             .bind(&id)
             .bind(item.product_url)
@@ -634,8 +693,9 @@ pub async fn update_order(
     tx.commit().await.map_err(|e| e.to_string())?;
 
     // Enqueue sync for order
+    let select_order_sql = format!("SELECT * FROM orders WHERE id = {}", d.p(1));
     if let Ok(order) =
-        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+        d.query_as::<crate::models::Order>(&select_order_sql)
             .bind(&id)
             .fetch_one(&*pool)
             .await
@@ -669,12 +729,14 @@ pub async fn update_order(
     }
 
     // Enqueue sync for order items
-    if let Ok(items_db) = sqlx::query_as::<_, OrderItem>(
-        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
-    )
-    .bind(&id)
-    .fetch_all(&*pool)
-    .await
+    let select_items_sql = format!(
+        "SELECT * FROM order_items WHERE order_id = {} AND deleted_at IS NULL",
+        d.p(1)
+    );
+    if let Ok(items_db) = d.query_as::<OrderItem>(&select_items_sql)
+        .bind(&id)
+        .fetch_all(&*pool)
+        .await
     {
         for item in items_db {
             let item_id = item.id.clone();
@@ -695,26 +757,34 @@ pub async fn update_order(
 
 pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
-    // Soft delete
-    sqlx::query(
-        "UPDATE orders SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-    )
-    .bind(&id)
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let delete_order_sql = format!(
+        "UPDATE orders SET deleted_at = {now}, updated_at = {now} WHERE id = {p1}",
+        now = d.now(),
+        p1 = d.p(1)
+    );
+    d.query(&delete_order_sql)
+        .bind(&id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    // Also soft delete order items
-    sqlx::query("UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ?")
+    let delete_items_sql = format!(
+        "UPDATE order_items SET deleted_at = {now}, updated_at = {now} WHERE order_id = {p1}",
+        now = d.now(),
+        p1 = d.p(1)
+    );
+    d.query(&delete_items_sql)
         .bind(&id)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
     // Enqueue sync
+    let select_order_sql = format!("SELECT * FROM orders WHERE id = {}", d.p(1));
     if let Ok(order) =
-        sqlx::query_as::<_, crate::models::Order>("SELECT * FROM orders WHERE id = ?")
+        d.query_as::<crate::models::Order>(&select_order_sql)
             .bind(&id)
             .fetch_one(&*pool)
             .await
@@ -729,8 +799,9 @@ pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> 
         )
         .await;
     }
+    let select_del_items_sql = format!("SELECT * FROM order_items WHERE order_id = {}", d.p(1));
     if let Ok(items_db) =
-        sqlx::query_as::<_, OrderItem>("SELECT * FROM order_items WHERE order_id = ?")
+        d.query_as::<OrderItem>(&select_del_items_sql)
             .bind(&id)
             .fetch_all(&*pool)
             .await
@@ -778,11 +849,12 @@ pub async fn get_dashboard_stats(
     let range_from_opt = if has_range { Some(range_from) } else { None };
     let range_to_opt = if has_range { Some(range_to) } else { None };
     let normalized_status = normalize_order_status_filter(status)?;
+    let d = state.dialect();
     let query = format!(
         "{} WHERE o.deleted_at IS NULL {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
+    let orders = d.query_as::<OrderWithCustomer>(&query)
         .fetch_all(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -884,11 +956,12 @@ pub async fn get_dashboard_detail_records(
         );
     }
 
+    let d = state.dialect();
     let query = format!(
         "{} WHERE o.deleted_at IS NULL {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = sqlx::query_as::<_, OrderWithCustomer>(&query)
+    let orders = d.query_as::<OrderWithCustomer>(&query)
         .fetch_all(&*pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -952,6 +1025,7 @@ pub async fn get_dashboard_detail_records(
 
 pub async fn get_orders_for_export(state: Arc<AppState>) -> AppResult<Vec<OrderExportRow>> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
     let query = r#"
         SELECT
@@ -984,7 +1058,7 @@ pub async fn get_orders_for_export(state: Arc<AppState>) -> AppResult<Vec<OrderE
         ORDER BY o.id ASC
     "#;
 
-    let rows = sqlx::query_as::<_, OrderExportRow>(query)
+    let rows = d.query_as::<OrderExportRow>(query)
         .fetch_all(&*pool)
         .await
         .map_err(|e| e.to_string())?;

@@ -37,3 +37,29 @@ export const updateOnboardingTheme = async (
   const settings = await getAppSettings();
   await updateAppSettings({ ...settings, theme });
 };
+
+export interface DatabaseConfig {
+  database_type: "sqlite" | "postgresql";
+  postgres_url: string;
+}
+
+export const saveDatabaseConfig = async (
+  config: DatabaseConfig,
+): Promise<void> => {
+  return invoke("save_database_config", {
+    databaseType: config.database_type,
+    postgresUrl: config.postgres_url,
+  });
+};
+
+export const getDatabaseConfig = async (): Promise<DatabaseConfig> => {
+  return invoke("get_database_config");
+};
+
+export const testPostgresConnection = async (url: string): Promise<boolean> => {
+  return invoke("test_postgres_connection", { url });
+};
+
+export const restartApp = async (): Promise<void> => {
+  return invoke("restart_app");
+};

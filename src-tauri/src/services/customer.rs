@@ -33,31 +33,40 @@ pub async fn create_customer(
     deleted_at: Option<String>,
 ) -> AppResult<String> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
     let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let normalized_customer_id = customer_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    let rowid = sqlx::query(
-        "INSERT INTO customers (id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?)",
-    )
-    .bind(&record_id)
-    .bind(&normalized_customer_id)
-    .bind(&name)
-    .bind(&phone)
-    .bind(&address)
-    .bind(&city)
-    .bind(&social_media_url)
-    .bind(&platform)
-    .bind(&created_at)
-    .bind(&updated_at)
-    .bind(&deleted_at)
-    .execute(&*pool)
-    .await?
-    .last_insert_rowid();
+    let insert_sql = format!(
+        "INSERT INTO customers \
+         (id, customer_id, name, phone, address, city, social_media_url, platform, \
+          created_at, updated_at, deleted_at) \
+         VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
+        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.p(7), d.p(8),
+        d.coalesce_or_now(9),
+        d.p(10), d.p(11)
+    );
+
+    let rowid = d.query(&insert_sql)
+        .bind(&record_id)
+        .bind(&normalized_customer_id)
+        .bind(&name)
+        .bind(&phone)
+        .bind(&address)
+        .bind(&city)
+        .bind(&social_media_url)
+        .bind(&platform)
+        .bind(&created_at)
+        .bind(&updated_at)
+        .bind(&deleted_at)
+        .execute(&*pool)
+        .await?
+        .last_insert_id();
 
     if normalized_customer_id.is_none() {
-        let prefix: Option<String> = sqlx::query_scalar(
+        let prefix: Option<String> = d.query_scalar(
             "SELECT customer_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1",
         )
         .fetch_optional(&*pool)
@@ -65,16 +74,31 @@ pub async fn create_customer(
         .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
 
         let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
-        let new_customer_id = format!("{prefix_str}{rowid:05}");
 
-        let _ = sqlx::query("UPDATE customers SET customer_id = ? WHERE id = ?")
+        let seq_num: i64 = if d.is_postgres() {
+            d.query_scalar("SELECT COUNT(*) FROM customers")
+                .fetch_one(&*pool)
+                .await
+                .unwrap_or(1)
+        } else {
+            rowid.unwrap_or(0) as i64
+        };
+
+        let new_customer_id = format!("{prefix_str}{:05}", seq_num);
+
+        let update_id_sql = format!(
+            "UPDATE customers SET customer_id = {} WHERE id = {}",
+            d.p(1), d.p(2)
+        );
+        let _ = d.query(&update_id_sql)
             .bind(new_customer_id)
             .bind(&record_id)
             .execute(&*pool)
             .await;
     }
 
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
+    let select_sql = format!("SELECT * FROM customers WHERE id = {}", d.p(1));
+    if let Ok(record) = d.query_as::<Customer>(&select_sql)
         .bind(&record_id)
         .fetch_one(&*pool)
         .await
@@ -97,10 +121,10 @@ pub async fn create_customer(
 #[instrument(skip(state))]
 pub async fn get_customers(state: Arc<AppState>) -> AppResult<Vec<Customer>> {
     let pool = state.db.lock().await;
-    let customers =
-        sqlx::query_as::<_, Customer>("SELECT * FROM customers ORDER BY created_at DESC")
-            .fetch_all(&*pool)
-            .await?;
+    let d = state.dialect();
+    let customers = d.query_as::<Customer>("SELECT * FROM customers ORDER BY created_at DESC")
+        .fetch_all(&*pool)
+        .await?;
 
     Ok(customers)
 }
@@ -117,6 +141,7 @@ pub async fn get_customers_paginated(
     sort_order: Option<String>,
 ) -> AppResult<PaginatedCustomers> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
     let requested_page_size = page_size.unwrap_or(DEFAULT_CUSTOMERS_PAGE_SIZE);
     let no_limit = requested_page_size <= 0;
@@ -159,30 +184,31 @@ pub async fn get_customers_paginated(
     let order_clause = format!("ORDER BY {sort_column} {sort_direction}");
 
     let (total, customers) = if has_search {
-        let count_query = format!(
-            "SELECT COUNT(*) FROM customers WHERE COALESCE({}, '') LIKE ?",
-            search_column
+        let count_sql = format!(
+            "SELECT COUNT(*) FROM customers WHERE COALESCE({search_column}, '') LIKE {}",
+            d.p(1)
         );
-        let total: i64 = sqlx::query_scalar(&count_query)
+        let total: i64 = d.query_scalar(&count_sql)
             .bind(&search_pattern)
             .fetch_one(&*pool)
             .await?;
 
         let customers = if no_limit {
-            let data_query = format!(
-                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {}",
-                search_column, order_clause
+            let data_sql = format!(
+                "SELECT * FROM customers WHERE COALESCE({search_column}, '') LIKE {} {order_clause}",
+                d.p(1)
             );
-            sqlx::query_as::<_, Customer>(&data_query)
+            d.query_as::<Customer>(&data_sql)
                 .bind(&search_pattern)
                 .fetch_all(&*pool)
                 .await?
         } else {
-            let data_query = format!(
-                "SELECT * FROM customers WHERE COALESCE({}, '') LIKE ? {} LIMIT ? OFFSET ?",
-                search_column, order_clause
+            let data_sql = format!(
+                "SELECT * FROM customers WHERE COALESCE({search_column}, '') LIKE {} \
+                 {order_clause} LIMIT {} OFFSET {}",
+                d.p(1), d.p(2), d.p(3)
             );
-            sqlx::query_as::<_, Customer>(&data_query)
+            d.query_as::<Customer>(&data_sql)
                 .bind(&search_pattern)
                 .bind(page_size)
                 .bind(offset)
@@ -192,18 +218,21 @@ pub async fn get_customers_paginated(
 
         (total, customers)
     } else {
-        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM customers")
+        let total: i64 = d.query_scalar("SELECT COUNT(*) FROM customers")
             .fetch_one(&*pool)
             .await?;
 
         let customers = if no_limit {
-            let data_query = format!("SELECT * FROM customers {order_clause}");
-            sqlx::query_as::<_, Customer>(&data_query)
+            let data_sql = format!("SELECT * FROM customers {order_clause}");
+            d.query_as::<Customer>(&data_sql)
                 .fetch_all(&*pool)
                 .await?
         } else {
-            let data_query = format!("SELECT * FROM customers {order_clause} LIMIT ? OFFSET ?");
-            sqlx::query_as::<_, Customer>(&data_query)
+            let data_sql = format!(
+                "SELECT * FROM customers {order_clause} LIMIT {} OFFSET {}",
+                d.p(1), d.p(2)
+            );
+            d.query_as::<Customer>(&data_sql)
                 .bind(page_size)
                 .bind(offset)
                 .fetch_all(&*pool)
@@ -235,7 +264,9 @@ pub async fn get_customers_paginated(
 #[instrument(skip(state))]
 pub async fn get_customer(state: Arc<AppState>, id: String) -> AppResult<Customer> {
     let pool = state.db.lock().await;
-    let customer = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
+    let d = state.dialect();
+    let sql = format!("SELECT * FROM customers WHERE id = {}", d.p(1));
+    let customer = d.query_as::<Customer>(&sql)
         .bind(&id)
         .fetch_optional(&*pool)
         .await?
@@ -263,28 +294,43 @@ pub async fn update_customer(
     deleted_at: Option<String>,
 ) -> AppResult<()> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
     let normalized_customer_id = customer_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    sqlx::query(
-        "UPDATE customers SET customer_id = ?, name = ?, phone = ?, address = ?, city = ?, social_media_url = ?, platform = ?, created_at = COALESCE(?, created_at), updated_at = COALESCE(?, datetime('now')), deleted_at = ? WHERE id = ?",
-    )
-    .bind(&normalized_customer_id)
-    .bind(&name)
-    .bind(&phone)
-    .bind(&address)
-    .bind(&city)
-    .bind(&social_media_url)
-    .bind(&platform)
-    .bind(&created_at)
-    .bind(&updated_at)
-    .bind(&deleted_at)
-    .bind(&id)
-    .execute(&*pool)
-    .await?;
+    let update_sql = format!(
+        "UPDATE customers SET \
+         customer_id = {}, name = {}, phone = {}, address = {}, city = {}, \
+         social_media_url = {}, platform = {}, \
+         created_at = COALESCE({}, created_at), \
+         updated_at = {}, \
+         deleted_at = {} \
+         WHERE id = {}",
+        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.p(7),
+        d.p(8),
+        d.coalesce_or_now(9),
+        d.p(10),
+        d.p(11)
+    );
 
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
+    d.query(&update_sql)
+        .bind(&normalized_customer_id)
+        .bind(&name)
+        .bind(&phone)
+        .bind(&address)
+        .bind(&city)
+        .bind(&social_media_url)
+        .bind(&platform)
+        .bind(&created_at)
+        .bind(&updated_at)
+        .bind(&deleted_at)
+        .bind(&id)
+        .execute(&*pool)
+        .await?;
+
+    let select_sql = format!("SELECT * FROM customers WHERE id = {}", d.p(1));
+    if let Ok(record) = d.query_as::<Customer>(&select_sql)
         .bind(&id)
         .fetch_one(&*pool)
         .await
@@ -307,15 +353,20 @@ pub async fn update_customer(
 #[instrument(skip(state, app))]
 pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
-    sqlx::query(
-        "UPDATE customers SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-    )
-    .bind(&id)
-    .execute(&*pool)
-    .await?;
+    let delete_sql = format!(
+        "UPDATE customers SET deleted_at = {now}, updated_at = {now} WHERE id = {p1}",
+        now = d.now(),
+        p1 = d.p(1)
+    );
+    d.query(&delete_sql)
+        .bind(&id)
+        .execute(&*pool)
+        .await?;
 
-    if let Ok(record) = sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE id = ?")
+    let select_sql = format!("SELECT * FROM customers WHERE id = {}", d.p(1));
+    if let Ok(record) = d.query_as::<Customer>(&select_sql)
         .bind(&id)
         .fetch_one(&*pool)
         .await

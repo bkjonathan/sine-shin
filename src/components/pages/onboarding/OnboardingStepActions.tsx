@@ -29,7 +29,7 @@ export default function OnboardingStepActions({
         {t("auth.onboarding.back")}
       </Button>
 
-      {currentStep < 4 ? (
+      {currentStep < 5 ? (
         <Button variant="primary" onClick={onNext}>
           {t("auth.onboarding.next")}
           <IconChevronRight size={16} strokeWidth={2} />

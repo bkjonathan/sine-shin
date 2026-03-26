@@ -1,7 +1,7 @@
 pub mod client;
 
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Sqlite};
+use sqlx::AnyPool;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -75,7 +75,7 @@ struct PushSyncResult {
 // ─── Core Sync Functions ─────────────────────────────────────────
 
 /// Auto-prune sync_sessions and sync_queue to keep only the latest 100 rows each.
-async fn cleanup_old_sync_data(pool: &Pool<Sqlite>) {
+async fn cleanup_old_sync_data(pool: &AnyPool) {
     // Keep only latest 100 sync_sessions
     let _ = sqlx::query(
         "DELETE FROM sync_sessions WHERE id NOT IN (SELECT id FROM sync_sessions ORDER BY started_at DESC LIMIT 100)"
@@ -156,7 +156,7 @@ fn remote_order_item_signature(row: &serde_json::Value) -> Option<String> {
     ))
 }
 
-async fn local_record_is_active(pool: &Pool<Sqlite>, table: &str, record_id: &str) -> bool {
+async fn local_record_is_active(pool: &AnyPool, table: &str, record_id: &str) -> bool {
     let exists = match table {
         "shop_settings" => {
             sqlx::query_scalar::<_, i64>("SELECT 1 FROM shop_settings WHERE id = ? LIMIT 1")
@@ -223,7 +223,7 @@ fn build_supabase_payload(
 }
 
 async fn mark_local_synced(
-    pool: &Pool<Sqlite>,
+    pool: &AnyPool,
     table: &str,
     record_id: &str,
     _remote_uuid: Option<&str>,
@@ -345,7 +345,7 @@ async fn push_sync_item(
 
 /// Try immediate sync first. If it fails, store item in queue for retry.
 pub async fn enqueue_sync(
-    pool: &Pool<Sqlite>,
+    pool: &AnyPool,
     _app: &AppHandle,
     table: &str,
     op: &str,
@@ -434,7 +434,7 @@ pub async fn enqueue_sync(
 }
 
 /// Load sync config from SQLite
-async fn load_sync_config(pool: &Pool<Sqlite>) -> Option<SyncConfig> {
+async fn load_sync_config(pool: &AnyPool) -> Option<SyncConfig> {
     let row: Option<(i64, String, String, String, i64, i64)> = sqlx::query_as(
         "SELECT id, supabase_url, supabase_anon_key, supabase_service_key, sync_enabled, COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
     )

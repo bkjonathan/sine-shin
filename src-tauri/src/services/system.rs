@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use sqlx::any::AnyPoolOptions;
 use tauri::{AppHandle, Manager};
 use tracing::instrument;
 
@@ -33,9 +34,12 @@ pub async fn reset_app_data(state: Arc<AppState>, app: &AppHandle) -> AppResult<
     sqlx::query("DROP TABLE IF EXISTS expenses")
         .execute(&*pool)
         .await?;
-    sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
-        .execute(&*pool)
-        .await?;
+
+    if state.db_type != "postgresql" {
+        let _ = sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
+            .execute(&*pool)
+            .await;
+    }
 
     if let Ok(app_data_dir) = app.path().app_data_dir() {
         let logos_dir = app_data_dir.join("logos");
@@ -44,15 +48,25 @@ pub async fn reset_app_data(state: Arc<AppState>, app: &AppHandle) -> AppResult<
         }
     }
 
-    init_db(&pool)
+    init_db(&pool, &state.db_type)
         .await
         .map_err(|e| AppError::internal(e.to_string()))?;
     Ok(())
 }
 
-/// Backs up sqlite DB file to destination path.
+/// Backs up sqlite DB file to destination path. Not supported for PostgreSQL.
 #[instrument(skip(app))]
-pub async fn backup_database(app: &AppHandle, dest_path: String) -> AppResult<u64> {
+pub async fn backup_database(
+    app: &AppHandle,
+    dest_path: String,
+    db_type: &str,
+) -> AppResult<u64> {
+    if db_type == "postgresql" {
+        return Err(AppError::invalid_input(
+            "File backup is not supported in PostgreSQL mode. Use your database provider's backup tools.",
+        ));
+    }
+
     let app_data_dir = app.path().app_data_dir()?;
     let db_path = app_data_dir.join("shop.db");
 
@@ -66,13 +80,19 @@ pub async fn backup_database(app: &AppHandle, dest_path: String) -> AppResult<u6
     Ok(bytes_copied)
 }
 
-/// Restores sqlite DB file and reconnects pool.
+/// Restores sqlite DB file and reconnects pool. Not supported for PostgreSQL.
 #[instrument(skip(state, app))]
 pub async fn restore_database(
     state: Arc<AppState>,
     app: &AppHandle,
     restore_path: String,
 ) -> AppResult<()> {
+    if state.db_type == "postgresql" {
+        return Err(AppError::invalid_input(
+            "File restore is not supported in PostgreSQL mode. Use your database provider's restore tools.",
+        ));
+    }
+
     let mut pool_guard = state.db.lock().await;
     pool_guard.close().await;
 
@@ -88,7 +108,7 @@ pub async fn restore_database(
         .map_err(|e| AppError::internal(format!("Failed to restore database: {}", e)))?;
 
     let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
-    let new_pool = sqlx::sqlite::SqlitePoolOptions::new()
+    let new_pool = AnyPoolOptions::new()
         .max_connections(5)
         .connect(&db_url)
         .await
@@ -103,26 +123,34 @@ pub async fn restore_database(
 pub async fn get_db_status(state: Arc<AppState>, app: &AppHandle) -> AppResult<DbStatus> {
     let pool = state.db.lock().await;
 
-    let tables: Vec<(String,)> = sqlx::query_as(
-        "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-    )
-    .fetch_all(&*pool)
-    .await?;
+    let table_names: Vec<String> = if state.db_type == "postgresql" {
+        sqlx::query_scalar(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'",
+        )
+        .fetch_all(&*pool)
+        .await?
+    } else {
+        sqlx::query_scalar(
+            "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+        )
+        .fetch_all(&*pool)
+        .await?
+    };
 
     let mut table_statuses = Vec::new();
-    for (name,) in &tables {
-        let query = format!("SELECT COUNT(*) FROM {}", name);
-        let count: (i64,) = sqlx::query_as(&query).fetch_one(&*pool).await?;
+    for name in &table_names {
+        let query = format!("SELECT COUNT(*) FROM \"{}\"", name);
+        let count: i64 = sqlx::query_scalar(&query).fetch_one(&*pool).await?;
         table_statuses.push(TableStatus {
             name: name.clone(),
-            row_count: count.0,
+            row_count: count,
         });
     }
 
-    let size_bytes = if let Ok(app_data_dir) = app.path().app_data_dir() {
-        let db_path = app_data_dir.join("shop.db");
-        if let Ok(metadata) = fs::metadata(db_path) {
-            Some(metadata.len())
+    let size_bytes = if state.db_type != "postgresql" {
+        if let Ok(app_data_dir) = app.path().app_data_dir() {
+            let db_path = app_data_dir.join("shop.db");
+            fs::metadata(db_path).ok().map(|m| m.len())
         } else {
             None
         }
@@ -131,7 +159,7 @@ pub async fn get_db_status(state: Arc<AppState>, app: &AppHandle) -> AppResult<D
     };
 
     Ok(DbStatus {
-        total_tables: tables.len() as i64,
+        total_tables: table_names.len() as i64,
         tables: table_statuses,
         size_bytes,
     })
@@ -142,11 +170,18 @@ fn quote_sqlite_identifier(identifier: &str) -> String {
 }
 
 /// Resets sqlite sequence for a table to its current MAX(id).
+/// Not supported for PostgreSQL.
 #[instrument(skip(state))]
 pub async fn reset_table_sequence(
     state: Arc<AppState>,
     table_name: String,
 ) -> AppResult<TableSequenceResetStatus> {
+    if state.db_type == "postgresql" {
+        return Err(AppError::invalid_input(
+            "Sequence reset is not applicable in PostgreSQL mode.",
+        ));
+    }
+
     let table_name = table_name.trim();
     if table_name.is_empty() {
         return Err(AppError::invalid_input("Table name is required"));

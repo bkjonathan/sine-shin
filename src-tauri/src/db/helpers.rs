@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use sqlx::{Pool, Sqlite};
+use sqlx::AnyPool;
 use tokio::sync::Mutex;
 
 use crate::error::{AppError, AppResult};
@@ -17,7 +17,7 @@ struct SyncConfigRow {
 }
 
 /// Loads the active sync configuration from the local database.
-pub async fn load_active_sync_config(db: &Arc<Mutex<Pool<Sqlite>>>) -> AppResult<SyncConfig> {
+pub async fn load_active_sync_config(db: &Arc<Mutex<AnyPool>>) -> AppResult<SyncConfig> {
     let pool = db.lock().await;
 
     let row = sqlx::query_as::<_, SyncConfigRow>(

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use sqlx::{QueryBuilder, Sqlite};
+use sqlx::{Any, QueryBuilder};
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
@@ -47,6 +47,7 @@ pub async fn create_expense(
     }
 
     let pool = state.db.lock().await;
+    let d = state.dialect();
     let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
 
     let sanitized_category = sanitize_optional(category);
@@ -55,30 +56,48 @@ pub async fn create_expense(
     let sanitized_notes = sanitize_optional(notes);
     let sanitized_expense_id = sanitize_optional(expense_id);
 
-    let rowid = sqlx::query(
-        "INSERT INTO expenses (id, title, amount, category, expense_date, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&record_id)
-    .bind(trimmed_title)
-    .bind(amount)
-    .bind(sanitized_category)
-    .bind(sanitized_expense_date)
-    .bind(sanitized_payment_method)
-    .bind(sanitized_notes)
-    .execute(&*pool)
-    .await?
-    .last_insert_rowid();
+    let insert_sql = format!(
+        "INSERT INTO expenses (id, title, amount, category, expense_date, payment_method, notes) \
+         VALUES ({}, {}, {}, {}, {}, {}, {})",
+        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.p(7)
+    );
+
+    let rowid = d.query(&insert_sql)
+        .bind(&record_id)
+        .bind(trimmed_title)
+        .bind(amount)
+        .bind(sanitized_category)
+        .bind(sanitized_expense_date)
+        .bind(sanitized_payment_method)
+        .bind(sanitized_notes)
+        .execute(&*pool)
+        .await?
+        .last_insert_id();
+
+    let seq_num: i64 = if d.is_postgres() {
+        d.query_scalar("SELECT COUNT(*) FROM expenses")
+            .fetch_one(&*pool)
+            .await
+            .unwrap_or(1)
+    } else {
+        rowid.unwrap_or(0) as i64
+    };
 
     let final_expense_id = sanitized_expense_id
-        .unwrap_or_else(|| format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, rowid));
+        .unwrap_or_else(|| format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, seq_num));
 
-    sqlx::query("UPDATE expenses SET expense_id = ? WHERE id = ?")
+    let update_id_sql = format!(
+        "UPDATE expenses SET expense_id = {} WHERE id = {}",
+        d.p(1), d.p(2)
+    );
+    d.query(&update_id_sql)
         .bind(final_expense_id)
         .bind(&record_id)
         .execute(&*pool)
         .await?;
 
-    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
+    let select_sql = format!("SELECT * FROM expenses WHERE id = {}", d.p(1));
+    if let Ok(record) = d.query_as::<Expense>(&select_sql)
         .bind(&record_id)
         .fetch_one(&*pool)
         .await
@@ -101,16 +120,17 @@ pub async fn create_expense(
 #[instrument(skip(state))]
 pub async fn get_expenses(state: Arc<AppState>) -> AppResult<Vec<Expense>> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
-    let expenses =
-        sqlx::query_as::<_, Expense>("SELECT * FROM expenses ORDER BY created_at DESC")
-            .fetch_all(&*pool)
-            .await?;
+    let expenses = d.query_as::<Expense>("SELECT * FROM expenses ORDER BY created_at DESC")
+        .fetch_all(&*pool)
+        .await?;
 
     Ok(expenses)
 }
 
 /// Loads paginated expense list with filters.
+/// Uses QueryBuilder<Any> which handles placeholder translation automatically.
 #[instrument(skip(state))]
 #[allow(clippy::too_many_arguments)]
 pub async fn get_expenses_paginated(
@@ -177,7 +197,8 @@ pub async fn get_expenses_paginated(
         _ => "DESC",
     };
 
-    let apply_filters = |query: &mut QueryBuilder<Sqlite>| {
+    // QueryBuilder<Any> handles ?/$N placeholder translation automatically via push_bind
+    let apply_filters = |query: &mut QueryBuilder<Any>| {
         let mut has_condition = false;
 
         if has_search {
@@ -202,9 +223,9 @@ pub async fn get_expenses_paginated(
             if has_condition {
                 query.push(" AND ");
             }
-            query.push("DATE(COALESCE(expense_date, created_at)) >= DATE(");
+            query.push("SUBSTR(COALESCE(expense_date, created_at, ''), 1, 10) >= SUBSTR(");
             query.push_bind(date_from_value.clone());
-            query.push(")");
+            query.push(", 1, 10)");
             has_condition = true;
         }
 
@@ -212,13 +233,13 @@ pub async fn get_expenses_paginated(
             if has_condition {
                 query.push(" AND ");
             }
-            query.push("DATE(COALESCE(expense_date, created_at)) <= DATE(");
+            query.push("SUBSTR(COALESCE(expense_date, created_at, ''), 1, 10) <= SUBSTR(");
             query.push_bind(date_to_value.clone());
-            query.push(")");
+            query.push(", 1, 10)");
         }
     };
 
-    let mut count_query = QueryBuilder::<Sqlite>::new("SELECT COUNT(*) FROM expenses");
+    let mut count_query = QueryBuilder::<Any>::new("SELECT COUNT(*) FROM expenses");
     if has_search || has_category_filter || has_date_from || has_date_to {
         count_query.push(" WHERE ");
         apply_filters(&mut count_query);
@@ -226,7 +247,7 @@ pub async fn get_expenses_paginated(
 
     let total: i64 = count_query.build_query_scalar().fetch_one(&*pool).await?;
 
-    let mut data_query = QueryBuilder::<Sqlite>::new("SELECT * FROM expenses");
+    let mut data_query = QueryBuilder::<Any>::new("SELECT * FROM expenses");
     if has_search || has_category_filter || has_date_from || has_date_to {
         data_query.push(" WHERE ");
         apply_filters(&mut data_query);
@@ -271,7 +292,9 @@ pub async fn get_expenses_paginated(
 #[instrument(skip(state))]
 pub async fn get_expense(state: Arc<AppState>, id: String) -> AppResult<Expense> {
     let pool = state.db.lock().await;
-    let expense = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
+    let d = state.dialect();
+    let sql = format!("SELECT * FROM expenses WHERE id = {}", d.p(1));
+    let expense = d.query_as::<Expense>(&sql)
         .bind(&id)
         .fetch_optional(&*pool)
         .await?
@@ -305,21 +328,29 @@ pub async fn update_expense(
     }
 
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
-    sqlx::query(
-        "UPDATE expenses SET title = ?, amount = ?, category = ?, expense_date = ?, payment_method = ?, notes = ?, updated_at = datetime('now') WHERE id = ?",
-    )
-    .bind(trimmed_title)
-    .bind(amount)
-    .bind(sanitize_optional(category))
-    .bind(sanitize_optional(expense_date))
-    .bind(sanitize_optional(payment_method))
-    .bind(sanitize_optional(notes))
-    .bind(&id)
-    .execute(&*pool)
-    .await?;
+    let update_sql = format!(
+        "UPDATE expenses SET \
+         title = {}, amount = {}, category = {}, expense_date = {}, \
+         payment_method = {}, notes = {}, updated_at = {} \
+         WHERE id = {}",
+        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.now(), d.p(7)
+    );
 
-    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
+    d.query(&update_sql)
+        .bind(trimmed_title)
+        .bind(amount)
+        .bind(sanitize_optional(category))
+        .bind(sanitize_optional(expense_date))
+        .bind(sanitize_optional(payment_method))
+        .bind(sanitize_optional(notes))
+        .bind(&id)
+        .execute(&*pool)
+        .await?;
+
+    let select_sql = format!("SELECT * FROM expenses WHERE id = {}", d.p(1));
+    if let Ok(record) = d.query_as::<Expense>(&select_sql)
         .bind(&id)
         .fetch_one(&*pool)
         .await
@@ -342,15 +373,20 @@ pub async fn update_expense(
 #[instrument(skip(state, app))]
 pub async fn delete_expense(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
-    sqlx::query(
-        "UPDATE expenses SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-    )
-    .bind(&id)
-    .execute(&*pool)
-    .await?;
+    let delete_sql = format!(
+        "UPDATE expenses SET deleted_at = {now}, updated_at = {now} WHERE id = {p1}",
+        now = d.now(),
+        p1 = d.p(1)
+    );
+    d.query(&delete_sql)
+        .bind(&id)
+        .execute(&*pool)
+        .await?;
 
-    if let Ok(record) = sqlx::query_as::<_, Expense>("SELECT * FROM expenses WHERE id = ?")
+    let select_sql = format!("SELECT * FROM expenses WHERE id = {}", d.p(1));
+    if let Ok(record) = d.query_as::<Expense>(&select_sql)
         .bind(&id)
         .fetch_one(&*pool)
         .await

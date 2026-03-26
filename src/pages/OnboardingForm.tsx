@@ -10,6 +10,11 @@ import {
   saveShopSetup,
   updateAppLanguage,
   updateOnboardingTheme,
+  saveDatabaseConfig,
+  getDatabaseConfig,
+  testPostgresConnection,
+  restartApp,
+  type DatabaseConfig,
 } from "../api/onboardingApi";
 import {
   onboardingSlideTransition,
@@ -19,6 +24,7 @@ import { useTheme } from "../context/ThemeContext";
 import OnboardingLanguageSwitcher from "../components/pages/onboarding/OnboardingLanguageSwitcher";
 import OnboardingStepIndicators from "../components/pages/onboarding/OnboardingStepIndicators";
 import OnboardingStepWelcome from "../components/pages/onboarding/OnboardingStepWelcome";
+import OnboardingStepDatabase from "../components/pages/onboarding/OnboardingStepDatabase";
 import OnboardingStepTheme from "../components/pages/onboarding/OnboardingStepTheme";
 import OnboardingStepDetails from "../components/pages/onboarding/OnboardingStepDetails";
 import OnboardingStepLogo from "../components/pages/onboarding/OnboardingStepLogo";
@@ -27,7 +33,14 @@ import OnboardingStepActions from "../components/pages/onboarding/OnboardingStep
 import { useAuth } from "../context/AuthContext";
 import { OnboardingStep } from "../types/onboarding";
 
-const LAST_STEP: OnboardingStep = 4;
+// Step layout:
+// 0: Welcome
+// 1: Database
+// 2: Theme
+// 3: Details
+// 4: Logo
+// 5: Account (LAST)
+const LAST_STEP: OnboardingStep = 5;
 const USERNAME_REGEX = /^[A-Za-z0-9_.-]+$/;
 
 interface OnboardingFormProps {
@@ -45,12 +58,20 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Database step state
+  const [databaseType, setDatabaseType] = useState<"sqlite" | "postgresql">("sqlite");
+  const [postgresUrl, setPostgresUrl] = useState("");
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Shop details state
   const [shopName, setShopName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [logoPath, setLogoPath] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
 
+  // Account state
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -123,10 +144,73 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
     input.click();
   };
 
-  const handleNext = () => {
+  const handleTestConnection = async () => {
+    if (!postgresUrl.trim()) return;
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      await testPostgresConnection(postgresUrl.trim());
+      setTestResult({ success: true, message: "Connected successfully" });
+    } catch (err) {
+      const msg =
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+            ? err.message
+            : "Connection failed";
+      setTestResult({ success: false, message: msg });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleNext = async () => {
     setError("");
 
-    if (currentStep === 2 && !shopName.trim()) {
+    // Validate database step
+    if (currentStep === 1) {
+      if (databaseType === "postgresql" && !postgresUrl.trim()) {
+        setError(
+          t(
+            "auth.onboarding.database.error_url_required",
+            "Please enter a PostgreSQL connection URL",
+          ),
+        );
+        return;
+      }
+
+      if (window.__TAURI_INTERNALS__) {
+        // Save database config
+        const config: DatabaseConfig = {
+          database_type: databaseType,
+          postgres_url: postgresUrl.trim(),
+        };
+
+        try {
+          // Check if the database type actually changed
+          const currentConfig = await getDatabaseConfig();
+          const typeChanged = currentConfig.database_type !== databaseType;
+
+          await saveDatabaseConfig(config);
+
+          if (typeChanged && databaseType === "postgresql") {
+            // Restart required to apply new database connection
+            setIsSubmitting(true);
+            await restartApp();
+            return;
+          }
+        } catch (err) {
+          setError(
+            typeof err === "string"
+              ? err
+              : t("auth.onboarding.error_failed", "Failed to save database config"),
+          );
+          return;
+        }
+      }
+    }
+
+    if (currentStep === 3 && !shopName.trim()) {
       setError(t("auth.onboarding.error_shop_name"));
       return;
     }
@@ -247,6 +331,26 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
 
     if (currentStep === 1) {
       return (
+        <OnboardingStepDatabase
+          databaseType={databaseType}
+          postgresUrl={postgresUrl}
+          onDatabaseTypeChange={(type) => {
+            setDatabaseType(type);
+            setTestResult(null);
+          }}
+          onPostgresUrlChange={(url) => {
+            setPostgresUrl(url);
+            setTestResult(null);
+          }}
+          isTesting={isTesting}
+          testResult={testResult}
+          onTestConnection={handleTestConnection}
+        />
+      );
+    }
+
+    if (currentStep === 2) {
+      return (
         <OnboardingStepTheme
           theme={theme}
           accentColor={accentColor}
@@ -256,7 +360,7 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
       );
     }
 
-    if (currentStep === 2) {
+    if (currentStep === 3) {
       return (
         <OnboardingStepDetails
           shopName={shopName}
@@ -269,7 +373,7 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
       );
     }
 
-    if (currentStep === 3) {
+    if (currentStep === 4) {
       return (
         <OnboardingStepLogo
           logoPath={logoPath}

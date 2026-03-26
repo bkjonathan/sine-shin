@@ -31,21 +31,25 @@ pub async fn save_shop_setup(
 ) -> AppResult<()> {
     let internal_logo_path = copy_logo_to_app_data(app, &logo_file_path)?;
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
     let shop_id = Uuid::new_v4().to_string();
-    sqlx::query(
-        "INSERT INTO shop_settings (id, shop_name, phone, address, logo_path) VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(&shop_id)
-    .bind(&name)
-    .bind(&phone)
-    .bind(&address)
-    .bind(&internal_logo_path)
-    .execute(&*pool)
-    .await?;
+    let insert_sql = format!(
+        "INSERT INTO shop_settings (id, shop_name, phone, address, logo_path) \
+         VALUES ({}, {}, {}, {}, {})",
+        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5)
+    );
+    d.query(&insert_sql)
+        .bind(&shop_id)
+        .bind(&name)
+        .bind(&phone)
+        .bind(&address)
+        .bind(&internal_logo_path)
+        .execute(&*pool)
+        .await?;
 
     if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
+        d.query_as::<ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await
     {
@@ -68,8 +72,9 @@ pub async fn save_shop_setup(
 #[instrument(skip(state))]
 pub async fn get_shop_settings(state: Arc<AppState>) -> AppResult<ShopSettings> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
     let settings: ShopSettings =
-        sqlx::query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
+        d.query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await?;
     Ok(settings)
@@ -88,9 +93,10 @@ pub async fn update_shop_settings(
     order_id_prefix: Option<String>,
 ) -> AppResult<()> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
     let latest_id: Option<String> =
-        sqlx::query_scalar("SELECT id FROM shop_settings ORDER BY created_at DESC LIMIT 1")
+        d.query_scalar("SELECT id FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_optional(&*pool)
             .await?;
 
@@ -101,7 +107,14 @@ pub async fn update_shop_settings(
         };
 
         if let Some(internal_path) = new_internal_logo_path {
-            sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ?, customer_id_prefix = ?, order_id_prefix = ? WHERE id = ?")
+            let sql = format!(
+                "UPDATE shop_settings SET \
+                 shop_name = {}, phone = {}, address = {}, logo_path = {}, \
+                 customer_id_prefix = {}, order_id_prefix = {} \
+                 WHERE id = {}",
+                d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.p(7)
+            );
+            d.query(&sql)
                 .bind(shop_name)
                 .bind(phone)
                 .bind(address)
@@ -112,7 +125,14 @@ pub async fn update_shop_settings(
                 .execute(&*pool)
                 .await?;
         } else {
-            sqlx::query("UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, customer_id_prefix = ?, order_id_prefix = ? WHERE id = ?")
+            let sql = format!(
+                "UPDATE shop_settings SET \
+                 shop_name = {}, phone = {}, address = {}, \
+                 customer_id_prefix = {}, order_id_prefix = {} \
+                 WHERE id = {}",
+                d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6)
+            );
+            d.query(&sql)
                 .bind(shop_name)
                 .bind(phone)
                 .bind(address)
@@ -127,7 +147,7 @@ pub async fn update_shop_settings(
     }
 
     if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
+        d.query_as::<ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await
     {
@@ -199,8 +219,9 @@ pub async fn upload_shop_logo_to_s3(
     };
 
     let pool = state.db.lock().await;
+    let d = state.dialect();
     let latest: ShopSettings =
-        sqlx::query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
+        d.query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await?;
     drop(pool);
@@ -267,14 +288,22 @@ pub async fn upload_shop_logo_to_s3(
 
     let pool = state.db.lock().await;
     if let Some(local_logo_path) = new_internal_logo_path {
-        sqlx::query("UPDATE shop_settings SET logo_path = ?, logo_cloud_url = ? WHERE id = ?")
+        let sql = format!(
+            "UPDATE shop_settings SET logo_path = {}, logo_cloud_url = {} WHERE id = {}",
+            d.p(1), d.p(2), d.p(3)
+        );
+        d.query(&sql)
             .bind(local_logo_path)
             .bind(&cloud_url)
             .bind(&latest.id)
             .execute(&*pool)
             .await?;
     } else {
-        sqlx::query("UPDATE shop_settings SET logo_cloud_url = ? WHERE id = ?")
+        let sql = format!(
+            "UPDATE shop_settings SET logo_cloud_url = {} WHERE id = {}",
+            d.p(1), d.p(2)
+        );
+        d.query(&sql)
             .bind(&cloud_url)
             .bind(&latest.id)
             .execute(&*pool)
@@ -282,7 +311,7 @@ pub async fn upload_shop_logo_to_s3(
     }
 
     if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
+        d.query_as::<ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await
     {

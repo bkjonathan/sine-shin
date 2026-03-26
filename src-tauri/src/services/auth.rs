@@ -11,10 +11,16 @@ use crate::state::AppState;
 #[instrument(skip(state, password), fields(username = %name))]
 pub async fn register_user(state: Arc<AppState>, name: String, password: String) -> AppResult<()> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
     let user_id = Uuid::new_v4().to_string();
     let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)?;
 
-    sqlx::query("INSERT INTO users (id, name, password_hash) VALUES (?, ?, ?)")
+    let sql = format!(
+        "INSERT INTO users (id, name, password_hash) VALUES ({}, {}, {})",
+        d.p(1), d.p(2), d.p(3)
+    );
+
+    d.query(&sql)
         .bind(user_id)
         .bind(name)
         .bind(password_hash)
@@ -29,8 +35,11 @@ pub async fn register_user(state: Arc<AppState>, name: String, password: String)
 #[instrument(skip(state, password), fields(username = %name))]
 pub async fn login_user(state: Arc<AppState>, name: String, password: String) -> AppResult<User> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
-    let user: Option<User> = sqlx::query_as("SELECT * FROM users WHERE name = ?")
+    let sql = format!("SELECT * FROM users WHERE name = {}", d.p(1));
+
+    let user: Option<User> = d.query_as::<User>(&sql)
         .bind(&name)
         .fetch_optional(&*pool)
         .await?;
@@ -53,14 +62,15 @@ pub async fn login_user(state: Arc<AppState>, name: String, password: String) ->
 #[instrument(skip(state))]
 pub async fn check_is_onboarded(state: Arc<AppState>) -> AppResult<bool> {
     let pool = state.db.lock().await;
+    let d = state.dialect();
 
-    let shop_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM shop_settings")
+    let shop_count: i64 = d.query_scalar("SELECT COUNT(*) FROM shop_settings")
         .fetch_one(&*pool)
         .await?;
 
-    let user_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+    let user_count: i64 = d.query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(&*pool)
         .await?;
 
-    Ok(shop_count.0 > 0 && user_count.0 > 0)
+    Ok(shop_count > 0 && user_count > 0)
 }

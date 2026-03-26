@@ -1,11 +1,14 @@
 use std::fs;
 use std::path::PathBuf;
 
-use sqlx::{Pool, Sqlite};
+use sqlx::AnyPool;
 use tauri::{AppHandle, Manager};
 use tracing::warn;
 
+pub mod dialect;
 pub mod helpers;
+
+pub use dialect::SqlDialect;
 
 use crate::error::{AppError, AppResult};
 
@@ -26,7 +29,31 @@ pub const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
 "#;
 pub const ORDER_WITH_CUSTOMER_GROUP_BY: &str = " GROUP BY o.id ";
 
-pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error>> {
+/// Initialize database for either SQLite or PostgreSQL based on db_type.
+pub async fn init_db(pool: &AnyPool, db_type: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if db_type == "postgresql" {
+        init_db_postgres(pool).await
+    } else {
+        init_db_sqlite(pool).await
+    }
+}
+
+/// Initialize PostgreSQL database with full schema.
+async fn init_db_postgres(pool: &AnyPool) -> Result<(), Box<dyn std::error::Error>> {
+    const POSTGRES_INIT_SQL: &str = include_str!("../migrations/002_postgres_init.sql");
+
+    for statement in POSTGRES_INIT_SQL.split(';') {
+        let stmt = statement.trim();
+        if !stmt.is_empty() {
+            sqlx::query(stmt).persistent(false).execute(pool).await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Initialize SQLite database with migrations and schema evolution.
+async fn init_db_sqlite(pool: &AnyPool) -> Result<(), Box<dyn std::error::Error>> {
     const INIT_SQL: &str = include_str!("../migrations/001_init.sql");
 
     rebuild_empty_legacy_core_tables(pool).await?;
@@ -167,8 +194,6 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         .await?;
 
     // ── Add updated_at, deleted_at, synced columns to existing tables ──
-    // NOTE: SQLite does not allow non-constant defaults (like CURRENT_TIMESTAMP)
-    // in ALTER TABLE ADD COLUMN, so we add columns without defaults and backfill.
     let alter_columns: Vec<(&str, &str, &str)> = vec![
         ("customers", "updated_at", "DATETIME"),
         ("customers", "deleted_at", "DATETIME"),
@@ -224,12 +249,11 @@ pub async fn init_db(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Erro
         .await?;
     }
 
-
     Ok(())
 }
 
 async fn rebuild_empty_legacy_core_tables(
-    pool: &Pool<Sqlite>,
+    pool: &AnyPool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     const CORE_TABLES: [&str; 6] = [
         "shop_settings",

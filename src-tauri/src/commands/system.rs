@@ -20,9 +20,13 @@ pub async fn reset_app_data(
 
 /// Copies the sqlite database file to backup destination.
 #[tauri::command]
-#[instrument(skip(app))]
-pub async fn backup_database(app: AppHandle, dest_path: String) -> Result<u64, AppError> {
-    system::backup_database(&app, dest_path).await
+#[instrument(skip(app, state))]
+pub async fn backup_database(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    dest_path: String,
+) -> Result<u64, AppError> {
+    system::backup_database(&app, dest_path, &state.db_type).await
 }
 
 /// Restores sqlite database file from source path.
