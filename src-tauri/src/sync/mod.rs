@@ -5,7 +5,8 @@ use sqlx::{Pool, Sqlite};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::state::AppDb;
+use crate::db::SQLITE_ONLY_FEATURE_MESSAGE;
+use crate::state::{AppDb, AppState};
 
 // ─── Structs ─────────────────────────────────────────────────────
 
@@ -70,6 +71,38 @@ pub struct TestConnectionResult {
 #[derive(Debug, Clone)]
 struct PushSyncResult {
     remote_uuid: Option<String>,
+}
+
+fn sqlite_only_sync_error() -> String {
+    SQLITE_ONLY_FEATURE_MESSAGE.to_string()
+}
+
+async fn get_app_sqlite_pool(app: &AppHandle) -> Option<Pool<Sqlite>> {
+    let db = app.state::<AppDb>();
+    let pool = db.0.lock().await.clone();
+    pool
+}
+
+async fn require_app_sqlite_pool(app: &AppHandle) -> Result<Pool<Sqlite>, String> {
+    get_app_sqlite_pool(app)
+        .await
+        .ok_or_else(sqlite_only_sync_error)
+}
+
+pub async fn enqueue_sync_if_available(
+    state: &AppState,
+    app: &AppHandle,
+    table: &str,
+    op: &str,
+    record_id: &str,
+    payload: serde_json::Value,
+) {
+    let pool_guard = state.sqlite_pool.lock().await;
+    let Some(pool) = pool_guard.as_ref() else {
+        return;
+    };
+
+    enqueue_sync(pool, app, table, op, record_id, payload).await;
 }
 
 // ─── Core Sync Functions ─────────────────────────────────────────
@@ -517,8 +550,9 @@ async fn load_sync_config(pool: &Pool<Sqlite>) -> Option<SyncConfig> {
 
 /// Process all pending/failed sync queue items
 pub async fn process_sync_queue(app: &AppHandle) {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let Some(pool) = get_app_sqlite_pool(app).await else {
+        return;
+    };
 
     let config = match load_sync_config(&pool).await {
         Some(c) if c.sync_enabled => c,
@@ -529,7 +563,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
     let mut items: Vec<SyncQueueItem> = sqlx::query_as(
         "SELECT * FROM sync_queue WHERE status = 'pending' OR (status = 'failed' AND retry_count < 5) ORDER BY created_at ASC, id ASC"
     )
-    .fetch_all(&*pool)
+    .fetch_all(&pool)
     .await
     .unwrap_or_default();
 
@@ -550,7 +584,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
     // Create session
     let session_id: i64 =
         sqlx::query_scalar("INSERT INTO sync_sessions (status) VALUES ('running') RETURNING id")
-            .fetch_one(&*pool)
+            .fetch_one(&pool)
             .await
             .unwrap_or(0);
 
@@ -558,7 +592,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
     let _ = sqlx::query("UPDATE sync_sessions SET total_queued = ? WHERE id = ?")
         .bind(total_queued)
         .bind(session_id)
-        .execute(&*pool)
+        .execute(&pool)
         .await;
 
     let mut total_synced: i64 = 0;
@@ -578,7 +612,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
                  WHERE id = ?",
             )
             .bind(item.id)
-            .execute(&*pool)
+            .execute(&pool)
             .await;
             continue;
         }
@@ -586,7 +620,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
         // Mark as syncing
         let _ = sqlx::query("UPDATE sync_queue SET status = 'syncing' WHERE id = ?")
             .bind(item.id)
-            .execute(&*pool)
+            .execute(&pool)
             .await;
 
         match push_sync_item(
@@ -604,10 +638,10 @@ pub async fn process_sync_queue(app: &AppHandle) {
                     "UPDATE sync_queue SET status = 'synced', synced_at = datetime('now') WHERE id = ?"
                 )
                 .bind(item.id)
-                .execute(&*pool)
+                .execute(&pool)
                 .await;
                 mark_local_synced(
-                    &*pool,
+                    &pool,
                     &item.table_name,
                     &item.record_id,
                     result.remote_uuid.as_deref(),
@@ -621,7 +655,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
                 )
                 .bind(&error_text)
                 .bind(item.id)
-                .execute(&*pool)
+                .execute(&pool)
                 .await;
                 total_failed += 1;
             }
@@ -641,7 +675,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
     .bind(total_failed)
     .bind(session_status)
     .bind(session_id)
-    .execute(&*pool)
+    .execute(&pool)
     .await;
 
     // Auto-cleanup old sync data (keep latest 100 rows)
@@ -668,8 +702,9 @@ pub fn start_sync_loop(app: AppHandle) {
         loop {
             tokio::time::sleep(Duration::from_secs(5)).await;
 
-            let db = app.state::<AppDb>();
-            let pool = db.0.lock().await;
+            let Some(pool) = get_app_sqlite_pool(&app).await else {
+                continue;
+            };
 
             if let Some(config) = load_sync_config(&pool).await {
                 if config.sync_enabled {
@@ -681,8 +716,6 @@ pub fn start_sync_loop(app: AppHandle) {
                     };
 
                     if should_sync {
-                        // Drop the lock before running process_sync_queue which takes its own lock
-                        drop(pool);
                         process_sync_queue(&app).await;
                         last_sync = Some(tokio::time::Instant::now());
                     }
@@ -701,21 +734,20 @@ pub async fn save_sync_config(
     anon_key: String,
     service_key: String,
 ) -> Result<(), String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     // Fetch existing interval or default to 30
     let current_interval: i32 = sqlx::query_scalar(
         "SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 LIMIT 1",
     )
-    .fetch_optional(&*pool)
+    .fetch_optional(&pool)
     .await
     .map_err(|e| e.to_string())?
     .unwrap_or(30);
 
     // Deactivate existing configs
     sqlx::query("UPDATE sync_config SET is_active = 0")
-        .execute(&*pool)
+        .execute(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -727,7 +759,7 @@ pub async fn save_sync_config(
     .bind(anon_key)
     .bind(service_key)
     .bind(current_interval)
-    .execute(&*pool)
+    .execute(&pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -736,20 +768,18 @@ pub async fn save_sync_config(
 
 #[tauri::command]
 pub async fn get_sync_config(app: AppHandle) -> Result<Option<SyncConfig>, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
     let config = load_sync_config(&pool).await;
     Ok(config)
 }
 
 #[tauri::command]
 pub async fn update_sync_interval(app: AppHandle, interval: i32) -> Result<(), String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     sqlx::query("UPDATE sync_config SET sync_interval = ? WHERE is_active = 1")
         .bind(interval)
-        .execute(&*pool)
+        .execute(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -758,8 +788,7 @@ pub async fn update_sync_interval(app: AppHandle, interval: i32) -> Result<(), S
 
 #[tauri::command]
 pub async fn test_sync_connection(app: AppHandle) -> Result<TestConnectionResult, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     let config = load_sync_config(&pool)
         .await
@@ -825,25 +854,24 @@ pub async fn trigger_sync_now(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn get_sync_queue_stats(app: AppHandle) -> Result<SyncStats, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     let pending: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'")
-            .fetch_one(&*pool)
+            .fetch_one(&pool)
             .await
             .map_err(|e| e.to_string())?;
     let syncing: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'syncing'")
-            .fetch_one(&*pool)
+            .fetch_one(&pool)
             .await
             .map_err(|e| e.to_string())?;
     let synced: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'synced'")
-        .fetch_one(&*pool)
+        .fetch_one(&pool)
         .await
         .map_err(|e| e.to_string())?;
     let failed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE status = 'failed'")
-        .fetch_one(&*pool)
+        .fetch_one(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -857,14 +885,13 @@ pub async fn get_sync_queue_stats(app: AppHandle) -> Result<SyncStats, String> {
 
 #[tauri::command]
 pub async fn get_sync_sessions(app: AppHandle, limit: i64) -> Result<Vec<SyncSession>, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     let sessions = sqlx::query_as::<_, SyncSession>(
         "SELECT * FROM sync_sessions ORDER BY started_at DESC LIMIT ?",
     )
     .bind(limit)
-    .fetch_all(&*pool)
+    .fetch_all(&pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -877,8 +904,7 @@ pub async fn get_sync_queue_items(
     status: Option<String>,
     limit: i64,
 ) -> Result<Vec<SyncQueueItem>, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     let items = if let Some(s) = status {
         sqlx::query_as::<_, SyncQueueItem>(
@@ -886,7 +912,7 @@ pub async fn get_sync_queue_items(
         )
         .bind(s)
         .bind(limit)
-        .fetch_all(&*pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| e.to_string())?
     } else {
@@ -894,7 +920,7 @@ pub async fn get_sync_queue_items(
             "SELECT * FROM sync_queue ORDER BY created_at DESC LIMIT ?",
         )
         .bind(limit)
-        .fetch_all(&*pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| e.to_string())?
     };
@@ -904,13 +930,12 @@ pub async fn get_sync_queue_items(
 
 #[tauri::command]
 pub async fn retry_failed_items(app: AppHandle) -> Result<i64, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     let result = sqlx::query(
         "UPDATE sync_queue SET status = 'pending', retry_count = 0, error_message = NULL WHERE status = 'failed'"
     )
-    .execute(&*pool)
+    .execute(&pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -919,14 +944,13 @@ pub async fn retry_failed_items(app: AppHandle) -> Result<i64, String> {
 
 #[tauri::command]
 pub async fn clear_synced_items(app: AppHandle, older_than_days: i64) -> Result<i64, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     let result = sqlx::query(
         "DELETE FROM sync_queue WHERE status = 'synced' AND synced_at < datetime('now', ? || ' days')"
     )
     .bind(format!("-{}", older_than_days))
-    .execute(&*pool)
+    .execute(&pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -935,20 +959,19 @@ pub async fn clear_synced_items(app: AppHandle, older_than_days: i64) -> Result<
 
 #[tauri::command]
 pub async fn clean_sync_data(app: AppHandle) -> Result<i64, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     // Delete all completed/failed sessions
     let sessions_deleted =
         sqlx::query("DELETE FROM sync_sessions WHERE status IN ('completed', 'failed')")
-            .execute(&*pool)
+            .execute(&pool)
             .await
             .map_err(|e| e.to_string())?
             .rows_affected();
 
     // Delete all synced queue items
     let queue_deleted = sqlx::query("DELETE FROM sync_queue WHERE status = 'synced'")
-        .execute(&*pool)
+        .execute(&pool)
         .await
         .map_err(|e| e.to_string())?
         .rows_affected();
@@ -967,13 +990,12 @@ pub async fn set_master_password(
     use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
     use rand_core::OsRng;
 
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     // Verify current login password for the owner
     let user: Option<(i64, String)> =
         sqlx::query_as("SELECT id, password_hash FROM users WHERE role = 'owner' LIMIT 1")
-            .fetch_optional(&*pool)
+            .fetch_optional(&pool)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -994,7 +1016,7 @@ pub async fn set_master_password(
     sqlx::query("UPDATE users SET master_password_hash = ? WHERE id = ?")
         .bind(master_hash)
         .bind(user_id)
-        .execute(&*pool)
+        .execute(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -1005,13 +1027,12 @@ pub async fn set_master_password(
 pub async fn verify_master_password(app: AppHandle, input: String) -> Result<bool, String> {
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     let hash: Option<String> = sqlx::query_scalar(
         "SELECT master_password_hash FROM users WHERE role = 'owner' AND master_password_hash IS NOT NULL LIMIT 1"
     )
-    .fetch_optional(&*pool)
+    .fetch_optional(&pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -1036,14 +1057,13 @@ pub async fn migrate_to_new_database(
 ) -> Result<String, String> {
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     // 1. Verify master password
     let hash: Option<String> = sqlx::query_scalar(
         "SELECT master_password_hash FROM users WHERE role = 'owner' AND master_password_hash IS NOT NULL LIMIT 1"
     )
-    .fetch_optional(&*pool)
+    .fetch_optional(&pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -1060,14 +1080,14 @@ pub async fn migrate_to_new_database(
     let current_interval: i32 = sqlx::query_scalar(
         "SELECT COALESCE(sync_interval, 30) FROM sync_config WHERE is_active = 1 ORDER BY id DESC LIMIT 1",
     )
-    .fetch_optional(&*pool)
+    .fetch_optional(&pool)
     .await
     .map_err(|e| e.to_string())?
     .unwrap_or(30);
 
     // 3. Save new Supabase config
     sqlx::query("UPDATE sync_config SET is_active = 0")
-        .execute(&*pool)
+        .execute(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -1078,19 +1098,16 @@ pub async fn migrate_to_new_database(
     .bind(&new_anon_key)
     .bind(&new_service_key)
     .bind(current_interval)
-    .execute(&*pool)
+    .execute(&pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    // 4. Trigger a proper full sync rebuild using complete payloads.
-    drop(pool);
     trigger_full_sync(app).await
 }
 
 #[tauri::command]
 pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     // Verify config exists
     let _config = load_sync_config(&pool)
@@ -1099,7 +1116,7 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
 
     // Clear any existing pending/failed items to avoid duplicates
     sqlx::query("DELETE FROM sync_queue WHERE status IN ('pending', 'failed')")
-        .execute(&*pool)
+        .execute(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -1117,7 +1134,7 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
     for (table, json_expr) in &tables {
         let query = format!("SELECT id, {} as payload FROM {}", json_expr, table);
         let rows: Vec<(String, String)> = sqlx::query_as(&query)
-            .fetch_all(&*pool)
+            .fetch_all(&pool)
             .await
             .unwrap_or_default();
 
@@ -1128,7 +1145,7 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
             .bind(table)
             .bind(id)
             .bind(payload)
-            .execute(&*pool)
+            .execute(&pool)
             .await;
         }
 
@@ -1144,12 +1161,10 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
         "shop_settings",
     ] {
         let _ = sqlx::query(&format!("UPDATE {} SET synced = 0", table))
-            .execute(&*pool)
+            .execute(&pool)
             .await;
     }
 
-    // Drop pool lock and trigger sync immediately
-    drop(pool);
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
         process_sync_queue(&app_clone).await;
@@ -1165,8 +1180,7 @@ pub async fn get_migration_sql() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn truncate_and_sync(app: AppHandle) -> Result<String, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     // Verify config exists
     let config = load_sync_config(&pool)
@@ -1213,10 +1227,6 @@ pub async fn truncate_and_sync(app: AppHandle) -> Result<String, String> {
         }
     }
 
-    // Drop lock before calling trigger_full_sync
-    drop(pool);
-
-    // Call trigger_full_sync which will queue everything up and start the sync
     trigger_full_sync(app).await
 }
 
@@ -1232,8 +1242,7 @@ pub struct RemoteChange {
 
 #[tauri::command]
 pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     // Verify config exists
     let config = load_sync_config(&pool)
@@ -1380,7 +1389,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                             let local_row: Option<(Option<String>, Option<String>, String)> =
                                 sqlx::query_as(&query)
                                     .bind(record_id_str.as_str())
-                                    .fetch_optional(&*pool)
+                                    .fetch_optional(&pool)
                                     .await
                                     .unwrap_or(None);
 
@@ -1430,7 +1439,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                     "SELECT updated_at FROM orders WHERE id = ? AND deleted_at IS NULL LIMIT 1",
                                                 )
                                                 .bind(order_id.as_str())
-                                                .fetch_optional(&*pool)
+                                                .fetch_optional(&pool)
                                                 .await
                                                 .unwrap_or(None);
 
@@ -1469,7 +1478,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                 .bind(remote_product_qty)
                                                 .bind(remote_price)
                                                 .bind(remote_weight)
-                                                .fetch_optional(&*pool)
+                                                .fetch_optional(&pool)
                                                 .await
                                                 .unwrap_or(None);
 
@@ -1486,7 +1495,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                         Some(remote_updated_at.to_string())
                                                     })
                                                     .bind(&existing_id)
-                                                    .execute(&*pool)
+                                                    .execute(&pool)
                                                     .await;
                                                 }
                                                 continue;
@@ -1658,7 +1667,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                 ))
                                                 .bind(sqlite_time)
                                                 .bind(record_id_str.as_str())
-                                                .execute(&*pool)
+                                                .execute(&pool)
                                                 .await;
                                             }
                                         }
@@ -1680,8 +1689,7 @@ pub async fn apply_remote_changes(
     app: AppHandle,
     changes: Vec<RemoteChange>,
 ) -> Result<String, String> {
-    let db = app.state::<AppDb>();
-    let pool = db.0.lock().await;
+    let pool = require_app_sqlite_pool(&app).await?;
 
     // First, cache the local valid columns for each table we are going to touch
     let mut table_columns: std::collections::HashMap<String, std::collections::HashSet<String>> =
@@ -1691,7 +1699,7 @@ pub async fn apply_remote_changes(
         if !table_columns.contains_key(&table) {
             let cols: Vec<(String,)> =
                 sqlx::query_as(&format!("SELECT name FROM PRAGMA_TABLE_INFO('{}')", table))
-                    .fetch_all(&*pool)
+                    .fetch_all(&pool)
                     .await
                     .unwrap_or_default();
             let cols_set: std::collections::HashSet<String> =
@@ -1712,7 +1720,7 @@ pub async fn apply_remote_changes(
                 if table == "order_items" {
                     let res = sqlx::query("DELETE FROM order_items WHERE id = ?")
                         .bind(&change.record_id)
-                        .execute(&*pool)
+                        .execute(&pool)
                         .await;
 
                     if let Ok(result) = res {
@@ -1751,7 +1759,7 @@ pub async fn apply_remote_changes(
                             .bind(deleted_at)
                             .bind(updated_at)
                             .bind(&change.record_id)
-                            .execute(&*pool)
+                            .execute(&pool)
                             .await;
 
                         if let Ok(result) = res {
@@ -1819,7 +1827,7 @@ pub async fn apply_remote_changes(
                     }
                 }
 
-                let res = q.execute(&*pool).await;
+                let res = q.execute(&pool).await;
                 if res.is_ok() {
                     applied_count += 1;
                 } else {
@@ -1869,7 +1877,7 @@ pub async fn apply_remote_changes(
 
                 q = q.bind(&change.record_id);
 
-                let res = q.execute(&*pool).await;
+                let res = q.execute(&pool).await;
                 if res.is_ok() {
                     applied_count += 1;
                 } else {

@@ -232,7 +232,9 @@ export default function SettingsDataPanel() {
     aws_region,
     aws_bucket_name,
     imagekit_base_url,
+    database_kind,
   } = useAppSettings();
+  const isSqliteDatabase = database_kind === "sqlite";
 
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveEmail, setDriveEmail] = useState<string | null>(null);
@@ -591,10 +593,35 @@ export default function SettingsDataPanel() {
         {t("settings.data_mgmt.subtitle")}
       </p>
 
-      <SettingsDbStatus />
+      {!isSqliteDatabase && (
+        <div className="mb-6 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
+              <IconTriangleAlert size={20} strokeWidth={2} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-amber-600 mb-1">
+                {t(
+                  "settings.data_mgmt.sqlite_only_title",
+                  "SQLite-only maintenance tools",
+                )}
+              </h3>
+              <p className="text-xs text-text-muted">
+                {t(
+                  "settings.data_mgmt.sqlite_only_desc",
+                  "Database status, backup, restore, sequence reset, Google Drive backup, and reset tools are disabled while PostgreSQL is the active primary database.",
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isSqliteDatabase && <SettingsDbStatus />}
 
       <div className="space-y-6">
-        <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
+        {isSqliteDatabase && (
+          <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
           <div className="flex items-start gap-4">
             <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
               <IconDownload size={20} strokeWidth={2} />
@@ -639,9 +666,11 @@ export default function SettingsDataPanel() {
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        )}
 
-        <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
+        {isSqliteDatabase && (
+          <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
           <div className="flex items-start gap-4">
             <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500">
               <IconCloud size={20} strokeWidth={2} />
@@ -748,7 +777,8 @@ export default function SettingsDataPanel() {
               )}
             </div>
           </div>
-        </div>
+          </div>
+        )}
 
         <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
           <div className="flex items-start gap-4">
@@ -893,7 +923,8 @@ export default function SettingsDataPanel() {
           </div>
         </div>
 
-        <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5">
+        {isSqliteDatabase && (
+          <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5">
           <div className="flex items-start gap-4">
             <div className="p-2 rounded-lg bg-red-500/10 text-red-500">
               <IconTrash size={20} strokeWidth={2} />
@@ -916,11 +947,12 @@ export default function SettingsDataPanel() {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
-        {showConfirm && (
+        {isSqliteDatabase && showConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}

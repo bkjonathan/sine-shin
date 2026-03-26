@@ -6,8 +6,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { loginUser, registerUser } from "../api/authApi";
 import {
+  configureDatabase,
   restoreDatabase,
   saveShopSetup,
+  testPostgresqlConnection,
   updateAppLanguage,
   updateOnboardingTheme,
 } from "../api/onboardingApi";
@@ -26,6 +28,7 @@ import OnboardingStepAccount from "../components/pages/onboarding/OnboardingStep
 import OnboardingStepActions from "../components/pages/onboarding/OnboardingStepActions";
 import { useAuth } from "../context/AuthContext";
 import { OnboardingStep } from "../types/onboarding";
+import type { DatabaseKind } from "../types/settings";
 
 const LAST_STEP: OnboardingStep = 4;
 const USERNAME_REGEX = /^[A-Za-z0-9_.-]+$/;
@@ -48,6 +51,12 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
   const [shopName, setShopName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [databaseKind, setDatabaseKind] = useState<DatabaseKind>("sqlite");
+  const [postgresqlUrl, setPostgresqlUrl] = useState("");
+  const [isTestingPostgresql, setIsTestingPostgresql] = useState(false);
+  const [postgresqlConnectionOk, setPostgresqlConnectionOk] = useState<boolean | null>(null);
+  const [postgresqlConnectionMessage, setPostgresqlConnectionMessage] = useState("");
+  const [testedPostgresqlUrl, setTestedPostgresqlUrl] = useState("");
   const [logoPath, setLogoPath] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
 
@@ -125,9 +134,34 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
 
   const handleNext = () => {
     setError("");
+    const trimmedPostgresqlUrl = postgresqlUrl.trim();
 
     if (currentStep === 2 && !shopName.trim()) {
       setError(t("auth.onboarding.error_shop_name"));
+      return;
+    }
+
+    if (currentStep === 2 && databaseKind === "postgresql" && !trimmedPostgresqlUrl) {
+      setError(
+        t(
+          "auth.onboarding.error_postgresql_url",
+          "PostgreSQL URL is required when PostgreSQL is selected.",
+        ),
+      );
+      return;
+    }
+
+    if (
+      currentStep === 2 &&
+      databaseKind === "postgresql" &&
+      (!postgresqlConnectionOk || testedPostgresqlUrl !== trimmedPostgresqlUrl)
+    ) {
+      setError(
+        t(
+          "auth.onboarding.error_postgresql_not_tested",
+          "Test the PostgreSQL connection successfully before continuing.",
+        ),
+      );
       return;
     }
 
@@ -157,6 +191,61 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
       console.error("Failed to restore database:", err);
       setError(typeof err === "string" ? err : "Failed to restore database");
       setIsSubmitting(false);
+    }
+  };
+
+  const handlePostgresqlUrlChange = (value: string) => {
+    setPostgresqlUrl(value);
+    setPostgresqlConnectionOk(null);
+    setPostgresqlConnectionMessage("");
+    setTestedPostgresqlUrl("");
+  };
+
+  const handleDatabaseKindChange = (value: DatabaseKind) => {
+    setDatabaseKind(value);
+    setError("");
+    if (value !== "postgresql") {
+      setPostgresqlConnectionOk(null);
+      setPostgresqlConnectionMessage("");
+      setTestedPostgresqlUrl("");
+    }
+  };
+
+  const handleTestPostgresql = async () => {
+    const trimmedUrl = postgresqlUrl.trim();
+    if (!trimmedUrl) {
+      setPostgresqlConnectionOk(false);
+      setPostgresqlConnectionMessage(
+        t(
+          "auth.onboarding.error_postgresql_url",
+          "PostgreSQL URL is required when PostgreSQL is selected.",
+        ),
+      );
+      return;
+    }
+
+    try {
+      setIsTestingPostgresql(true);
+      setError("");
+      const result = await testPostgresqlConnection(trimmedUrl);
+      setPostgresqlConnectionOk(result.connected);
+      setPostgresqlConnectionMessage(result.message);
+      setTestedPostgresqlUrl(trimmedUrl);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : t(
+                "auth.onboarding.database_failed",
+                "PostgreSQL connection failed",
+              );
+      setPostgresqlConnectionOk(false);
+      setPostgresqlConnectionMessage(message);
+      setTestedPostgresqlUrl("");
+    } finally {
+      setIsTestingPostgresql(false);
     }
   };
 
@@ -200,6 +289,11 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
 
     try {
       if (window.__TAURI_INTERNALS__) {
+        await configureDatabase(
+          databaseKind,
+          databaseKind === "postgresql" ? postgresqlUrl : undefined,
+        );
+
         await saveShopSetup({
           name: shopName.trim(),
           phone: phone.trim(),
@@ -262,9 +356,17 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
           shopName={shopName}
           phone={phone}
           address={address}
+          databaseKind={databaseKind}
+          postgresqlUrl={postgresqlUrl}
+          isTestingPostgresql={isTestingPostgresql}
+          postgresqlConnectionOk={postgresqlConnectionOk}
+          postgresqlConnectionMessage={postgresqlConnectionMessage}
           onShopNameChange={setShopName}
           onPhoneChange={setPhone}
           onAddressChange={setAddress}
+          onDatabaseKindChange={handleDatabaseKindChange}
+          onPostgresqlUrlChange={handlePostgresqlUrlChange}
+          onTestPostgresqlConnection={handleTestPostgresql}
         />
       );
     }
@@ -326,7 +428,11 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
 
       <OnboardingStepIndicators currentStep={currentStep} />
 
-      <div className="relative z-10 w-full max-w-[420px] mx-4">
+      <div
+        className={`relative z-10 w-full mx-4 ${
+          currentStep === 2 ? "max-w-[860px]" : "max-w-[420px]"
+        }`}
+      >
         <div className="glass-panel p-8 overflow-hidden">
           <AnimatePresence>
             {error && (

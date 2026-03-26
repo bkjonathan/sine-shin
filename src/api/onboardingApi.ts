@@ -2,7 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { getAppSettings, updateAppSettings } from "./appApi";
 
-import type { AppSettings } from "../types/settings";
+import type {
+  AppSettings,
+  DatabaseConnectionStatus,
+  DatabaseKind,
+} from "../types/settings";
 
 export interface SaveShopSetupPayload {
   name: string;
@@ -24,6 +28,24 @@ export const saveShopSetup = async (
 
 export const restoreDatabase = async (restorePath: string): Promise<void> => {
   return invoke("restore_database", { restorePath });
+};
+
+export const configureDatabase = async (
+  databaseKind: DatabaseKind,
+  postgresqlUrl?: string,
+): Promise<void> => {
+  return invoke("configure_database", {
+    input: {
+      database_kind: databaseKind,
+      postgresql_url: postgresqlUrl?.trim() || null,
+    },
+  });
+};
+
+export const testPostgresqlConnection = async (
+  url: string,
+): Promise<DatabaseConnectionStatus> => {
+  return invoke("test_postgresql_connection", { url });
 };
 
 export const updateAppLanguage = async (language: string): Promise<void> => {

@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::Arc;
 
 use aws_config::BehaviorVersion;
 use aws_credential_types::provider::SharedCredentialsProvider;
@@ -7,7 +8,16 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tracing::instrument;
 
+use crate::db;
 use crate::error::{AppError, AppResult};
+use crate::state::AppState;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DatabaseKind {
+    Sqlite,
+    Postgresql,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppSettings {
@@ -46,6 +56,10 @@ pub struct AppSettings {
     pub aws_bucket_name: String,
     #[serde(default)]
     pub imagekit_base_url: String,
+    #[serde(default = "default_database_kind")]
+    pub database_kind: DatabaseKind,
+    #[serde(default)]
+    pub postgresql_url: String,
 }
 
 fn default_accent_color() -> String {
@@ -88,6 +102,10 @@ fn default_font_size() -> String {
     "normal".to_string()
 }
 
+fn default_database_kind() -> DatabaseKind {
+    DatabaseKind::Sqlite
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -110,6 +128,8 @@ impl Default for AppSettings {
             aws_region: String::new(),
             aws_bucket_name: String::new(),
             imagekit_base_url: String::new(),
+            database_kind: DatabaseKind::Sqlite,
+            postgresql_url: String::new(),
         }
     }
 }
@@ -126,6 +146,34 @@ pub struct AwsS3ConnectionInput {
 pub struct AwsS3ConnectionStatus {
     pub connected: bool,
     pub message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DatabaseConnectionInput {
+    pub database_kind: DatabaseKind,
+    pub postgresql_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DatabaseConnectionStatus {
+    pub connected: bool,
+    pub message: String,
+}
+
+impl AppSettings {
+    pub fn normalized_postgresql_url(&self) -> Option<String> {
+        match self.database_kind {
+            DatabaseKind::Sqlite => None,
+            DatabaseKind::Postgresql => {
+                let normalized = self.postgresql_url.trim().to_string();
+                if normalized.is_empty() {
+                    None
+                } else {
+                    Some(normalized)
+                }
+            }
+        }
+    }
 }
 
 pub(crate) fn normalize_s3_bucket_name(bucket_name: &str) -> String {
@@ -209,7 +257,11 @@ pub fn update_app_settings(app: AppHandle, settings: AppSettings) -> AppResult<(
     let app_data_dir = app.path().app_data_dir()?;
     let settings_path = app_data_dir.join("settings.json");
 
-    let settings_json = serde_json::to_string_pretty(&settings)?;
+    let sanitized_settings = AppSettings {
+        postgresql_url: settings.postgresql_url.trim().to_string(),
+        ..settings
+    };
+    let settings_json = serde_json::to_string_pretty(&sanitized_settings)?;
     fs::write(settings_path, settings_json)?;
     Ok(())
 }
@@ -263,4 +315,77 @@ pub async fn get_aws_s3_connection_status(app: AppHandle) -> AppResult<AwsS3Conn
             message: err.to_string(),
         }),
     }
+}
+
+#[instrument(skip(url))]
+pub async fn test_postgresql_connection(url: String) -> AppResult<DatabaseConnectionStatus> {
+    let normalized_url = url.trim().to_string();
+    if normalized_url.is_empty() {
+        return Err(AppError::invalid_input("PostgreSQL URL is required."));
+    }
+
+    db::connect_postgresql_database(&normalized_url).await?;
+
+    Ok(DatabaseConnectionStatus {
+        connected: true,
+        message: "PostgreSQL connection and schema initialization successful.".to_string(),
+    })
+}
+
+#[instrument(skip(input))]
+pub fn validate_database_connection_input(
+    input: DatabaseConnectionInput,
+) -> AppResult<DatabaseConnectionInput> {
+    let normalized_url = input.postgresql_url.unwrap_or_default().trim().to_string();
+
+    match input.database_kind {
+        DatabaseKind::Sqlite => Ok(DatabaseConnectionInput {
+            database_kind: DatabaseKind::Sqlite,
+            postgresql_url: None,
+        }),
+        DatabaseKind::Postgresql => {
+            if normalized_url.is_empty() {
+                return Err(AppError::invalid_input("PostgreSQL URL is required."));
+            }
+
+            Ok(DatabaseConnectionInput {
+                database_kind: DatabaseKind::Postgresql,
+                postgresql_url: Some(normalized_url),
+            })
+        }
+    }
+}
+
+#[instrument(skip(app, state, input))]
+pub async fn configure_database(
+    app: AppHandle,
+    state: Arc<AppState>,
+    input: DatabaseConnectionInput,
+) -> AppResult<()> {
+    let normalized = validate_database_connection_input(input)?;
+    let (new_db, new_sqlite_pool) = db::connect_database(
+        &app,
+        normalized.database_kind,
+        normalized.postgresql_url.as_deref(),
+    )
+    .await?;
+
+    let mut next_settings = get_app_settings(app.clone())?;
+    next_settings.database_kind = normalized.database_kind;
+    next_settings.postgresql_url = normalized.postgresql_url.unwrap_or_default();
+    update_app_settings(app.clone(), next_settings)?;
+
+    let mut db_guard = state.db.lock().await;
+    let mut sqlite_pool_guard = state.sqlite_pool.lock().await;
+    let mut database_kind_guard = state.database_kind.lock().await;
+
+    if let Some(existing_pool) = sqlite_pool_guard.take() {
+        existing_pool.close().await;
+    }
+
+    *db_guard = new_db;
+    *sqlite_pool_guard = new_sqlite_pool;
+    *database_kind_guard = normalized.database_kind;
+
+    Ok(())
 }

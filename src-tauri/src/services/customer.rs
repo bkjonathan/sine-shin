@@ -1,19 +1,16 @@
 use std::sync::Arc;
 
-use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, Set,
-    Statement,
-};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, EntityTrait, FromQueryResult, Set, Statement};
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::DEFAULT_CUSTOMER_ID_PREFIX;
+use crate::db::{current_timestamp_utc, parse_optional_datetime, DEFAULT_CUSTOMER_ID_PREFIX};
 use crate::entities::customers;
 use crate::error::{AppError, AppResult};
 use crate::models::{Customer, PaginatedCustomers};
 use crate::state::AppState;
-use crate::sync::enqueue_sync;
+use crate::sync::enqueue_sync_if_available;
 
 const DEFAULT_CUSTOMERS_PAGE_SIZE: i64 = 5;
 const MIN_CUSTOMERS_PAGE_SIZE: i64 = 5;
@@ -53,10 +50,14 @@ pub async fn create_customer(
     deleted_at: Option<String>,
 ) -> AppResult<String> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let normalized_customer_id = customer_id
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
+    let parsed_created_at = parse_optional_datetime(created_at)?;
+    let parsed_updated_at = parse_optional_datetime(updated_at)?;
+    let parsed_deleted_at = parse_optional_datetime(deleted_at)?;
 
     // Use entity insert; created_at defaults to CURRENT_TIMESTAMP when NotSet
     customers::ActiveModel {
@@ -68,11 +69,11 @@ pub async fn create_customer(
         city: Set(city),
         social_media_url: Set(social_media_url),
         platform: Set(platform),
-        created_at: created_at
-            .map(|v| Set(Some(v)))
+        created_at: parsed_created_at
+            .map(|value| Set(Some(value)))
             .unwrap_or(sea_orm::ActiveValue::NotSet),
-        updated_at: Set(updated_at),
-        deleted_at: Set(deleted_at),
+        updated_at: Set(parsed_updated_at),
+        deleted_at: Set(parsed_deleted_at),
         synced: Set(Some(0)),
     }
     .insert(&db)
@@ -80,7 +81,7 @@ pub async fn create_customer(
 
     if normalized_customer_id.is_none() {
         let prefix_str = PrefixRow::find_by_statement(Statement::from_string(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT customer_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1"
                 .to_string(),
         ))
@@ -93,7 +94,7 @@ pub async fn create_customer(
 
         let like_pattern = format!("{}%", prefix_str);
         let next_seq = NextSeqRow::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT COALESCE(MAX(CAST(REPLACE(customer_id, ?, '') AS INTEGER)), 0) + 1 AS next_seq \
              FROM customers WHERE customer_id LIKE ?",
             [prefix_str.clone().into(), like_pattern.into()],
@@ -107,7 +108,7 @@ pub async fn create_customer(
         let new_customer_id = format!("{}{:05}", prefix_str, next_seq);
         let _ = db
             .execute(Statement::from_sql_and_values(
-                DatabaseBackend::Sqlite,
+                backend,
                 "UPDATE customers SET customer_id = ? WHERE id = ?",
                 [new_customer_id.into(), record_id.clone().into()],
             ))
@@ -115,7 +116,7 @@ pub async fn create_customer(
     }
 
     if let Ok(Some(record)) = Customer::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, \
          created_at, updated_at, deleted_at FROM customers WHERE id = ?",
         [record_id.clone().into()],
@@ -123,9 +124,8 @@ pub async fn create_customer(
     .one(&db)
     .await
     {
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "customers",
             "INSERT",
@@ -142,8 +142,9 @@ pub async fn create_customer(
 #[instrument(skip(state))]
 pub async fn get_customers(state: Arc<AppState>) -> AppResult<Vec<Customer>> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     let customers = Customer::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, \
          created_at, updated_at, deleted_at FROM customers ORDER BY created_at DESC"
             .to_string(),
@@ -165,6 +166,7 @@ pub async fn get_customers_paginated(
     sort_order: Option<String>,
 ) -> AppResult<PaginatedCustomers> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let requested_page_size = page_size.unwrap_or(DEFAULT_CUSTOMERS_PAGE_SIZE);
     let no_limit = requested_page_size <= 0;
@@ -208,7 +210,7 @@ pub async fn get_customers_paginated(
 
     let (total, customers) = if has_search {
         let count = CountRow::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             &format!(
                 "SELECT COUNT(*) as cnt FROM customers WHERE COALESCE({}, '') LIKE ?",
                 search_column
@@ -234,7 +236,7 @@ pub async fn get_customers_paginated(
 
         let rows = if no_limit {
             Customer::find_by_statement(Statement::from_sql_and_values(
-                DatabaseBackend::Sqlite,
+                backend,
                 &data_sql,
                 [search_pattern.into()],
             ))
@@ -242,7 +244,7 @@ pub async fn get_customers_paginated(
             .await?
         } else {
             Customer::find_by_statement(Statement::from_sql_and_values(
-                DatabaseBackend::Sqlite,
+                backend,
                 &data_sql,
                 [search_pattern.into(), page_size.into(), offset.into()],
             ))
@@ -252,7 +254,7 @@ pub async fn get_customers_paginated(
         (count, rows)
     } else {
         let count = CountRow::find_by_statement(Statement::from_string(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT COUNT(*) as cnt FROM customers".to_string(),
         ))
         .one(&db)
@@ -270,12 +272,12 @@ pub async fn get_customers_paginated(
         };
 
         let rows = if no_limit {
-            Customer::find_by_statement(Statement::from_string(DatabaseBackend::Sqlite, data_sql))
+            Customer::find_by_statement(Statement::from_string(backend, data_sql))
                 .all(&db)
                 .await?
         } else {
             Customer::find_by_statement(Statement::from_sql_and_values(
-                DatabaseBackend::Sqlite,
+                backend,
                 &data_sql,
                 [page_size.into(), offset.into()],
             ))
@@ -333,16 +335,21 @@ pub async fn update_customer(
     deleted_at: Option<String>,
 ) -> AppResult<()> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
+    let now = current_timestamp_utc();
     let normalized_customer_id = customer_id
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
+    let parsed_created_at = parse_optional_datetime(created_at)?;
+    let parsed_updated_at = parse_optional_datetime(updated_at)?;
+    let parsed_deleted_at = parse_optional_datetime(deleted_at)?;
 
     db.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "UPDATE customers SET customer_id = ?, name = ?, phone = ?, address = ?, city = ?, \
          social_media_url = ?, platform = ?, \
          created_at = COALESCE(?, created_at), \
-         updated_at = COALESCE(?, datetime('now')), \
+         updated_at = COALESCE(?, ?), \
          deleted_at = ? WHERE id = ?",
         [
             normalized_customer_id.into(),
@@ -352,9 +359,10 @@ pub async fn update_customer(
             city.into(),
             social_media_url.into(),
             platform.into(),
-            created_at.into(),
-            updated_at.into(),
-            deleted_at.into(),
+            parsed_created_at.into(),
+            parsed_updated_at.into(),
+            now.into(),
+            parsed_deleted_at.into(),
             id.clone().into(),
         ],
     ))
@@ -365,9 +373,8 @@ pub async fn update_customer(
         .one(&db)
         .await
     {
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "customers",
             "UPDATE",
@@ -384,11 +391,13 @@ pub async fn update_customer(
 #[instrument(skip(state, app))]
 pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
+    let now = current_timestamp_utc();
 
     db.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
-        "UPDATE customers SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-        [id.clone().into()],
+        backend,
+        "UPDATE customers SET deleted_at = ?, updated_at = ? WHERE id = ?",
+        [now.clone().into(), now.into(), id.clone().into()],
     ))
     .await?;
 
@@ -397,9 +406,8 @@ pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: String) 
         .one(&db)
         .await
     {
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "customers",
             "DELETE",

@@ -8,20 +8,19 @@ use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, QueryOrder,
-    Set, Statement,
+    ActiveModelTrait, ConnectionTrait, EntityTrait, FromQueryResult, QueryOrder, Set, Statement,
 };
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::copy_logo_to_app_data;
+use crate::db::{copy_logo_to_app_data, current_timestamp_utc};
 use crate::entities::shop_settings;
 use crate::error::{AppError, AppResult};
 use crate::models::ShopSettings;
 use crate::services::settings::{get_app_settings, normalize_s3_bucket_name};
 use crate::state::AppState;
-use crate::sync::enqueue_sync;
+use crate::sync::enqueue_sync_if_available;
 
 #[derive(Debug, FromQueryResult)]
 struct IdRow {
@@ -60,9 +59,8 @@ pub async fn save_shop_setup(
         .await
     {
         let record_id = record.id.clone();
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "shop_settings",
             "INSERT",
@@ -100,9 +98,11 @@ pub async fn update_shop_settings(
     order_id_prefix: Option<String>,
 ) -> AppResult<()> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
+    let now = current_timestamp_utc();
 
     let latest_id = IdRow::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT id FROM shop_settings ORDER BY created_at DESC LIMIT 1".to_string(),
     ))
     .one(&db)
@@ -117,9 +117,9 @@ pub async fn update_shop_settings(
 
     if let Some(internal_path) = new_internal_logo_path {
         db.execute(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ?, \
-             customer_id_prefix = ?, order_id_prefix = ?, updated_at = datetime('now') WHERE id = ?",
+             customer_id_prefix = ?, order_id_prefix = ?, updated_at = ? WHERE id = ?",
             [
                 shop_name.into(),
                 phone.into(),
@@ -127,21 +127,23 @@ pub async fn update_shop_settings(
                 internal_path.into(),
                 customer_id_prefix.into(),
                 order_id_prefix.into(),
+                now.clone().into(),
                 latest_id.clone().into(),
             ],
         ))
         .await?;
     } else {
         db.execute(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, \
-             customer_id_prefix = ?, order_id_prefix = ?, updated_at = datetime('now') WHERE id = ?",
+             customer_id_prefix = ?, order_id_prefix = ?, updated_at = ? WHERE id = ?",
             [
                 shop_name.into(),
                 phone.into(),
                 address.into(),
                 customer_id_prefix.into(),
                 order_id_prefix.into(),
+                now.into(),
                 latest_id.clone().into(),
             ],
         ))
@@ -155,9 +157,8 @@ pub async fn update_shop_settings(
         .await
     {
         let record_id = record.id.clone();
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "shop_settings",
             "UPDATE",
@@ -222,6 +223,7 @@ pub async fn upload_shop_logo_to_s3(
         .flatten();
 
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     let latest = shop_settings::Entity::find()
         .order_by_desc(shop_settings::Column::CreatedAt)
         .into_model::<ShopSettings>()
@@ -290,7 +292,7 @@ pub async fn upload_shop_logo_to_s3(
 
     if let Some(local_path) = new_internal_logo_path {
         db.execute(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "UPDATE shop_settings SET logo_path = ?, logo_cloud_url = ? WHERE id = ?",
             [
                 local_path.into(),
@@ -301,7 +303,7 @@ pub async fn upload_shop_logo_to_s3(
         .await?;
     } else {
         db.execute(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "UPDATE shop_settings SET logo_cloud_url = ? WHERE id = ?",
             [cloud_url.clone().into(), latest.id.clone().into()],
         ))
@@ -315,9 +317,8 @@ pub async fn upload_shop_logo_to_s3(
         .await
     {
         let record_id = record.id.clone();
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "shop_settings",
             "UPDATE",

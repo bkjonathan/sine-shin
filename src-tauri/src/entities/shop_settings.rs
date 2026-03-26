@@ -13,8 +13,8 @@ pub struct Model {
     pub logo_cloud_url: Option<String>,
     pub customer_id_prefix: Option<String>,
     pub order_id_prefix: Option<String>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
+    pub created_at: Option<DateTimeUtc>,
+    pub updated_at: Option<DateTimeUtc>,
     pub synced: Option<i32>,
 }
 

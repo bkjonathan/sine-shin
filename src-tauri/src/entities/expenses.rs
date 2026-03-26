@@ -12,10 +12,10 @@ pub struct Model {
     pub category: Option<String>,
     pub payment_method: Option<String>,
     pub notes: Option<String>,
-    pub expense_date: Option<String>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-    pub deleted_at: Option<String>,
+    pub expense_date: Option<Date>,
+    pub created_at: Option<DateTimeUtc>,
+    pub updated_at: Option<DateTimeUtc>,
+    pub deleted_at: Option<DateTimeUtc>,
     pub synced: Option<i32>,
 }
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use chrono::NaiveDate;
-use sea_orm::{DatabaseBackend, FromQueryResult, Statement};
+use chrono::{Datelike, NaiveDate};
+use sea_orm::{ConnectionTrait, FromQueryResult, Statement};
 use tracing::instrument;
 
 use crate::error::{AppError, AppResult};
@@ -31,18 +31,20 @@ pub async fn get_account_summary(
     date_to: Option<String>,
 ) -> AppResult<AccountSummary> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     let date_range = normalize_date_range(date_from, date_to)?;
+    let current_month = current_month_bounds()?;
 
     let mut orders_date_filter = String::new();
     let mut expenses_date_filter = String::new();
     if let Some((df, dt)) = date_range {
         orders_date_filter = format!(
-            " AND date(COALESCE(o.order_date, o.created_at)) >= '{df}' \
-              AND date(COALESCE(o.order_date, o.created_at)) <= '{dt}'",
+            " AND COALESCE(o.order_date, DATE(o.created_at)) >= '{df}' \
+              AND COALESCE(o.order_date, DATE(o.created_at)) <= '{dt}'",
         );
         expenses_date_filter = format!(
-            " AND date(COALESCE(expense_date, created_at)) >= '{df}' \
-              AND date(COALESCE(expense_date, created_at)) <= '{dt}'",
+            " AND COALESCE(expense_date, DATE(created_at)) >= '{df}' \
+              AND COALESCE(expense_date, DATE(created_at)) <= '{dt}'",
         );
     }
 
@@ -78,23 +80,21 @@ pub async fn get_account_summary(
         orders_date_filter
     );
 
-    let income_all = IncomeRow::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
-        income_all_sql,
-    ))
-    .one(&db)
-    .await?
-    .unwrap_or(IncomeRow {
-        total_income: 0.0,
-        total_orders: 0,
-        total_service_fee: 0.0,
-        total_product_discount: 0.0,
-        total_cargo_fee: 0.0,
-    });
+    let income_all = IncomeRow::find_by_statement(Statement::from_string(backend, income_all_sql))
+        .one(&db)
+        .await?
+        .unwrap_or(IncomeRow {
+            total_income: 0.0,
+            total_orders: 0,
+            total_service_fee: 0.0,
+            total_product_discount: 0.0,
+            total_cargo_fee: 0.0,
+        });
 
     let income_month = IncomeRow::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
-        r#"
+        backend,
+        format!(
+            r#"
         SELECT
             COALESCE(SUM(
                 CASE
@@ -121,9 +121,11 @@ pub async fn get_account_summary(
             FROM order_items WHERE deleted_at IS NULL GROUP BY order_id
         ) agg ON agg.order_id = o.id
         WHERE o.deleted_at IS NULL
-          AND strftime('%Y-%m', COALESCE(o.order_date, o.created_at)) = strftime('%Y-%m', 'now')
-        "#
-        .to_string(),
+          AND COALESCE(o.order_date, DATE(o.created_at)) >= '{}'
+          AND COALESCE(o.order_date, DATE(o.created_at)) <= '{}'
+        "#,
+            current_month.0, current_month.1
+        ),
     ))
     .one(&db)
     .await?
@@ -136,7 +138,7 @@ pub async fn get_account_summary(
     });
 
     let expense_all = ExpenseRow::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
+        backend,
         format!(
             "SELECT CAST(COALESCE(SUM(amount), 0) AS REAL) as total_expenses, COUNT(*) as total_records \
              FROM expenses WHERE deleted_at IS NULL{}",
@@ -151,11 +153,14 @@ pub async fn get_account_summary(
     });
 
     let expense_month = ExpenseRow::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
-        "SELECT CAST(COALESCE(SUM(amount), 0) AS REAL) as total_expenses, COUNT(*) as total_records \
+        backend,
+        format!(
+            "SELECT CAST(COALESCE(SUM(amount), 0) AS REAL) as total_expenses, COUNT(*) as total_records \
          FROM expenses WHERE deleted_at IS NULL \
-         AND strftime('%Y-%m', COALESCE(expense_date, created_at)) = strftime('%Y-%m', 'now')"
-            .to_string(),
+         AND COALESCE(expense_date, DATE(created_at)) >= '{}' \
+         AND COALESCE(expense_date, DATE(created_at)) <= '{}'",
+            current_month.0, current_month.1
+        ),
     ))
     .one(&db)
     .await?
@@ -199,4 +204,25 @@ fn parse_ymd(value: &str) -> AppResult<String> {
     let parsed = NaiveDate::parse_from_str(value, "%Y-%m-%d")
         .map_err(|_| AppError::invalid_input("Date must be in YYYY-MM-DD format"))?;
     Ok(parsed.format("%Y-%m-%d").to_string())
+}
+
+fn current_month_bounds() -> AppResult<(String, String)> {
+    let today = chrono::Utc::now().date_naive();
+    let first_day = today
+        .with_day(1)
+        .ok_or_else(|| AppError::internal("Failed to compute current month start"))?;
+    let next_month = if first_day.month() == 12 {
+        NaiveDate::from_ymd_opt(first_day.year() + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(first_day.year(), first_day.month() + 1, 1)
+    }
+    .ok_or_else(|| AppError::internal("Failed to compute next month"))?;
+    let last_day = next_month
+        .pred_opt()
+        .ok_or_else(|| AppError::internal("Failed to compute current month end"))?;
+
+    Ok((
+        first_day.format("%Y-%m-%d").to_string(),
+        last_day.format("%Y-%m-%d").to_string(),
+    ))
 }

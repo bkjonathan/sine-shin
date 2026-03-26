@@ -1,6 +1,7 @@
 export type ThemeMode = "light" | "dark";
 export type AccentColor = "blue" | "purple" | "pink" | "cyan" | "green";
 export type FontSize = "small" | "normal" | "large" | "extra-large";
+export type DatabaseKind = "sqlite" | "postgresql";
 
 export interface AppSettings {
   language: string;
@@ -22,6 +23,8 @@ export interface AppSettings {
   aws_region: string;
   aws_bucket_name: string;
   imagekit_base_url: string;
+  database_kind: DatabaseKind;
+  postgresql_url: string;
 }
 
 export interface AppSettingsLanguage {
@@ -29,6 +32,11 @@ export interface AppSettingsLanguage {
 }
 
 export interface AwsS3ConnectionStatus {
+  connected: boolean;
+  message: string;
+}
+
+export interface DatabaseConnectionStatus {
   connected: boolean;
   message: string;
 }

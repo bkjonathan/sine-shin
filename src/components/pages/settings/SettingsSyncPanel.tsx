@@ -19,6 +19,7 @@ import {
   IconX,
 } from "../../icons";
 import SettingsToggle from "./SettingsToggle";
+import { useAppSettings } from "../../../context/AppSettingsContext";
 import {
   getSyncConfig,
   saveSyncConfig,
@@ -105,6 +106,7 @@ function PasswordField({
 export default function SettingsSyncPanel() {
   const { t } = useTranslation();
   const { playSound } = useSound();
+  const { database_kind } = useAppSettings();
 
   // ─── Config state ───
   const [url, setUrl] = useState("");
@@ -471,6 +473,46 @@ export default function SettingsSyncPanel() {
   };
 
   if (!configLoaded) return null;
+
+  if (database_kind !== "sqlite") {
+    return (
+      <motion.div
+        key="sync"
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.2 }}
+      >
+        <h2 className="text-lg font-semibold text-text-primary mb-1">
+          {t("settings.sync.title")}
+        </h2>
+        <p className="text-xs text-text-muted mb-5">
+          {t("settings.sync.subtitle")}
+        </p>
+
+        <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
+              <IconTriangleAlert size={20} strokeWidth={2} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-amber-600 mb-1">
+                {t(
+                  "settings.sync.sqlite_only_title",
+                  "SQLite-only feature",
+                )}
+              </h3>
+              <p className="text-xs text-text-muted">
+                {t(
+                  "settings.sync.sqlite_only_desc",
+                  "Sync queue and Supabase controls are disabled while PostgreSQL is the active primary database.",
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

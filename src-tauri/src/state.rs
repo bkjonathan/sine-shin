@@ -5,14 +5,15 @@ use sea_orm::DatabaseConnection;
 use sqlx::{Pool, Sqlite};
 use tokio::sync::Mutex;
 
+use crate::services::settings::DatabaseKind;
 use crate::sync::client::SupabaseClient;
 
 /// Thin wrapper kept so the sync module can access the raw sqlx pool via
 /// `app.state::<AppDb>()` without needing to be rewritten.
 ///
-/// `AppDb.0` and `AppState.pool` point to the **same** `Arc<Mutex<Pool<Sqlite>>>`,
+/// `AppDb.0` and `AppState.sqlite_pool` point to the **same** mutex,
 /// so swapping the pool in either location is immediately visible to both.
-pub struct AppDb(pub Arc<Mutex<Pool<Sqlite>>>);
+pub struct AppDb(pub Arc<Mutex<Option<Pool<Sqlite>>>>);
 
 /// Shared app state used by all business-service commands.
 ///
@@ -30,19 +31,22 @@ pub struct AppDb(pub Arc<Mutex<Pool<Sqlite>>>);
 pub struct AppState {
     pub db: Mutex<DatabaseConnection>,
     /// Raw sqlx pool shared with `AppDb` for the sync module.
-    pub pool: Arc<Mutex<Pool<Sqlite>>>,
+    pub sqlite_pool: Arc<Mutex<Option<Pool<Sqlite>>>>,
+    pub database_kind: Mutex<DatabaseKind>,
     pub supabase_client: SupabaseClient,
 }
 
 impl AppState {
     pub fn new(
         db: DatabaseConnection,
-        pool: Arc<Mutex<Pool<Sqlite>>>,
+        sqlite_pool: Arc<Mutex<Option<Pool<Sqlite>>>>,
+        database_kind: DatabaseKind,
         http_client: Client,
     ) -> Self {
         Self {
             db: Mutex::new(db),
-            pool,
+            sqlite_pool,
+            database_kind: Mutex::new(database_kind),
             supabase_client: SupabaseClient::new(http_client),
         }
     }

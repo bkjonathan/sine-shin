@@ -15,9 +15,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::Client;
-use sea_orm::SqlxSqliteConnector;
-use sea_orm_migration::MigratorTrait;
-use sqlx::sqlite::SqlitePoolOptions;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
@@ -40,8 +37,8 @@ use crate::commands::order::{
     update_order,
 };
 use crate::commands::settings::{
-    get_app_settings, get_aws_s3_connection_status, test_aws_s3_connection, update_app_settings,
-    AppSettings,
+    configure_database, get_app_settings, get_aws_s3_connection_status, test_aws_s3_connection,
+    test_postgresql_connection, update_app_settings, AppSettings,
 };
 use crate::commands::shop::{
     get_shop_settings, save_shop_setup, update_shop_settings, upload_shop_logo_to_s3,
@@ -52,7 +49,7 @@ use crate::commands::staff::{
 use crate::commands::system::{
     backup_database, get_db_status, reset_app_data, reset_table_sequence, restore_database,
 };
-use crate::migration::Migrator;
+use crate::db::connect_database;
 use crate::scheduler::{reload_scheduler, setup_scheduler};
 use crate::state::{AppDb, AppState};
 use crate::sync::{
@@ -173,30 +170,31 @@ pub fn run() {
                 fs::write(&settings_path, settings_json).expect("Failed to write settings.json");
             }
 
-            let db_path = app_data_dir.join("shop.db");
-            let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
+            let settings: AppSettings = serde_json::from_str(
+                &fs::read_to_string(&settings_path).expect("Failed to read settings.json"),
+            )
+            .unwrap_or_default();
 
-            let (db, shared_pool) = tauri::async_runtime::block_on(async {
-                let pool = SqlitePoolOptions::new()
-                    .max_connections(5)
-                    .connect(&db_url)
-                    .await
-                    .expect("Failed to create database pool");
-
-                // Create a SeaORM connection wrapping the same pool
-                let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool.clone());
-
-                Migrator::up(&db, None)
-                    .await
-                    .expect("Failed to run database migrations");
-
-                let shared_pool = Arc::new(Mutex::new(pool));
-                (db, shared_pool)
+            let normalized_postgresql_url = settings.normalized_postgresql_url();
+            let app_handle = app.handle().clone();
+            let (db, sqlite_pool) = tauri::async_runtime::block_on(async {
+                connect_database(
+                    &app_handle,
+                    settings.database_kind,
+                    normalized_postgresql_url.as_deref(),
+                )
+                .await
+                .expect("Failed to initialize database")
             });
+            let shared_pool = Arc::new(Mutex::new(sqlite_pool));
 
-            let app_state = Arc::new(AppState::new(db, shared_pool.clone(), Client::new()));
+            let app_state = Arc::new(AppState::new(
+                db,
+                shared_pool.clone(),
+                settings.database_kind,
+                Client::new(),
+            ));
             app.manage(app_state.clone());
-            // Keep AppDb in state for the sync module
             app.manage(AppDb(shared_pool));
 
             let app_handle = app.handle().clone();
@@ -252,7 +250,9 @@ pub fn run() {
             get_account_summary,
             get_app_settings,
             update_app_settings,
+            configure_database,
             test_aws_s3_connection,
+            test_postgresql_connection,
             get_aws_s3_connection_status,
             print_window,
             print_invoice_direct,

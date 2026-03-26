@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use sea_orm::{
-    ActiveModelTrait, DatabaseBackend, EntityTrait, FromQueryResult, PaginatorTrait, Set, Statement,
+    ActiveModelTrait, ConnectionTrait, EntityTrait, FromQueryResult, PaginatorTrait, Set, Statement,
 };
 use tracing::{info, instrument};
 use uuid::Uuid;
@@ -36,9 +36,10 @@ pub async fn register_user(state: Arc<AppState>, name: String, password: String)
 #[instrument(skip(state, password), fields(username = %name))]
 pub async fn login_user(state: Arc<AppState>, name: String, password: String) -> AppResult<User> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let user = User::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT id, name, password_hash, role, created_at FROM users WHERE name = ?",
         [name.into()],
     ))

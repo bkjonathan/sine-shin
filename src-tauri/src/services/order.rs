@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, NaiveDateTime};
-use sea_orm::{ConnectionTrait, DatabaseBackend, FromQueryResult, Statement, TransactionTrait};
+use sea_orm::prelude::{Date, DateTimeUtc};
+use sea_orm::{ConnectionTrait, FromQueryResult, Statement, TransactionTrait};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -8,7 +9,8 @@ use tauri::AppHandle;
 use uuid::Uuid;
 
 use crate::db::{
-    DEFAULT_ORDER_ID_PREFIX, ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
+    current_timestamp_utc, parse_optional_date, DEFAULT_ORDER_ID_PREFIX,
+    ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -16,7 +18,7 @@ use crate::models::{
     OrderItemPayload, OrderWithCustomer, PaginatedOrders,
 };
 use crate::state::AppState;
-use crate::sync::enqueue_sync;
+use crate::sync::enqueue_sync_if_available;
 
 const DEFAULT_ORDERS_PAGE_SIZE: i64 = 5;
 const MIN_ORDERS_PAGE_SIZE: i64 = 5;
@@ -112,17 +114,31 @@ fn normalized_dashboard_date_field(date_field: Option<String>) -> &'static str {
     }
 }
 
+fn format_optional_date(value: Option<Date>) -> Option<String> {
+    value.map(|date| date.format("%Y-%m-%d").to_string())
+}
+
+fn format_optional_datetime(value: Option<DateTimeUtc>) -> Option<String> {
+    value.map(|datetime| datetime.to_rfc3339())
+}
+
 fn resolve_dashboard_comparison_date(
     order: &OrderWithCustomer,
     date_field: &str,
     range_to: Option<NaiveDate>,
 ) -> Option<NaiveDate> {
     if date_field == "created_at" {
-        return parse_flexible_date(order.created_at.as_deref());
+        return order
+            .created_at
+            .as_ref()
+            .map(|datetime| datetime.date_naive());
     }
 
-    let order_date = parse_flexible_date(order.order_date.as_deref());
-    let created_at = parse_flexible_date(order.created_at.as_deref());
+    let order_date = order.order_date;
+    let created_at = order
+        .created_at
+        .as_ref()
+        .map(|datetime| datetime.date_naive());
 
     match order_date {
         None => created_at,
@@ -235,14 +251,19 @@ pub async fn create_order(
     exclude_cargo_fee: Option<bool>,
 ) -> AppResult<String> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let normalized_status =
         normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
+    let parsed_order_date = parse_optional_date(order_date)?;
+    let parsed_arrived_date = parse_optional_date(arrived_date)?;
+    let parsed_shipment_date = parse_optional_date(shipment_date)?;
+    let parsed_user_withdraw_date = parse_optional_date(user_withdraw_date)?;
 
     let txn = db.begin().await?;
 
     txn.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, \
              shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, \
              user_withdraw_date, service_fee, product_discount, service_fee_type, \
@@ -258,10 +279,10 @@ pub async fn create_order(
             shipping_fee.into(),
             delivery_fee.into(),
             cargo_fee.into(),
-            order_date.into(),
-            arrived_date.into(),
-            shipment_date.into(),
-            user_withdraw_date.into(),
+            parsed_order_date.into(),
+            parsed_arrived_date.into(),
+            parsed_shipment_date.into(),
+            parsed_user_withdraw_date.into(),
             service_fee.into(),
             product_discount.into(),
             service_fee_type.into(),
@@ -280,7 +301,7 @@ pub async fn create_order(
     for item in items {
         let item_id = Uuid::new_v4().to_string();
         txn.execute(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) \
              VALUES (?, ?, ?, ?, ?, ?)",
             [
@@ -298,14 +319,14 @@ pub async fn create_order(
     if let Some(oid) = order_id {
         let _ = txn
             .execute(Statement::from_sql_and_values(
-                DatabaseBackend::Sqlite,
+                backend,
                 "UPDATE orders SET order_id = ? WHERE id = ?",
                 [oid.into(), record_id.clone().into()],
             ))
             .await;
     } else {
         let prefix_row = PrefixRow::find_by_statement(Statement::from_string(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT order_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1",
         ))
         .one(&txn)
@@ -320,7 +341,7 @@ pub async fn create_order(
 
         let like_pattern = format!("{}%", prefix_str);
         let next_seq = NextSeqRow::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT COALESCE(MAX(CAST(REPLACE(order_id, ?, '') AS INTEGER)), 0) + 1 AS next_seq \
              FROM orders WHERE order_id LIKE ?",
             [prefix_str.clone().into(), like_pattern.into()],
@@ -334,7 +355,7 @@ pub async fn create_order(
         let new_order_id = format!("{}{:05}", prefix_str, next_seq);
         let _ = txn
             .execute(Statement::from_sql_and_values(
-                DatabaseBackend::Sqlite,
+                backend,
                 "UPDATE orders SET order_id = ? WHERE id = ?",
                 [new_order_id.into(), record_id.clone().into()],
             ))
@@ -343,19 +364,17 @@ pub async fn create_order(
 
     txn.commit().await?;
 
-    let pool = state.pool.lock().await;
-
     if let Ok(Some(order)) =
         crate::models::Order::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT * FROM orders WHERE id = ?",
             [record_id.clone().into()],
         ))
         .one(&db)
         .await
     {
-        enqueue_sync(
-            &*pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "orders",
             "INSERT",
@@ -366,7 +385,7 @@ pub async fn create_order(
     }
 
     if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
         [record_id.clone().into()],
     ))
@@ -375,8 +394,8 @@ pub async fn create_order(
     {
         for item in items_db {
             let item_id = item.id.clone();
-            enqueue_sync(
-                &*pool,
+            enqueue_sync_if_available(
+                &state,
                 app,
                 "order_items",
                 "INSERT",
@@ -392,17 +411,15 @@ pub async fn create_order(
 
 pub async fn get_orders(state: Arc<AppState>) -> AppResult<Vec<OrderWithCustomer>> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let query = format!(
         "{} {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
-        query,
-    ))
-    .all(&db)
-    .await?;
+    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(backend, query))
+        .all(&db)
+        .await?;
 
     Ok(orders)
 }
@@ -418,6 +435,7 @@ pub async fn get_orders_paginated(
     sort_order: Option<String>,
 ) -> AppResult<PaginatedOrders> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let requested_page_size = page_size.unwrap_or(DEFAULT_ORDERS_PAGE_SIZE);
     let no_limit = requested_page_size <= 0;
@@ -483,7 +501,7 @@ pub async fn get_orders_paginated(
         where_clause
     );
     let total = CountRow::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         &count_sql,
         params.clone(),
     ))
@@ -514,7 +532,7 @@ pub async fn get_orders_paginated(
     };
 
     let orders = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         &data_sql,
         data_params,
     ))
@@ -544,13 +562,14 @@ pub async fn get_customer_orders(
     customer_id: String,
 ) -> AppResult<Vec<OrderWithCustomer>> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let query = format!(
         "{} WHERE o.customer_id = ? {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
     let orders = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         &query,
         [customer_id.into()],
     ))
@@ -562,13 +581,14 @@ pub async fn get_customer_orders(
 
 pub async fn get_order(state: Arc<AppState>, id: String) -> AppResult<OrderDetail> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let query = format!(
         "{} WHERE o.id = ? {}",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
     let order = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         &query,
         [id.clone().into()],
     ))
@@ -577,7 +597,7 @@ pub async fn get_order(state: Arc<AppState>, id: String) -> AppResult<OrderDetai
     .ok_or_else(|| AppError::not_found("Order not found"))?;
 
     let items = OrderItem::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
         [id.into()],
     ))
@@ -616,13 +636,19 @@ pub async fn update_order(
     exclude_cargo_fee: Option<bool>,
 ) -> AppResult<()> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     let normalized_status =
         normalize_order_status(status)?.unwrap_or_else(|| "pending".to_string());
+    let now = current_timestamp_utc();
+    let parsed_order_date = parse_optional_date(order_date)?;
+    let parsed_arrived_date = parse_optional_date(arrived_date)?;
+    let parsed_shipment_date = parse_optional_date(shipment_date)?;
+    let parsed_user_withdraw_date = parse_optional_date(user_withdraw_date)?;
 
     let txn = db.begin().await?;
 
     let old_items = OrderItem::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
         [id.clone().into()],
     ))
@@ -630,13 +656,14 @@ pub async fn update_order(
     .await?;
 
     txn.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, \
          shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, \
          shipment_date = ?, user_withdraw_date = ?, service_fee = ?, product_discount = ?, \
          service_fee_type = ?, shipping_fee_paid = ?, delivery_fee_paid = ?, \
          cargo_fee_paid = ?, service_fee_paid = ?, shipping_fee_by_shop = ?, \
-         delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ? WHERE id = ?",
+         delivery_fee_by_shop = ?, cargo_fee_by_shop = ?, exclude_cargo_fee = ?, \
+         updated_at = ? WHERE id = ?",
         [
             customer_id.into(),
             normalized_status.into(),
@@ -645,10 +672,10 @@ pub async fn update_order(
             shipping_fee.into(),
             delivery_fee.into(),
             cargo_fee.into(),
-            order_date.into(),
-            arrived_date.into(),
-            shipment_date.into(),
-            user_withdraw_date.into(),
+            parsed_order_date.into(),
+            parsed_arrived_date.into(),
+            parsed_shipment_date.into(),
+            parsed_user_withdraw_date.into(),
             service_fee.into(),
             product_discount.into(),
             service_fee_type.into(),
@@ -660,23 +687,24 @@ pub async fn update_order(
             delivery_fee_by_shop.unwrap_or(false).into(),
             cargo_fee_by_shop.unwrap_or(false).into(),
             exclude_cargo_fee.unwrap_or(false).into(),
+            now.clone().into(),
             id.clone().into(),
         ],
     ))
     .await?;
 
     txn.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
-        "UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') \
+        backend,
+        "UPDATE order_items SET deleted_at = ?, updated_at = ? \
          WHERE order_id = ? AND deleted_at IS NULL",
-        [id.clone().into()],
+        [now.clone().into(), now.clone().into(), id.clone().into()],
     ))
     .await?;
 
     for item in items {
         let item_id = Uuid::new_v4().to_string();
         txn.execute(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) \
              VALUES (?, ?, ?, ?, ?, ?)",
             [
@@ -693,19 +721,17 @@ pub async fn update_order(
 
     txn.commit().await?;
 
-    let pool = state.pool.lock().await;
-
     if let Ok(Some(order)) =
         crate::models::Order::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT * FROM orders WHERE id = ?",
             [id.clone().into()],
         ))
         .one(&db)
         .await
     {
-        enqueue_sync(
-            &*pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "orders",
             "UPDATE",
@@ -715,13 +741,12 @@ pub async fn update_order(
         .await;
     }
 
-    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     for mut old_item in old_items {
         old_item.deleted_at = Some(now.clone());
         old_item.updated_at = Some(now.clone());
         let old_item_id = old_item.id.clone();
-        enqueue_sync(
-            &*pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "order_items",
             "DELETE",
@@ -732,7 +757,7 @@ pub async fn update_order(
     }
 
     if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
         [id.clone().into()],
     ))
@@ -741,8 +766,8 @@ pub async fn update_order(
     {
         for item in items_db {
             let item_id = item.id.clone();
-            enqueue_sync(
-                &*pool,
+            enqueue_sync_if_available(
+                &state,
                 app,
                 "order_items",
                 "INSERT",
@@ -758,34 +783,34 @@ pub async fn update_order(
 
 pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
+    let now = current_timestamp_utc();
 
     db.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
-        "UPDATE orders SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-        [id.clone().into()],
+        backend,
+        "UPDATE orders SET deleted_at = ?, updated_at = ? WHERE id = ?",
+        [now.clone().into(), now.clone().into(), id.clone().into()],
     ))
     .await?;
 
     db.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
-        "UPDATE order_items SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE order_id = ?",
-        [id.clone().into()],
+        backend,
+        "UPDATE order_items SET deleted_at = ?, updated_at = ? WHERE order_id = ?",
+        [now.clone().into(), now.into(), id.clone().into()],
     ))
     .await?;
-
-    let pool = state.pool.lock().await;
 
     if let Ok(Some(order)) =
         crate::models::Order::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT * FROM orders WHERE id = ?",
             [id.clone().into()],
         ))
         .one(&db)
         .await
     {
-        enqueue_sync(
-            &*pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "orders",
             "DELETE",
@@ -796,7 +821,7 @@ pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> 
     }
 
     if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT * FROM order_items WHERE order_id = ?",
         [id.clone().into()],
     ))
@@ -805,8 +830,8 @@ pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> 
     {
         for item in items_db {
             let item_id = item.id.clone();
-            enqueue_sync(
-                &*pool,
+            enqueue_sync_if_available(
+                &state,
                 app,
                 "order_items",
                 "DELETE",
@@ -828,6 +853,7 @@ pub async fn get_dashboard_stats(
     status: Option<String>,
 ) -> AppResult<DashboardStats> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let selected_date_field = normalized_dashboard_date_field(date_field);
     let df = date_from.unwrap_or_default().trim().to_string();
@@ -851,12 +877,9 @@ pub async fn get_dashboard_stats(
         "{} WHERE o.deleted_at IS NULL {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
-        query,
-    ))
-    .all(&db)
-    .await?;
+    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(backend, query))
+        .all(&db)
+        .await?;
 
     let mut total_revenue = 0.0;
     let mut total_profit = 0.0;
@@ -934,6 +957,7 @@ pub async fn get_dashboard_detail_records(
     status: Option<String>,
 ) -> AppResult<Vec<DashboardDetailRecord>> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let selected_date_field = normalized_dashboard_date_field(date_field);
     let df = date_from.unwrap_or_default().trim().to_string();
@@ -967,12 +991,9 @@ pub async fn get_dashboard_detail_records(
         "{} WHERE o.deleted_at IS NULL {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
-        query,
-    ))
-    .all(&db)
-    .await?;
+    let orders = OrderWithCustomer::find_by_statement(Statement::from_string(backend, query))
+        .all(&db)
+        .await?;
 
     let mut records = Vec::<DashboardDetailRecord>::new();
 
@@ -1022,9 +1043,10 @@ pub async fn get_dashboard_detail_records(
         }
 
         let display_date = if selected_date_field == "created_at" {
-            order.created_at.clone()
+            format_optional_datetime(order.created_at)
         } else {
-            order.order_date.clone().or(order.created_at.clone())
+            format_optional_date(order.order_date)
+                .or_else(|| format_optional_datetime(order.created_at))
         };
 
         records.push(DashboardDetailRecord {
@@ -1040,9 +1062,10 @@ pub async fn get_dashboard_detail_records(
 
 pub async fn get_orders_for_export(state: Arc<AppState>) -> AppResult<Vec<OrderExportRow>> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let rows = OrderExportRow::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
+        backend,
         r#"
         SELECT
             o.order_id,

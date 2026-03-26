@@ -54,6 +54,8 @@ const DEFAULT_SETTINGS = {
   aws_region: "",
   aws_bucket_name: "",
   imagekit_base_url: "",
+  database_kind: "sqlite",
+  postgresql_url: "",
 } satisfies AppSettings;
 
 export function AppSettingsProvider({

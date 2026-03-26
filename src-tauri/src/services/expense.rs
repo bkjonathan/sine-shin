@@ -1,19 +1,16 @@
 use std::sync::Arc;
 
-use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, Set,
-    Statement,
-};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, EntityTrait, FromQueryResult, Set, Statement};
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::DEFAULT_EXPENSE_ID_PREFIX;
+use crate::db::{current_timestamp_utc, parse_optional_date, DEFAULT_EXPENSE_ID_PREFIX};
 use crate::entities::expenses;
 use crate::error::{AppError, AppResult};
 use crate::models::{Expense, PaginatedExpenses};
 use crate::state::AppState;
-use crate::sync::enqueue_sync;
+use crate::sync::enqueue_sync_if_available;
 
 const DEFAULT_EXPENSES_PAGE_SIZE: i64 = 10;
 const MIN_EXPENSES_PAGE_SIZE: i64 = 5;
@@ -61,15 +58,17 @@ pub async fn create_expense(
     }
 
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let sanitized_expense_id = sanitize_optional(expense_id);
+    let parsed_expense_date = parse_optional_date(sanitize_optional(expense_date))?;
 
     expenses::ActiveModel {
         id: Set(record_id.clone()),
         title: Set(trimmed_title),
         amount: Set(amount),
         category: Set(sanitize_optional(category)),
-        expense_date: Set(sanitize_optional(expense_date)),
+        expense_date: Set(parsed_expense_date),
         payment_method: Set(sanitize_optional(payment_method)),
         notes: Set(sanitize_optional(notes)),
         synced: Set(Some(0)),
@@ -83,7 +82,7 @@ pub async fn create_expense(
     } else {
         let like_pattern = format!("{}%", DEFAULT_EXPENSE_ID_PREFIX);
         let next_seq = NextSeqRow::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
+            backend,
             "SELECT COALESCE(MAX(CAST(REPLACE(expense_id, ?, '') AS INTEGER)), 0) + 1 AS next_seq \
              FROM expenses WHERE expense_id LIKE ?",
             [DEFAULT_EXPENSE_ID_PREFIX.into(), like_pattern.into()],
@@ -96,7 +95,7 @@ pub async fn create_expense(
         format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, next_seq)
     };
     db.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "UPDATE expenses SET expense_id = ? WHERE id = ?",
         [final_expense_id.into(), record_id.clone().into()],
     ))
@@ -107,9 +106,8 @@ pub async fn create_expense(
         .one(&db)
         .await
     {
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "expenses",
             "INSERT",
@@ -126,11 +124,12 @@ pub async fn create_expense(
 #[instrument(skip(state))]
 pub async fn get_expenses(state: Arc<AppState>) -> AppResult<Vec<Expense>> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     let expenses = Expense::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT id, expense_id, title, amount, category, payment_method, notes, expense_date, \
          created_at, updated_at, deleted_at FROM expenses WHERE deleted_at IS NULL \
-         ORDER BY COALESCE(expense_date, created_at) DESC"
+         ORDER BY COALESCE(expense_date, DATE(created_at)) DESC"
             .to_string(),
     ))
     .all(&db)
@@ -154,6 +153,7 @@ pub async fn get_expenses_paginated(
     sort_order: Option<String>,
 ) -> AppResult<PaginatedExpenses> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
 
     let requested_page_size = page_size.unwrap_or(DEFAULT_EXPENSES_PAGE_SIZE);
     let no_limit = requested_page_size <= 0;
@@ -189,10 +189,10 @@ pub async fn get_expenses_paginated(
     let sort_column = match sort_by.as_deref().unwrap_or("expense_date") {
         "title" => "title",
         "amount" => "amount",
-        "expense_date" => "COALESCE(expense_date, created_at)",
+        "expense_date" => "COALESCE(expense_date, DATE(created_at))",
         "created_at" => "created_at",
         "expense_id" => "expense_id",
-        _ => "COALESCE(expense_date, created_at)",
+        _ => "COALESCE(expense_date, DATE(created_at))",
     };
     let sort_dir = if sort_order.as_deref() == Some("asc") {
         "ASC"
@@ -213,12 +213,12 @@ pub async fn get_expenses_paginated(
         params.push(cat.clone().into());
     }
     if let Some(df) = normalized_date_from.as_ref() {
-        conditions.push("DATE(COALESCE(expense_date, created_at)) >= DATE(?)".to_string());
-        params.push(df.clone().into());
+        conditions.push("COALESCE(expense_date, DATE(created_at)) >= ?".to_string());
+        params.push(parse_optional_date(Some(df.clone()))?.into());
     }
     if let Some(dt) = normalized_date_to.as_ref() {
-        conditions.push("DATE(COALESCE(expense_date, created_at)) <= DATE(?)".to_string());
-        params.push(dt.clone().into());
+        conditions.push("COALESCE(expense_date, DATE(created_at)) <= ?".to_string());
+        params.push(parse_optional_date(Some(dt.clone()))?.into());
     }
 
     let where_clause = if conditions.is_empty() {
@@ -229,7 +229,7 @@ pub async fn get_expenses_paginated(
 
     let count_sql = format!("SELECT COUNT(*) as cnt FROM expenses {}", where_clause);
     let total = CountRow::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         &count_sql,
         params.clone(),
     ))
@@ -262,7 +262,7 @@ pub async fn get_expenses_paginated(
     };
 
     let expenses = Expense::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         &data_sql,
         query_params,
     ))
@@ -291,8 +291,9 @@ pub async fn get_expenses_paginated(
 #[instrument(skip(state))]
 pub async fn get_expense(state: Arc<AppState>, id: String) -> AppResult<Expense> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
     Expense::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "SELECT id, expense_id, title, amount, category, payment_method, notes, expense_date, \
          created_at, updated_at, deleted_at FROM expenses WHERE id = ? AND deleted_at IS NULL",
         [id.into()],
@@ -327,18 +328,22 @@ pub async fn update_expense(
     }
 
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
+    let now = current_timestamp_utc();
+    let parsed_expense_date = parse_optional_date(sanitize_optional(expense_date))?;
 
     db.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
+        backend,
         "UPDATE expenses SET title = ?, amount = ?, category = ?, expense_date = ?, \
-         payment_method = ?, notes = ?, updated_at = datetime('now') WHERE id = ?",
+         payment_method = ?, notes = ?, updated_at = ? WHERE id = ?",
         [
             trimmed_title.into(),
             amount.into(),
             sanitize_optional(category).into(),
-            sanitize_optional(expense_date).into(),
+            parsed_expense_date.into(),
             sanitize_optional(payment_method).into(),
             sanitize_optional(notes).into(),
+            now.into(),
             id.clone().into(),
         ],
     ))
@@ -349,9 +354,8 @@ pub async fn update_expense(
         .one(&db)
         .await
     {
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "expenses",
             "UPDATE",
@@ -368,11 +372,13 @@ pub async fn update_expense(
 #[instrument(skip(state, app))]
 pub async fn delete_expense(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
     let db = state.db.lock().await.clone();
+    let backend = db.get_database_backend();
+    let now = current_timestamp_utc();
 
     db.execute(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
-        "UPDATE expenses SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-        [id.clone().into()],
+        backend,
+        "UPDATE expenses SET deleted_at = ?, updated_at = ? WHERE id = ?",
+        [now.clone().into(), now.into(), id.clone().into()],
     ))
     .await?;
 
@@ -381,9 +387,8 @@ pub async fn delete_expense(state: Arc<AppState>, app: &AppHandle, id: String) -
         .one(&db)
         .await
     {
-        let pool = state.pool.lock().await;
-        enqueue_sync(
-            &pool,
+        enqueue_sync_if_available(
+            &state,
             app,
             "expenses",
             "DELETE",

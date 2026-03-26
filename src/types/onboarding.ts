@@ -1,3 +1,5 @@
+import type { DatabaseKind } from "./settings";
+
 export type OnboardingStep = 0 | 1 | 2 | 3 | 4;
 
 export type OnboardingTheme = "light" | "dark";
@@ -8,4 +10,9 @@ export interface OnboardingAppSettings {
   sound_effect: boolean;
   theme?: string;
   accent_color?: string;
+}
+
+export interface OnboardingDatabaseConfig {
+  databaseKind: DatabaseKind;
+  postgresqlUrl: string;
 }

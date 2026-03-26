@@ -11,9 +11,9 @@ pub struct Model {
     pub product_qty: Option<i32>,
     pub price: Option<f64>,
     pub product_weight: Option<f64>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-    pub deleted_at: Option<String>,
+    pub created_at: Option<DateTimeUtc>,
+    pub updated_at: Option<DateTimeUtc>,
+    pub deleted_at: Option<DateTimeUtc>,
     pub synced: Option<i32>,
 }
 

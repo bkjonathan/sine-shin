@@ -1,9 +1,16 @@
+use std::sync::Arc;
+
+use tauri::State;
 use tracing::instrument;
 
 use crate::error::AppError;
 use crate::services::settings;
+use crate::state::AppState;
 
-pub use crate::services::settings::{AppSettings, AwsS3ConnectionInput, AwsS3ConnectionStatus};
+pub use crate::services::settings::{
+    AppSettings, AwsS3ConnectionInput, AwsS3ConnectionStatus, DatabaseConnectionInput,
+    DatabaseConnectionStatus,
+};
 
 /// Returns app settings from local settings storage.
 #[tauri::command]
@@ -35,4 +42,22 @@ pub async fn get_aws_s3_connection_status(
     app: tauri::AppHandle,
 ) -> Result<AwsS3ConnectionStatus, AppError> {
     settings::get_aws_s3_connection_status(app).await
+}
+
+/// Tests a PostgreSQL connection string without switching the active database.
+#[tauri::command]
+#[instrument(skip(url))]
+pub async fn test_postgresql_connection(url: String) -> Result<DatabaseConnectionStatus, AppError> {
+    settings::test_postgresql_connection(url).await
+}
+
+/// Switches the active application database and persists the selection.
+#[tauri::command]
+#[instrument(skip(app, state, input))]
+pub async fn configure_database(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    input: DatabaseConnectionInput,
+) -> Result<(), AppError> {
+    settings::configure_database(app, state.inner().clone(), input).await
 }

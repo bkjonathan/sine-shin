@@ -2,16 +2,16 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sea_orm::SqlxSqliteConnector;
 use sea_orm::{ConnectionTrait, DatabaseBackend, FromQueryResult, Statement};
 use sea_orm_migration::MigratorTrait;
-use sqlx::sqlite::SqlitePoolOptions;
 use tauri::{AppHandle, Manager};
 use tracing::instrument;
 
+use crate::db::{connect_sqlite_database, sqlite_database_path, SQLITE_ONLY_FEATURE_MESSAGE};
 use crate::error::{AppError, AppResult};
 use crate::migration::Migrator;
 use crate::models::{DbStatus, TableSequenceResetStatus, TableStatus};
+use crate::services::settings::DatabaseKind;
 use crate::state::AppState;
 
 #[derive(Debug, FromQueryResult)]
@@ -34,9 +34,19 @@ struct SeqRow {
     seq_val: i64,
 }
 
+async fn ensure_sqlite_mode(state: &Arc<AppState>) -> AppResult<()> {
+    let database_kind = *state.database_kind.lock().await;
+    if database_kind != DatabaseKind::Sqlite {
+        return Err(AppError::invalid_input(SQLITE_ONLY_FEATURE_MESSAGE));
+    }
+
+    Ok(())
+}
+
 /// Resets core app data tables and re-initializes schema.
 #[instrument(skip(state, app))]
 pub async fn reset_app_data(state: Arc<AppState>, app: &AppHandle) -> AppResult<()> {
+    ensure_sqlite_mode(&state).await?;
     let db = state.db.lock().await.clone();
 
     for table in [
@@ -71,8 +81,7 @@ pub async fn reset_app_data(state: Arc<AppState>, app: &AppHandle) -> AppResult<
 /// Backs up sqlite DB file to destination path.
 #[instrument(skip(app))]
 pub async fn backup_database(app: &AppHandle, dest_path: String) -> AppResult<u64> {
-    let app_data_dir = app.path().app_data_dir()?;
-    let db_path = app_data_dir.join("shop.db");
+    let db_path = sqlite_database_path(app)?;
 
     if !db_path.exists() {
         return Err(AppError::not_found("Database file not found"));
@@ -91,36 +100,28 @@ pub async fn restore_database(
     app: &AppHandle,
     restore_path: String,
 ) -> AppResult<()> {
+    ensure_sqlite_mode(&state).await?;
     let restore_source = PathBuf::from(&restore_path);
     if !restore_source.exists() {
         return Err(AppError::not_found("Restore file not found"));
     }
 
-    let app_data_dir = app.path().app_data_dir()?;
-    let db_path = app_data_dir.join("shop.db");
+    let db_path = sqlite_database_path(app)?;
 
     // Hold both locks to atomically swap the connections.
     let mut db_guard = state.db.lock().await;
-    let mut pool_guard = state.pool.lock().await;
+    let mut pool_guard = state.sqlite_pool.lock().await;
 
-    pool_guard.close().await;
+    if let Some(existing_pool) = pool_guard.as_ref() {
+        existing_pool.close().await;
+    }
 
     fs::copy(&restore_source, &db_path)
         .map_err(|e| AppError::internal(format!("Failed to restore database: {}", e)))?;
 
-    let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
-    let new_pool = SqlitePoolOptions::new()
-        .max_connections(5)
-        .connect(&db_url)
-        .await
-        .map_err(|e| AppError::internal(format!("Failed to reconnect to database: {}", e)))?;
+    let (new_db, new_pool) = connect_sqlite_database(app).await?;
 
-    let new_db = SqlxSqliteConnector::from_sqlx_sqlite_pool(new_pool.clone());
-    Migrator::up(&new_db, None)
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
-
-    *pool_guard = new_pool;
+    *pool_guard = Some(new_pool);
     *db_guard = new_db;
     Ok(())
 }
@@ -128,6 +129,7 @@ pub async fn restore_database(
 /// Returns DB table row counts and DB file size.
 #[instrument(skip(state, app))]
 pub async fn get_db_status(state: Arc<AppState>, app: &AppHandle) -> AppResult<DbStatus> {
+    ensure_sqlite_mode(&state).await?;
     let db = state.db.lock().await.clone();
 
     let tables = TableRow::find_by_statement(Statement::from_string(
@@ -181,6 +183,7 @@ pub async fn reset_table_sequence(
     state: Arc<AppState>,
     table_name: String,
 ) -> AppResult<TableSequenceResetStatus> {
+    ensure_sqlite_mode(&state).await?;
     let table_name = table_name.trim().to_string();
     if table_name.is_empty() {
         return Err(AppError::invalid_input("Table name is required"));

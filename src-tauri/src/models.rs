@@ -1,4 +1,7 @@
-use sea_orm::FromQueryResult;
+use sea_orm::{
+    prelude::{Date, DateTimeUtc},
+    FromQueryResult,
+};
 use serde::{Deserialize, Serialize};
 
 /// Mirrors `entities::shop_settings::Model` but kept as a plain struct so that
@@ -13,8 +16,8 @@ pub struct ShopSettings {
     pub logo_cloud_url: Option<String>,
     pub customer_id_prefix: Option<String>,
     pub order_id_prefix: Option<String>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
+    pub created_at: Option<DateTimeUtc>,
+    pub updated_at: Option<DateTimeUtc>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromQueryResult)]
@@ -23,7 +26,7 @@ pub struct User {
     pub name: String,
     pub password_hash: String,
     pub role: String,
-    pub created_at: Option<String>,
+    pub created_at: Option<DateTimeUtc>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromQueryResult)]
@@ -36,9 +39,9 @@ pub struct Customer {
     pub city: Option<String>,
     pub social_media_url: Option<String>,
     pub platform: Option<String>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-    pub deleted_at: Option<String>,
+    pub created_at: Option<DateTimeUtc>,
+    pub updated_at: Option<DateTimeUtc>,
+    pub deleted_at: Option<DateTimeUtc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -68,10 +71,10 @@ pub struct Expense {
     pub category: Option<String>,
     pub payment_method: Option<String>,
     pub notes: Option<String>,
-    pub expense_date: Option<String>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-    pub deleted_at: Option<String>,
+    pub expense_date: Option<Date>,
+    pub created_at: Option<DateTimeUtc>,
+    pub updated_at: Option<DateTimeUtc>,
+    pub deleted_at: Option<DateTimeUtc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -94,11 +97,11 @@ pub struct Order {
     pub shipping_fee: Option<f64>,
     pub delivery_fee: Option<f64>,
     pub cargo_fee: Option<f64>,
-    pub order_date: Option<String>,
-    pub arrived_date: Option<String>,
-    pub shipment_date: Option<String>,
-    pub user_withdraw_date: Option<String>,
-    pub created_at: Option<String>,
+    pub order_date: Option<Date>,
+    pub arrived_date: Option<Date>,
+    pub shipment_date: Option<Date>,
+    pub user_withdraw_date: Option<Date>,
+    pub created_at: Option<DateTimeUtc>,
     pub service_fee: Option<f64>,
     pub product_discount: Option<f64>,
     pub service_fee_type: Option<String>,
@@ -110,8 +113,8 @@ pub struct Order {
     pub delivery_fee_by_shop: Option<bool>,
     pub cargo_fee_by_shop: Option<bool>,
     pub exclude_cargo_fee: Option<bool>,
-    pub updated_at: Option<String>,
-    pub deleted_at: Option<String>,
+    pub updated_at: Option<DateTimeUtc>,
+    pub deleted_at: Option<DateTimeUtc>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromQueryResult)]
@@ -122,9 +125,9 @@ pub struct OrderItem {
     pub product_qty: Option<i64>,
     pub price: Option<f64>,
     pub product_weight: Option<f64>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-    pub deleted_at: Option<String>,
+    pub created_at: Option<DateTimeUtc>,
+    pub updated_at: Option<DateTimeUtc>,
+    pub deleted_at: Option<DateTimeUtc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -147,11 +150,11 @@ pub struct OrderWithCustomer {
     pub shipping_fee: Option<f64>,
     pub delivery_fee: Option<f64>,
     pub cargo_fee: Option<f64>,
-    pub order_date: Option<String>,
-    pub arrived_date: Option<String>,
-    pub shipment_date: Option<String>,
-    pub user_withdraw_date: Option<String>,
-    pub created_at: Option<String>,
+    pub order_date: Option<Date>,
+    pub arrived_date: Option<Date>,
+    pub shipment_date: Option<Date>,
+    pub user_withdraw_date: Option<Date>,
+    pub created_at: Option<DateTimeUtc>,
     pub service_fee: Option<f64>,
     pub product_discount: Option<f64>,
     pub service_fee_type: Option<String>,
@@ -167,8 +170,8 @@ pub struct OrderWithCustomer {
     pub delivery_fee_by_shop: Option<bool>,
     pub cargo_fee_by_shop: Option<bool>,
     pub exclude_cargo_fee: Option<bool>,
-    pub updated_at: Option<String>,
-    pub deleted_at: Option<String>,
+    pub updated_at: Option<DateTimeUtc>,
+    pub deleted_at: Option<DateTimeUtc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -239,9 +242,9 @@ pub struct OrderExportRow {
     pub customer_phone: Option<String>,
     pub status: Option<String>,
     pub order_from: Option<String>,
-    pub order_date: Option<String>,
-    pub arrived_date: Option<String>,
-    pub shipment_date: Option<String>,
+    pub order_date: Option<Date>,
+    pub arrived_date: Option<Date>,
+    pub shipment_date: Option<Date>,
     pub service_fee: Option<f64>,
     pub product_discount: Option<f64>,
     pub service_fee_type: Option<String>,
@@ -253,7 +256,7 @@ pub struct OrderExportRow {
     pub product_qty: Option<i64>,
     pub product_price: Option<f64>,
     pub product_weight: Option<f64>,
-    pub created_at: Option<String>,
+    pub created_at: Option<DateTimeUtc>,
     pub shipping_fee_by_shop: Option<bool>,
     pub delivery_fee_by_shop: Option<bool>,
     pub cargo_fee_by_shop: Option<bool>,

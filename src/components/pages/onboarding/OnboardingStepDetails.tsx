@@ -1,22 +1,39 @@
 import { useTranslation } from "react-i18next";
-import { Input } from "../../ui";
+import { Button, Input, Select } from "../../ui";
+import type { DatabaseKind } from "../../../types/settings";
 
 interface OnboardingStepDetailsProps {
   shopName: string;
   phone: string;
   address: string;
+  databaseKind: DatabaseKind;
+  postgresqlUrl: string;
+  isTestingPostgresql: boolean;
+  postgresqlConnectionOk: boolean | null;
+  postgresqlConnectionMessage: string;
   onShopNameChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
   onAddressChange: (value: string) => void;
+  onDatabaseKindChange: (value: DatabaseKind) => void;
+  onPostgresqlUrlChange: (value: string) => void;
+  onTestPostgresqlConnection: () => void;
 }
 
 export default function OnboardingStepDetails({
   shopName,
   phone,
   address,
+  databaseKind,
+  postgresqlUrl,
+  isTestingPostgresql,
+  postgresqlConnectionOk,
+  postgresqlConnectionMessage,
   onShopNameChange,
   onPhoneChange,
   onAddressChange,
+  onDatabaseKindChange,
+  onPostgresqlUrlChange,
+  onTestPostgresqlConnection,
 }: OnboardingStepDetailsProps) {
   const { t } = useTranslation();
 
@@ -29,43 +46,145 @@ export default function OnboardingStepDetails({
         <p className="text-sm text-text-muted">{t("auth.onboarding.step1_subtitle")}</p>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">
-          {t("auth.onboarding.shop_name")} <span className="text-error">*</span>
-        </label>
-        <Input
-          type="text"
-          className="input-liquid"
-          placeholder={t("auth.onboarding.enter_shop_name")}
-          value={shopName}
-          onChange={(e) => onShopNameChange(e.target.value)}
-          autoFocus
-        />
-      </div>
+      <div className="grid gap-6 md:grid-cols-[1.02fr_minmax(0,1fr)] md:items-start">
+        <div className="rounded-2xl border border-glass-border bg-glass-white p-4 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary">
+              {t("auth.onboarding.database_title", "Database")}
+            </h3>
+            <p className="text-xs text-text-muted mt-1 leading-relaxed">
+              {t(
+                "auth.onboarding.database_subtitle",
+                "Choose where the app stores its main data. SQLite-only maintenance tools will be disabled when PostgreSQL is active.",
+              )}
+            </p>
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">
-          {t("auth.onboarding.phone_number")}
-        </label>
-        <Input
-          type="tel"
-          className="input-liquid"
-          placeholder={t("auth.onboarding.enter_phone")}
-          value={phone}
-          onChange={(e) => onPhoneChange(e.target.value)}
-        />
-      </div>
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">
+              {t("auth.onboarding.database_type", "Database Type")}
+            </label>
+            <Select
+              className="w-full"
+              value={databaseKind}
+              onChange={(value) => onDatabaseKindChange(value.toString() as DatabaseKind)}
+              options={[
+                {
+                  value: "sqlite",
+                  label: t("auth.onboarding.database_sqlite", "SQLite"),
+                },
+                {
+                  value: "postgresql",
+                  label: t("auth.onboarding.database_postgresql", "PostgreSQL"),
+                },
+              ]}
+              placeholder={t("auth.onboarding.database_type", "Database Type")}
+            />
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">
-          {t("settings.account.address")}
-        </label>
-        <textarea
-          className="input-liquid min-h-[80px] py-2"
-          placeholder={t("settings.account.address_placeholder")}
-          value={address}
-          onChange={(e) => onAddressChange(e.target.value)}
-        />
+          {databaseKind === "postgresql" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  {t("auth.onboarding.database_url", "PostgreSQL URL")}{" "}
+                  <span className="text-error">*</span>
+                </label>
+                <Input
+                  type="text"
+                  className="input-liquid"
+                  placeholder="postgresql://user:password@host:5432/database"
+                  value={postgresqlUrl}
+                  onChange={(e) => onPostgresqlUrlChange(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="px-4 py-2 text-xs font-semibold"
+                  onClick={onTestPostgresqlConnection}
+                  loading={isTestingPostgresql}
+                  loadingText={t(
+                    "auth.onboarding.database_testing",
+                    "Testing...",
+                  )}
+                  disabled={!postgresqlUrl.trim()}
+                >
+                  {t(
+                    "auth.onboarding.database_test_connection",
+                    "Test Connection",
+                  )}
+                </Button>
+
+                {postgresqlConnectionOk !== null && (
+                  <span
+                    className={`text-xs font-medium ${
+                      postgresqlConnectionOk ? "text-green-400" : "text-red-400"
+                    }`}
+                  >
+                    {postgresqlConnectionOk
+                      ? t("auth.onboarding.database_connected", "Connected")
+                      : t("auth.onboarding.database_failed", "Connection failed")}
+                  </span>
+                )}
+              </div>
+
+              {postgresqlConnectionMessage && (
+                <div
+                  className={`rounded-xl border px-3 py-2 text-xs leading-relaxed ${
+                    postgresqlConnectionOk
+                      ? "border-green-500/20 bg-green-500/10 text-green-300"
+                      : "border-red-500/20 bg-red-500/10 text-red-300"
+                  }`}
+                >
+                  {postgresqlConnectionMessage}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">
+              {t("auth.onboarding.shop_name")} <span className="text-error">*</span>
+            </label>
+            <Input
+              type="text"
+              className="input-liquid"
+              placeholder={t("auth.onboarding.enter_shop_name")}
+              value={shopName}
+              onChange={(e) => onShopNameChange(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">
+              {t("auth.onboarding.phone_number")}
+            </label>
+            <Input
+              type="tel"
+              className="input-liquid"
+              placeholder={t("auth.onboarding.enter_phone")}
+              value={phone}
+              onChange={(e) => onPhoneChange(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">
+              {t("settings.account.address")}
+            </label>
+            <textarea
+              className="input-liquid min-h-[120px] py-2"
+              placeholder={t("settings.account.address_placeholder")}
+              value={address}
+              onChange={(e) => onAddressChange(e.target.value)}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
