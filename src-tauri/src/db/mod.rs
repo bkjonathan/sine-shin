@@ -1,19 +1,19 @@
+pub mod postgres;
+pub mod sqlite;
+
+pub use postgres::connect_postgresql_database;
+pub use sqlite::{connect_sqlite_database, sqlite_database_path};
+
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use sea_orm::prelude::{Date, DateTimeUtc};
-use sea_orm::{
-    ConnectionTrait, Database, DatabaseBackend, DatabaseConnection, SqlxSqliteConnector,
-    Statement, Value,
-};
-use sea_orm_migration::MigratorTrait;
-use sqlx::sqlite::SqlitePoolOptions;
+use sea_orm::{DatabaseBackend, DatabaseConnection, Statement, Value};
 use sqlx::{Pool, Sqlite};
 use tauri::{AppHandle, Manager};
 
 use crate::error::{AppError, AppResult};
-use crate::migration::Migrator;
 use crate::services::settings::DatabaseKind;
 
 pub mod helpers {
@@ -175,57 +175,6 @@ pub fn parse_optional_datetime(value: Option<String>) -> AppResult<Option<DateTi
     Err(AppError::invalid_input(format!(
         "Invalid timestamp value: {raw}"
     )))
-}
-
-pub fn sqlite_database_path(app: &AppHandle) -> AppResult<PathBuf> {
-    let app_data_dir = app.path().app_data_dir()?;
-    Ok(app_data_dir.join("shop.db"))
-}
-
-pub fn sqlite_database_url(db_path: &Path) -> String {
-    format!("sqlite:{}?mode=rwc", db_path.to_string_lossy())
-}
-
-pub async fn connect_sqlite_database(
-    app: &AppHandle,
-) -> AppResult<(DatabaseConnection, Pool<Sqlite>)> {
-    let db_path = sqlite_database_path(app)?;
-    let db_url = sqlite_database_url(&db_path);
-
-    let pool = SqlitePoolOptions::new()
-        .max_connections(5)
-        .connect(&db_url)
-        .await
-        .map_err(|e| AppError::internal(format!("Failed to create SQLite pool: {e}")))?;
-
-    let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool.clone());
-
-    Migrator::up(&db, None)
-        .await
-        .map_err(|e| AppError::internal(format!("Failed to run SQLite migrations: {e}")))?;
-
-    Ok((db, pool))
-}
-
-pub async fn connect_postgresql_database(url: &str) -> AppResult<DatabaseConnection> {
-    let db = Database::connect(url.trim())
-        .await
-        .map_err(|e| AppError::internal(format!("Failed to connect to PostgreSQL: {e}")))?;
-
-    db.execute_unprepared(include_str!("../migrations/full_schema_postgres.sql"))
-        .await
-        .map_err(|e| AppError::internal(format!("Failed to initialize PostgreSQL schema: {e}")))?;
-    db.execute_unprepared(include_str!(
-        "../migrations/postgres_string_timestamp_compat.sql"
-    ))
-    .await
-    .map_err(|e| {
-        AppError::internal(format!(
-            "Failed to normalize PostgreSQL timestamp columns: {e}"
-        ))
-    })?;
-
-    Ok(db)
 }
 
 pub async fn connect_database(
