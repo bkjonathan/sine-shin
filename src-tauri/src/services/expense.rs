@@ -22,8 +22,8 @@ struct CountRow {
 }
 
 #[derive(Debug, FromQueryResult)]
-struct RowIdRow {
-    rowid: i64,
+struct NextSeqRow {
+    next_seq: i64,
 }
 
 fn sanitize_optional(value: Option<String>) -> Option<String> {
@@ -75,17 +75,23 @@ pub async fn create_expense(
     .insert(&db)
     .await?;
 
-    let rowid = RowIdRow::find_by_statement(Statement::from_string(
-        DatabaseBackend::Sqlite,
-        "SELECT last_insert_rowid() as rowid".to_string(),
-    ))
-    .one(&db)
-    .await?
-    .map(|r| r.rowid)
-    .unwrap_or(0);
-
-    let final_expense_id = sanitized_expense_id
-        .unwrap_or_else(|| format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, rowid));
+    let final_expense_id = if let Some(eid) = sanitized_expense_id {
+        eid
+    } else {
+        let like_pattern = format!("{}%", DEFAULT_EXPENSE_ID_PREFIX);
+        let next_seq = NextSeqRow::find_by_statement(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "SELECT COALESCE(MAX(CAST(REPLACE(expense_id, ?, '') AS INTEGER)), 0) + 1 AS next_seq \
+             FROM expenses WHERE expense_id LIKE ?",
+            [DEFAULT_EXPENSE_ID_PREFIX.into(), like_pattern.into()],
+        ))
+        .one(&db)
+        .await
+        .unwrap_or(None)
+        .map(|r| r.next_seq)
+        .unwrap_or(1);
+        format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, next_seq)
+    };
     db.execute(Statement::from_sql_and_values(
         DatabaseBackend::Sqlite,
         "UPDATE expenses SET expense_id = ? WHERE id = ?",

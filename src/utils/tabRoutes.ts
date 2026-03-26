@@ -40,11 +40,11 @@ export const isSupportedTabPath = (pathname: string): boolean => {
     return true;
   }
 
-  if (/^\/orders\/\d+$/.test(pathname)) {
+  if (/^\/orders\/[^/]+$/.test(pathname)) {
     return true;
   }
 
-  return /^\/customers\/\d+$/.test(pathname);
+  return /^\/customers\/[^/]+$/.test(pathname);
 };
 
 export const getRouteLabel = (
@@ -53,12 +53,12 @@ export const getRouteLabel = (
 ): string => {
   const pathname = getPathnameFromTabPath(tabPath);
 
-  if (/^\/orders\/\d+$/.test(pathname)) {
+  if (/^\/orders\/[^/]+$/.test(pathname)) {
     const id = pathname.split("/").pop();
     return `${t("orders.detail.title")} #${id}`;
   }
 
-  if (/^\/customers\/\d+$/.test(pathname)) {
+  if (/^\/customers\/[^/]+$/.test(pathname)) {
     const id = pathname.split("/").pop();
     return `${t("customers.detail.title")} #${id}`;
   }
@@ -96,11 +96,11 @@ export const isNavigationItemActive = (
   const pathname = getPathnameFromTabPath(tabPath);
 
   if (navPath === "/orders") {
-    return pathname === "/orders" || /^\/orders\/\d+$/.test(pathname);
+    return pathname === "/orders" || /^\/orders\/[^/]+$/.test(pathname);
   }
 
   if (navPath === "/customers") {
-    return pathname === "/customers" || /^\/customers\/\d+$/.test(pathname);
+    return pathname === "/customers" || /^\/customers\/[^/]+$/.test(pathname);
   }
 
   return pathname === navPath;

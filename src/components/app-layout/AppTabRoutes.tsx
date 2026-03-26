@@ -37,12 +37,12 @@ export default function AppTabRoutes({ locationPath }: AppTabRoutesProps) {
   return (
     <Suspense fallback={<TabRouteFallback />}>
       {(() => {
-        const orderDetailMatch = pathname.match(/^\/orders\/(\d+)$/);
+        const orderDetailMatch = pathname.match(/^\/orders\/([^/]+)$/);
         if (orderDetailMatch) {
           return <OrderDetailPage id={orderDetailMatch[1]} />;
         }
 
-        const customerDetailMatch = pathname.match(/^\/customers\/(\d+)$/);
+        const customerDetailMatch = pathname.match(/^\/customers\/([^/]+)$/);
         if (customerDetailMatch) {
           return <CustomerDetailPage id={customerDetailMatch[1]} />;
         }

@@ -32,6 +32,11 @@ struct PrefixRow {
     order_id_prefix: Option<String>,
 }
 
+#[derive(Debug, FromQueryResult)]
+struct NextSeqRow {
+    next_seq: i64,
+}
+
 fn normalize_order_status(status: Option<String>) -> AppResult<Option<String>> {
     let normalized = status
         .map(|value| value.trim().to_lowercase())
@@ -236,7 +241,7 @@ pub async fn create_order(
 
     let txn = db.begin().await?;
 
-    let exec_result = txn
+    txn
         .execute(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
             "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, \
@@ -272,8 +277,6 @@ pub async fn create_order(
             ],
         ))
         .await?;
-
-    let rowid = exec_result.last_insert_id();
 
     for item in items {
         let item_id = Uuid::new_v4().to_string();
@@ -316,7 +319,20 @@ pub async fn create_order(
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
 
-        let new_order_id = format!("{}{:05}", prefix_str, rowid);
+        let like_pattern = format!("{}%", prefix_str);
+        let next_seq = NextSeqRow::find_by_statement(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "SELECT COALESCE(MAX(CAST(REPLACE(order_id, ?, '') AS INTEGER)), 0) + 1 AS next_seq \
+             FROM orders WHERE order_id LIKE ?",
+            [prefix_str.clone().into(), like_pattern.into()],
+        ))
+        .one(&txn)
+        .await
+        .unwrap_or(None)
+        .map(|r| r.next_seq)
+        .unwrap_or(1);
+
+        let new_order_id = format!("{}{:05}", prefix_str, next_seq);
         let _ = txn
             .execute(Statement::from_sql_and_values(
                 DatabaseBackend::Sqlite,

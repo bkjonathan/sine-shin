@@ -101,10 +101,10 @@ export const getCustomerById = async (id: string): Promise<Customer> => {
   return await invoke("get_customer", { id });
 };
 
-import { Order } from "../types/order";
+import { OrderWithCustomer } from "../types/order";
 
 export const getCustomerOrders = async (
   customerId: string,
-): Promise<Order[]> => {
+): Promise<OrderWithCustomer[]> => {
   return await invoke("get_customer_orders", { customerId });
 };

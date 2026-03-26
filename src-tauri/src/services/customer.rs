@@ -27,8 +27,8 @@ struct PrefixRow {
 }
 
 #[derive(Debug, FromQueryResult)]
-struct RowIdRow {
-    rowid: i64,
+struct NextSeqRow {
+    next_seq: i64,
 }
 
 /// Creates a customer and optionally enqueues initial sync payload.
@@ -75,20 +75,6 @@ pub async fn create_customer(
     .insert(&db)
     .await?;
 
-    // Get rowid for auto-generating customer_id when none was supplied
-    let rowid = if normalized_customer_id.is_none() {
-        RowIdRow::find_by_statement(Statement::from_string(
-            DatabaseBackend::Sqlite,
-            "SELECT last_insert_rowid() as rowid".to_string(),
-        ))
-        .one(&db)
-        .await?
-        .map(|r| r.rowid)
-        .unwrap_or(0)
-    } else {
-        0
-    };
-
     if normalized_customer_id.is_none() {
         let prefix_str = PrefixRow::find_by_statement(Statement::from_string(
             DatabaseBackend::Sqlite,
@@ -102,7 +88,20 @@ pub async fn create_customer(
         .filter(|p| !p.is_empty())
         .unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
 
-        let new_customer_id = format!("{}{:05}", prefix_str, rowid);
+        let like_pattern = format!("{}%", prefix_str);
+        let next_seq = NextSeqRow::find_by_statement(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "SELECT COALESCE(MAX(CAST(REPLACE(customer_id, ?, '') AS INTEGER)), 0) + 1 AS next_seq \
+             FROM customers WHERE customer_id LIKE ?",
+            [prefix_str.clone().into(), like_pattern.into()],
+        ))
+        .one(&db)
+        .await
+        .unwrap_or(None)
+        .map(|r| r.next_seq)
+        .unwrap_or(1);
+
+        let new_customer_id = format!("{}{:05}", prefix_str, next_seq);
         let _ = db
             .execute(Statement::from_sql_and_values(
                 DatabaseBackend::Sqlite,
