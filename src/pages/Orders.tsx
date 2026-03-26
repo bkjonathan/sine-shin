@@ -280,7 +280,7 @@ export default function Orders() {
     }
   };
 
-  const openLabelPrintPage = (ids: number[]) => {
+  const openLabelPrintPage = (ids: string[]) => {
     if (ids.length === 0) {
       return;
     }

@@ -174,20 +174,6 @@ const parseOptionalNumber = (
   return parsed;
 };
 
-const parseOptionalInt = (
-  record: Record<string, string>,
-  aliases: readonly string[],
-): number | undefined => {
-  const raw = parseOptionalString(record, aliases);
-  if (raw === undefined || raw === null) {
-    return undefined;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed)) {
-    return undefined;
-  }
-  return parsed;
-};
 
 const parseOptionalBoolean = (
   record: Record<string, string>,
