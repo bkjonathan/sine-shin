@@ -1,0 +1,302 @@
+use sea_orm_migration::prelude::*;
+
+pub struct Migration;
+
+impl MigrationName for Migration {
+    fn name(&self) -> &str {
+        "m20231001_000001_create_core_tables"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Create shop_settings
+        manager
+            .create_table(
+                Table::create()
+                    .table(Alias::new("shop_settings"))
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Alias::new("id"))
+                            .string()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(Alias::new("shop_name")).string().not_null())
+                    .col(ColumnDef::new(Alias::new("phone")).string())
+                    .col(ColumnDef::new(Alias::new("address")).string())
+                    .col(ColumnDef::new(Alias::new("logo_path")).string())
+                    .col(ColumnDef::new(Alias::new("logo_cloud_url")).string())
+                    .col(ColumnDef::new(Alias::new("customer_id_prefix")).string())
+                    .col(ColumnDef::new(Alias::new("order_id_prefix")).string())
+                    .col(ColumnDef::new(Alias::new("created_at")).string())
+                    .col(ColumnDef::new(Alias::new("updated_at")).string())
+                    .col(
+                        ColumnDef::new(Alias::new("synced"))
+                            .integer()
+                            .default(0),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create users
+        manager
+            .create_table(
+                Table::create()
+                    .table(Alias::new("users"))
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Alias::new("id"))
+                            .string()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(Alias::new("name")).string().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("password_hash"))
+                            .string()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("role"))
+                            .string()
+                            .not_null()
+                            .default("admin"),
+                    )
+                    .col(ColumnDef::new(Alias::new("created_at")).string())
+                    .col(ColumnDef::new(Alias::new("master_password_hash")).string())
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create customers
+        manager
+            .create_table(
+                Table::create()
+                    .table(Alias::new("customers"))
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Alias::new("id"))
+                            .string()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(Alias::new("customer_id")).string())
+                    .col(ColumnDef::new(Alias::new("name")).string().not_null())
+                    .col(ColumnDef::new(Alias::new("phone")).string())
+                    .col(ColumnDef::new(Alias::new("address")).string())
+                    .col(ColumnDef::new(Alias::new("city")).string())
+                    .col(ColumnDef::new(Alias::new("social_media_url")).string())
+                    .col(ColumnDef::new(Alias::new("platform")).string())
+                    .col(ColumnDef::new(Alias::new("created_at")).string())
+                    .col(ColumnDef::new(Alias::new("updated_at")).string())
+                    .col(ColumnDef::new(Alias::new("deleted_at")).string())
+                    .col(
+                        ColumnDef::new(Alias::new("synced"))
+                            .integer()
+                            .default(0),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create orders (with ALL columns - no ALTER TABLE needed later)
+        manager
+            .create_table(
+                Table::create()
+                    .table(Alias::new("orders"))
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Alias::new("id"))
+                            .string()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(Alias::new("order_id")).string())
+                    .col(ColumnDef::new(Alias::new("customer_id")).string())
+                    .col(
+                        ColumnDef::new(Alias::new("status"))
+                            .string()
+                            .default("pending"),
+                    )
+                    .col(ColumnDef::new(Alias::new("order_from")).string())
+                    .col(ColumnDef::new(Alias::new("exchange_rate")).double())
+                    .col(ColumnDef::new(Alias::new("shipping_fee")).double())
+                    .col(ColumnDef::new(Alias::new("delivery_fee")).double())
+                    .col(ColumnDef::new(Alias::new("cargo_fee")).double())
+                    .col(ColumnDef::new(Alias::new("service_fee")).double())
+                    .col(ColumnDef::new(Alias::new("service_fee_type")).string())
+                    .col(
+                        ColumnDef::new(Alias::new("product_discount"))
+                            .double()
+                            .default(0.0),
+                    )
+                    .col(ColumnDef::new(Alias::new("order_date")).string())
+                    .col(ColumnDef::new(Alias::new("arrived_date")).string())
+                    .col(ColumnDef::new(Alias::new("shipment_date")).string())
+                    .col(ColumnDef::new(Alias::new("user_withdraw_date")).string())
+                    .col(
+                        ColumnDef::new(Alias::new("shipping_fee_paid"))
+                            .integer()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("delivery_fee_paid"))
+                            .integer()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("cargo_fee_paid"))
+                            .integer()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("service_fee_paid"))
+                            .integer()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("shipping_fee_by_shop"))
+                            .integer()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("delivery_fee_by_shop"))
+                            .integer()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("cargo_fee_by_shop"))
+                            .integer()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("exclude_cargo_fee"))
+                            .integer()
+                            .default(0),
+                    )
+                    .col(ColumnDef::new(Alias::new("created_at")).string())
+                    .col(ColumnDef::new(Alias::new("updated_at")).string())
+                    .col(ColumnDef::new(Alias::new("deleted_at")).string())
+                    .col(
+                        ColumnDef::new(Alias::new("synced"))
+                            .integer()
+                            .default(0),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create order_items
+        manager
+            .create_table(
+                Table::create()
+                    .table(Alias::new("order_items"))
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Alias::new("id"))
+                            .string()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("order_id"))
+                            .string()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(Alias::new("product_url")).string())
+                    .col(ColumnDef::new(Alias::new("product_qty")).big_integer())
+                    .col(ColumnDef::new(Alias::new("price")).double())
+                    .col(ColumnDef::new(Alias::new("product_weight")).double())
+                    .col(ColumnDef::new(Alias::new("created_at")).string())
+                    .col(ColumnDef::new(Alias::new("updated_at")).string())
+                    .col(ColumnDef::new(Alias::new("deleted_at")).string())
+                    .col(
+                        ColumnDef::new(Alias::new("synced"))
+                            .integer()
+                            .default(0),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create expenses
+        manager
+            .create_table(
+                Table::create()
+                    .table(Alias::new("expenses"))
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Alias::new("id"))
+                            .string()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(Alias::new("expense_id")).string())
+                    .col(ColumnDef::new(Alias::new("title")).string().not_null())
+                    .col(ColumnDef::new(Alias::new("amount")).double().not_null())
+                    .col(ColumnDef::new(Alias::new("category")).string())
+                    .col(ColumnDef::new(Alias::new("payment_method")).string())
+                    .col(ColumnDef::new(Alias::new("notes")).string())
+                    .col(ColumnDef::new(Alias::new("expense_date")).string())
+                    .col(ColumnDef::new(Alias::new("created_at")).string())
+                    .col(ColumnDef::new(Alias::new("updated_at")).string())
+                    .col(ColumnDef::new(Alias::new("deleted_at")).string())
+                    .col(
+                        ColumnDef::new(Alias::new("synced"))
+                            .integer()
+                            .default(0),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Indexes for expenses
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_expenses_expense_date")
+                    .table(Alias::new("expenses"))
+                    .col(Alias::new("expense_date"))
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_expenses_category")
+                    .table(Alias::new("expenses"))
+                    .col(Alias::new("category"))
+                    .to_owned(),
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        for table in [
+            "expenses",
+            "order_items",
+            "orders",
+            "customers",
+            "users",
+            "shop_settings",
+        ] {
+            manager
+                .drop_table(
+                    Table::drop()
+                        .table(Alias::new(table))
+                        .if_exists()
+                        .to_owned(),
+                )
+                .await?;
+        }
+        Ok(())
+    }
+}

@@ -2,42 +2,37 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sqlx::any::AnyPoolOptions;
+use sea_orm::{ConnectionTrait, Database, DatabaseBackend, FromQueryResult, Statement};
 use tauri::{AppHandle, Manager};
 use tracing::instrument;
 
-use crate::db::init_db;
 use crate::error::{AppError, AppResult};
 use crate::models::{DbStatus, TableSequenceResetStatus, TableStatus};
 use crate::state::AppState;
 
-/// Resets core app data tables and re-initializes schema.
+/// Resets core app data tables and re-initializes schema via migrations.
 #[instrument(skip(state, app))]
 pub async fn reset_app_data(state: Arc<AppState>, app: &AppHandle) -> AppResult<()> {
-    let pool = state.db.lock().await;
+    use sea_orm_migration::MigratorTrait;
+    use crate::migrator::Migrator;
 
-    sqlx::query("DROP TABLE IF EXISTS shop_settings")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS users")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS orders")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS order_items")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS customers")
-        .execute(&*pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS expenses")
-        .execute(&*pool)
-        .await?;
-
-    if state.db_type != "postgresql" {
-        let _ = sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
-            .execute(&*pool)
+    // Drop core tables
+    let backend = state.db.as_ref().get_database_backend();
+    for table in &[
+        "shop_settings",
+        "users",
+        "orders",
+        "order_items",
+        "customers",
+        "expenses",
+        "seaql_migrations",
+    ] {
+        let _ = state
+            .db
+            .execute(Statement::from_string(
+                backend,
+                format!("DROP TABLE IF EXISTS {}", table),
+            ))
             .await;
     }
 
@@ -48,25 +43,16 @@ pub async fn reset_app_data(state: Arc<AppState>, app: &AppHandle) -> AppResult<
         }
     }
 
-    init_db(&pool, &state.db_type)
+    Migrator::up(state.db.as_ref(), None)
         .await
         .map_err(|e| AppError::internal(e.to_string()))?;
+
     Ok(())
 }
 
-/// Backs up sqlite DB file to destination path. Not supported for PostgreSQL.
+/// Backs up sqlite DB file to destination path.
 #[instrument(skip(app))]
-pub async fn backup_database(
-    app: &AppHandle,
-    dest_path: String,
-    db_type: &str,
-) -> AppResult<u64> {
-    if db_type == "postgresql" {
-        return Err(AppError::invalid_input(
-            "File backup is not supported in PostgreSQL mode. Use your database provider's backup tools.",
-        ));
-    }
-
+pub async fn backup_database(app: &AppHandle, dest_path: String) -> AppResult<u64> {
     let app_data_dir = app.path().app_data_dir()?;
     let db_path = app_data_dir.join("shop.db");
 
@@ -80,22 +66,14 @@ pub async fn backup_database(
     Ok(bytes_copied)
 }
 
-/// Restores sqlite DB file and reconnects pool. Not supported for PostgreSQL.
-#[instrument(skip(state, app))]
+/// Restores sqlite DB file. Note: with SeaORM DatabaseConnection we cannot swap it at runtime.
+/// We copy the file and return success; the user must restart the app for changes to take effect.
+#[instrument(skip(_state, app))]
 pub async fn restore_database(
-    state: Arc<AppState>,
+    _state: Arc<AppState>,
     app: &AppHandle,
     restore_path: String,
 ) -> AppResult<()> {
-    if state.db_type == "postgresql" {
-        return Err(AppError::invalid_input(
-            "File restore is not supported in PostgreSQL mode. Use your database provider's restore tools.",
-        ));
-    }
-
-    let mut pool_guard = state.db.lock().await;
-    pool_guard.close().await;
-
     let app_data_dir = app.path().app_data_dir()?;
     let db_path = app_data_dir.join("shop.db");
 
@@ -107,47 +85,61 @@ pub async fn restore_database(
     fs::copy(&restore_source, &db_path)
         .map_err(|e| AppError::internal(format!("Failed to restore database: {}", e)))?;
 
-    let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
-    let new_pool = AnyPoolOptions::new()
-        .max_connections(5)
-        .connect(&db_url)
-        .await
-        .map_err(|e| AppError::internal(format!("Failed to reconnect to database: {}", e)))?;
-
-    *pool_guard = new_pool;
     Ok(())
 }
 
 /// Returns DB table row counts and DB file size.
 #[instrument(skip(state, app))]
 pub async fn get_db_status(state: Arc<AppState>, app: &AppHandle) -> AppResult<DbStatus> {
-    let pool = state.db.lock().await;
+    let backend = state.db.as_ref().get_database_backend();
 
-    let table_names: Vec<String> = if state.db_type == "postgresql" {
-        sqlx::query_scalar(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'",
-        )
-        .fetch_all(&*pool)
+    #[derive(FromQueryResult)]
+    struct TableRow {
+        name: String,
+    }
+
+    let tables = if backend == DatabaseBackend::Sqlite {
+        TableRow::find_by_statement(Statement::from_string(
+            backend,
+            "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'".to_string(),
+        ))
+        .all(state.db.as_ref())
         .await?
     } else {
-        sqlx::query_scalar(
-            "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-        )
-        .fetch_all(&*pool)
+        TableRow::find_by_statement(Statement::from_string(
+            backend,
+            "SELECT table_name as name FROM information_schema.tables WHERE table_schema = 'public'".to_string(),
+        ))
+        .all(state.db.as_ref())
         .await?
     };
 
+    #[derive(FromQueryResult)]
+    struct CountRow {
+        count: i64,
+    }
+
     let mut table_statuses = Vec::new();
-    for name in &table_names {
-        let query = format!("SELECT COUNT(*) FROM \"{}\"", name);
-        let count: i64 = sqlx::query_scalar(&query).fetch_one(&*pool).await?;
+    for table_row in &tables {
+        let name = &table_row.name;
+        let count = CountRow::find_by_statement(Statement::from_string(
+            backend,
+            format!("SELECT COUNT(*) as count FROM \"{}\"", name),
+        ))
+        .one(state.db.as_ref())
+        .await
+        .ok()
+        .flatten()
+        .map(|r| r.count)
+        .unwrap_or(0);
+
         table_statuses.push(TableStatus {
             name: name.clone(),
             row_count: count,
         });
     }
 
-    let size_bytes = if state.db_type != "postgresql" {
+    let size_bytes = if backend == DatabaseBackend::Sqlite {
         if let Ok(app_data_dir) = app.path().app_data_dir() {
             let db_path = app_data_dir.join("shop.db");
             fs::metadata(db_path).ok().map(|m| m.len())
@@ -159,7 +151,7 @@ pub async fn get_db_status(state: Arc<AppState>, app: &AppHandle) -> AppResult<D
     };
 
     Ok(DbStatus {
-        total_tables: table_names.len() as i64,
+        total_tables: tables.len() as i64,
         tables: table_statuses,
         size_bytes,
     })
@@ -170,70 +162,102 @@ fn quote_sqlite_identifier(identifier: &str) -> String {
 }
 
 /// Resets sqlite sequence for a table to its current MAX(id).
-/// Not supported for PostgreSQL.
 #[instrument(skip(state))]
 pub async fn reset_table_sequence(
     state: Arc<AppState>,
     table_name: String,
 ) -> AppResult<TableSequenceResetStatus> {
-    if state.db_type == "postgresql" {
-        return Err(AppError::invalid_input(
-            "Sequence reset is not applicable in PostgreSQL mode.",
-        ));
-    }
-
-    let table_name = table_name.trim();
+    let table_name = table_name.trim().to_string();
     if table_name.is_empty() {
         return Err(AppError::invalid_input("Table name is required"));
     }
 
-    let pool = state.db.lock().await;
-    let table_exists: Option<String> = sqlx::query_scalar(
-        "SELECT name FROM sqlite_schema WHERE type='table' AND name = ? AND name NOT LIKE 'sqlite_%' LIMIT 1",
-    )
-    .bind(table_name)
-    .fetch_optional(&*pool)
+    let backend = state.db.as_ref().get_database_backend();
+
+    if backend != DatabaseBackend::Sqlite {
+        return Err(AppError::invalid_input(
+            "reset_table_sequence is only supported for SQLite databases",
+        ));
+    }
+
+    #[derive(FromQueryResult)]
+    struct TableExistsRow {
+        name: String,
+    }
+
+    let table_exists = TableExistsRow::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT name FROM sqlite_schema WHERE type='table' AND name = $1 AND name NOT LIKE 'sqlite_%' LIMIT 1",
+        [table_name.clone().into()],
+    ))
+    .one(state.db.as_ref())
     .await?;
 
     let table_name = table_exists
-        .ok_or_else(|| AppError::not_found(format!("Table not found: {}", table_name)))?;
+        .ok_or_else(|| AppError::not_found(format!("Table not found: {}", table_name)))?
+        .name;
+
     let quoted_table = quote_sqlite_identifier(&table_name);
 
-    let max_id_query = format!("SELECT COALESCE(MAX(id), 0) FROM {}", quoted_table);
-    let max_id: i64 = sqlx::query_scalar(&max_id_query)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("no such column: id") {
-                AppError::invalid_input(format!(
-                    "Table '{}' does not have an 'id' column",
-                    table_name
-                ))
-            } else {
-                AppError::internal(msg)
-            }
-        })?;
+    #[derive(FromQueryResult)]
+    struct MaxIdRow {
+        max_id: i64,
+    }
 
-    let update_result = sqlx::query("UPDATE sqlite_sequence SET seq = ? WHERE name = ?")
-        .bind(max_id)
-        .bind(&table_name)
-        .execute(&*pool)
+    let max_id = MaxIdRow::find_by_statement(Statement::from_string(
+        backend,
+        format!("SELECT COALESCE(MAX(id), 0) as max_id FROM {}", quoted_table),
+    ))
+    .one(state.db.as_ref())
+    .await
+    .map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("no such column: id") {
+            AppError::invalid_input(format!(
+                "Table '{}' does not have an 'id' column",
+                table_name
+            ))
+        } else {
+            AppError::internal(msg)
+        }
+    })?
+    .map(|r| r.max_id)
+    .unwrap_or(0);
+
+    let update_result = state
+        .db
+        .execute(Statement::from_sql_and_values(
+            backend,
+            "UPDATE sqlite_sequence SET seq = $1 WHERE name = $2",
+            [max_id.into(), table_name.clone().into()],
+        ))
         .await?;
 
     if update_result.rows_affected() == 0 {
-        sqlx::query("INSERT INTO sqlite_sequence(name, seq) VALUES(?, ?)")
-            .bind(&table_name)
-            .bind(max_id)
-            .execute(&*pool)
+        state
+            .db
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "INSERT INTO sqlite_sequence(name, seq) VALUES($1, $2)",
+                [table_name.clone().into(), max_id.into()],
+            ))
             .await?;
     }
 
-    let sequence_value: i64 =
-        sqlx::query_scalar("SELECT COALESCE(seq, 0) FROM sqlite_sequence WHERE name = ? LIMIT 1")
-            .bind(&table_name)
-            .fetch_one(&*pool)
-            .await?;
+    #[derive(FromQueryResult)]
+    struct SeqRow {
+        seq: i64,
+    }
+
+    let sequence_value = SeqRow::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT COALESCE(seq, 0) as seq FROM sqlite_sequence WHERE name = $1 LIMIT 1",
+        [table_name.clone().into()],
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .map(|r| r.seq)
+    .unwrap_or(0);
 
     Ok(TableSequenceResetStatus {
         table_name,

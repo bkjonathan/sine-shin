@@ -7,9 +7,9 @@ use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
+use sea_orm::{ConnectionTrait, FromQueryResult, Statement};
 use tauri::AppHandle;
 use tracing::instrument;
-
 use uuid::Uuid;
 
 use crate::db::copy_logo_to_app_data;
@@ -30,36 +30,41 @@ pub async fn save_shop_setup(
     logo_file_path: String,
 ) -> AppResult<()> {
     let internal_logo_path = copy_logo_to_app_data(app, &logo_file_path)?;
-    let pool = state.db.lock().await;
-    let d = state.dialect();
+    let backend = state.db.as_ref().get_database_backend();
+    let new_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
 
-    let shop_id = Uuid::new_v4().to_string();
-    let insert_sql = format!(
-        "INSERT INTO shop_settings (id, shop_name, phone, address, logo_path) \
-         VALUES ({}, {}, {}, {}, {})",
-        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5)
-    );
-    d.query(&insert_sql)
-        .bind(&shop_id)
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&internal_logo_path)
-        .execute(&*pool)
+    state
+        .db
+        .execute(Statement::from_sql_and_values(
+            backend,
+            "INSERT INTO shop_settings (id, shop_name, phone, address, logo_path, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+            [
+                new_id.clone().into(),
+                name.into(),
+                phone.into(),
+                address.into(),
+                internal_logo_path.into(),
+                now.into(),
+            ],
+        ))
         .await?;
 
-    if let Ok(record) =
-        d.query_as::<ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await
+    if let Ok(Some(record)) = ShopSettings::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, shop_name, phone, address, logo_path, logo_cloud_url, customer_id_prefix, order_id_prefix, created_at, updated_at FROM shop_settings ORDER BY id DESC LIMIT 1",
+        [],
+    ))
+    .one(state.db.as_ref())
+    .await
     {
-        let record_id = record.id.clone();
+        let id = record.id.clone();
         enqueue_sync(
-            &pool,
+            state.db.as_ref(),
             app,
             "shop_settings",
             "INSERT",
-            &record_id,
+            &id,
             serde_json::json!(record),
         )
         .await;
@@ -71,12 +76,16 @@ pub async fn save_shop_setup(
 /// Returns latest shop settings row.
 #[instrument(skip(state))]
 pub async fn get_shop_settings(state: Arc<AppState>) -> AppResult<ShopSettings> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
-    let settings: ShopSettings =
-        d.query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await?;
+    let backend = state.db.as_ref().get_database_backend();
+    let settings = ShopSettings::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, shop_name, phone, address, logo_path, logo_cloud_url, customer_id_prefix, order_id_prefix, created_at, updated_at FROM shop_settings ORDER BY id DESC LIMIT 1",
+        [],
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .ok_or_else(|| AppError::not_found("No shop settings found"))?;
+
     Ok(settings)
 }
 
@@ -92,13 +101,21 @@ pub async fn update_shop_settings(
     customer_id_prefix: Option<String>,
     order_id_prefix: Option<String>,
 ) -> AppResult<()> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
+    let backend = state.db.as_ref().get_database_backend();
 
-    let latest_id: Option<String> =
-        d.query_scalar("SELECT id FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_optional(&*pool)
-            .await?;
+    #[derive(FromQueryResult)]
+    struct IdRow {
+        id: String,
+    }
+
+    let latest_id = IdRow::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id FROM shop_settings ORDER BY id DESC LIMIT 1",
+        [],
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .map(|r| r.id);
 
     if let Some(id) = latest_id {
         let new_internal_logo_path = match logo_path {
@@ -106,58 +123,63 @@ pub async fn update_shop_settings(
             None => None,
         };
 
+        let now = chrono::Utc::now().to_rfc3339();
+
         if let Some(internal_path) = new_internal_logo_path {
-            let sql = format!(
-                "UPDATE shop_settings SET \
-                 shop_name = {}, phone = {}, address = {}, logo_path = {}, \
-                 customer_id_prefix = {}, order_id_prefix = {} \
-                 WHERE id = {}",
-                d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.p(7)
-            );
-            d.query(&sql)
-                .bind(shop_name)
-                .bind(phone)
-                .bind(address)
-                .bind(internal_path)
-                .bind(customer_id_prefix)
-                .bind(order_id_prefix)
-                .bind(id)
-                .execute(&*pool)
+            state
+                .db
+                .execute(Statement::from_sql_and_values(
+                    backend,
+                    "UPDATE shop_settings SET shop_name = $1, phone = $2, address = $3, logo_path = $4, customer_id_prefix = $5, order_id_prefix = $6, updated_at = $7 WHERE id = $8",
+                    [
+                        shop_name.into(),
+                        phone.into(),
+                        address.into(),
+                        internal_path.into(),
+                        customer_id_prefix.into(),
+                        order_id_prefix.into(),
+                        now.into(),
+                        id.clone().into(),
+                    ],
+                ))
                 .await?;
         } else {
-            let sql = format!(
-                "UPDATE shop_settings SET \
-                 shop_name = {}, phone = {}, address = {}, \
-                 customer_id_prefix = {}, order_id_prefix = {} \
-                 WHERE id = {}",
-                d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6)
-            );
-            d.query(&sql)
-                .bind(shop_name)
-                .bind(phone)
-                .bind(address)
-                .bind(customer_id_prefix)
-                .bind(order_id_prefix)
-                .bind(id)
-                .execute(&*pool)
+            state
+                .db
+                .execute(Statement::from_sql_and_values(
+                    backend,
+                    "UPDATE shop_settings SET shop_name = $1, phone = $2, address = $3, customer_id_prefix = $4, order_id_prefix = $5, updated_at = $6 WHERE id = $7",
+                    [
+                        shop_name.into(),
+                        phone.into(),
+                        address.into(),
+                        customer_id_prefix.into(),
+                        order_id_prefix.into(),
+                        now.into(),
+                        id.clone().into(),
+                    ],
+                ))
                 .await?;
         }
     } else {
         return Err(AppError::not_found("No shop settings found to update"));
     }
 
-    if let Ok(record) =
-        d.query_as::<ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await
+    if let Ok(Some(record)) = ShopSettings::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, shop_name, phone, address, logo_path, logo_cloud_url, customer_id_prefix, order_id_prefix, created_at, updated_at FROM shop_settings ORDER BY id DESC LIMIT 1",
+        [],
+    ))
+    .one(state.db.as_ref())
+    .await
     {
-        let record_id = record.id.clone();
+        let id = record.id.clone();
         enqueue_sync(
-            &pool,
+            state.db.as_ref(),
             app,
             "shop_settings",
             "UPDATE",
-            &record_id,
+            &id,
             serde_json::json!(record),
         )
         .await;
@@ -218,13 +240,15 @@ pub async fn upload_shop_logo_to_s3(
         None => None,
     };
 
-    let pool = state.db.lock().await;
-    let d = state.dialect();
-    let latest: ShopSettings =
-        d.query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await?;
-    drop(pool);
+    let backend = state.db.as_ref().get_database_backend();
+    let latest = ShopSettings::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, shop_name, phone, address, logo_path, logo_cloud_url, customer_id_prefix, order_id_prefix, created_at, updated_at FROM shop_settings ORDER BY id DESC LIMIT 1",
+        [],
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .ok_or_else(|| AppError::not_found("No shop settings found"))?;
 
     let logo_to_upload = new_internal_logo_path
         .clone()
@@ -286,42 +310,51 @@ pub async fn upload_shop_logo_to_s3(
         format!("{}/{}", imagekit_base_url, object_key)
     };
 
-    let pool = state.db.lock().await;
+    let now = chrono::Utc::now().to_rfc3339();
     if let Some(local_logo_path) = new_internal_logo_path {
-        let sql = format!(
-            "UPDATE shop_settings SET logo_path = {}, logo_cloud_url = {} WHERE id = {}",
-            d.p(1), d.p(2), d.p(3)
-        );
-        d.query(&sql)
-            .bind(local_logo_path)
-            .bind(&cloud_url)
-            .bind(&latest.id)
-            .execute(&*pool)
+        state
+            .db
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "UPDATE shop_settings SET logo_path = $1, logo_cloud_url = $2, updated_at = $3 WHERE id = $4",
+                [
+                    local_logo_path.into(),
+                    cloud_url.clone().into(),
+                    now.into(),
+                    latest.id.clone().into(),
+                ],
+            ))
             .await?;
     } else {
-        let sql = format!(
-            "UPDATE shop_settings SET logo_cloud_url = {} WHERE id = {}",
-            d.p(1), d.p(2)
-        );
-        d.query(&sql)
-            .bind(&cloud_url)
-            .bind(&latest.id)
-            .execute(&*pool)
+        state
+            .db
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "UPDATE shop_settings SET logo_cloud_url = $1, updated_at = $2 WHERE id = $3",
+                [
+                    cloud_url.clone().into(),
+                    now.into(),
+                    latest.id.clone().into(),
+                ],
+            ))
             .await?;
     }
 
-    if let Ok(record) =
-        d.query_as::<ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
-            .fetch_one(&*pool)
-            .await
+    if let Ok(Some(record)) = ShopSettings::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, shop_name, phone, address, logo_path, logo_cloud_url, customer_id_prefix, order_id_prefix, created_at, updated_at FROM shop_settings ORDER BY id DESC LIMIT 1",
+        [],
+    ))
+    .one(state.db.as_ref())
+    .await
     {
-        let record_id = record.id.clone();
+        let id = record.id.clone();
         enqueue_sync(
-            &pool,
+            state.db.as_ref(),
             app,
             "shop_settings",
             "UPDATE",
-            &record_id,
+            &id,
             serde_json::json!(record),
         )
         .await;

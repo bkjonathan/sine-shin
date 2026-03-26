@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] sea_orm::DbErr),
     #[error("HTTP client error: {0}")]
     Http(#[from] reqwest::Error),
     #[error("IO error: {0}")]

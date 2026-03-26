@@ -1,5 +1,9 @@
 use std::sync::Arc;
 
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter,
+    Set, Statement,
+};
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
@@ -20,6 +24,7 @@ const MAX_CUSTOMERS_PAGE_SIZE: i64 = 100;
 pub async fn create_customer(
     state: Arc<AppState>,
     app: &AppHandle,
+    _uuid: Option<String>,
     name: String,
     phone: Option<String>,
     address: Option<String>,
@@ -32,99 +37,102 @@ pub async fn create_customer(
     updated_at: Option<String>,
     deleted_at: Option<String>,
 ) -> AppResult<String> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
-    let record_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    use crate::entities::customers;
+
     let normalized_customer_id = customer_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    let insert_sql = format!(
-        "INSERT INTO customers \
-         (id, customer_id, name, phone, address, city, social_media_url, platform, \
-          created_at, updated_at, deleted_at) \
-         VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
-        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.p(7), d.p(8),
-        d.coalesce_or_now(9),
-        d.p(10), d.p(11)
-    );
+    let new_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    let now = chrono::Utc::now().to_rfc3339();
 
-    let rowid = d.query(&insert_sql)
-        .bind(&record_id)
-        .bind(&normalized_customer_id)
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&city)
-        .bind(&social_media_url)
-        .bind(&platform)
-        .bind(&created_at)
-        .bind(&updated_at)
-        .bind(&deleted_at)
-        .execute(&*pool)
-        .await?
-        .last_insert_id();
+    customers::ActiveModel {
+        id: Set(new_id.clone()),
+        name: Set(name.clone()),
+        phone: Set(phone),
+        address: Set(address),
+        city: Set(city),
+        social_media_url: Set(social_media_url),
+        platform: Set(platform),
+        customer_id: Set(normalized_customer_id.clone()),
+        created_at: Set(Some(created_at.unwrap_or_else(|| now.clone()))),
+        updated_at: Set(updated_at.or(Some(now.clone()))),
+        deleted_at: Set(deleted_at),
+        ..Default::default()
+    }
+    .insert(state.db.as_ref())
+    .await?;
 
     if normalized_customer_id.is_none() {
-        let prefix: Option<String> = d.query_scalar(
-            "SELECT customer_id_prefix FROM shop_settings ORDER BY created_at DESC LIMIT 1",
-        )
-        .fetch_optional(&*pool)
-        .await
-        .unwrap_or(Some(DEFAULT_CUSTOMER_ID_PREFIX.to_string()));
+        let backend = state.db.as_ref().get_database_backend();
+        let prefix: Option<String> = {
+            #[derive(FromQueryResult)]
+            struct PrefixRow {
+                customer_id_prefix: Option<String>,
+            }
+            PrefixRow::find_by_statement(Statement::from_sql_and_values(
+                backend,
+                "SELECT customer_id_prefix FROM shop_settings ORDER BY id DESC LIMIT 1",
+                [],
+            ))
+            .one(state.db.as_ref())
+            .await
+            .unwrap_or(None)
+            .and_then(|r| r.customer_id_prefix)
+        };
 
         let prefix_str = prefix.unwrap_or_else(|| DEFAULT_CUSTOMER_ID_PREFIX.to_string());
 
-        let seq_num: i64 = if d.is_postgres() {
-            d.query_scalar("SELECT COUNT(*) FROM customers")
-                .fetch_one(&*pool)
-                .await
-                .unwrap_or(1)
-        } else {
-            rowid.unwrap_or(0) as i64
-        };
+        // Get count for sequence number
+        let count = crate::entities::customers::Entity::find()
+            .count(state.db.as_ref())
+            .await
+            .unwrap_or(1);
+        let new_customer_id = format!("{}{:05}", prefix_str, count);
 
-        let new_customer_id = format!("{prefix_str}{:05}", seq_num);
-
-        let update_id_sql = format!(
-            "UPDATE customers SET customer_id = {} WHERE id = {}",
-            d.p(1), d.p(2)
-        );
-        let _ = d.query(&update_id_sql)
-            .bind(new_customer_id)
-            .bind(&record_id)
-            .execute(&*pool)
+        let _ = state
+            .db
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "UPDATE customers SET customer_id = $1 WHERE id = $2",
+                [new_customer_id.into(), new_id.clone().into()],
+            ))
             .await;
     }
 
-    let select_sql = format!("SELECT * FROM customers WHERE id = {}", d.p(1));
-    if let Ok(record) = d.query_as::<Customer>(&select_sql)
-        .bind(&record_id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(Some(record)) = Customer::find_by_statement(Statement::from_sql_and_values(
+        state.db.as_ref().get_database_backend(),
+        "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at FROM customers WHERE id = $1",
+        [new_id.clone().into()],
+    ))
+    .one(state.db.as_ref())
+    .await
     {
         enqueue_sync(
-            &pool,
+            state.db.as_ref(),
             app,
             "customers",
             "INSERT",
-            &record_id,
+            &new_id,
             serde_json::json!(record),
         )
         .await;
     }
 
-    Ok(record_id)
+    Ok(new_id)
 }
 
 /// Loads all customers in reverse creation order.
 #[instrument(skip(state))]
 pub async fn get_customers(state: Arc<AppState>) -> AppResult<Vec<Customer>> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
-    let customers = d.query_as::<Customer>("SELECT * FROM customers ORDER BY created_at DESC")
-        .fetch_all(&*pool)
-        .await?;
+    let backend = state.db.as_ref().get_database_backend();
+    let customers = Customer::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at FROM customers ORDER BY created_at DESC",
+        [],
+    ))
+    .all(state.db.as_ref())
+    .await?;
 
     Ok(customers)
 }
@@ -140,8 +148,7 @@ pub async fn get_customers_paginated(
     sort_by: Option<String>,
     sort_order: Option<String>,
 ) -> AppResult<PaginatedCustomers> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
+    let backend = state.db.as_ref().get_database_backend();
 
     let requested_page_size = page_size.unwrap_or(DEFAULT_CUSTOMERS_PAGE_SIZE);
     let no_limit = requested_page_size <= 0;
@@ -181,65 +188,90 @@ pub async fn get_customers_paginated(
         _ => "DESC",
     };
 
-    let order_clause = format!("ORDER BY {sort_column} {sort_direction}");
+    let where_clause = if has_search {
+        format!("WHERE COALESCE({}, '') LIKE $1", search_column)
+    } else {
+        String::new()
+    };
+
+    let count_sql = format!("SELECT COUNT(*) as count FROM customers {}", where_clause);
+    let data_sql = if no_limit {
+        format!(
+            "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at FROM customers {} ORDER BY {} {}",
+            where_clause, sort_column, sort_direction
+        )
+    } else {
+        format!(
+            "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at FROM customers {} ORDER BY {} {} LIMIT $2 OFFSET $3",
+            where_clause, sort_column, sort_direction
+        )
+    };
+
+    #[derive(FromQueryResult)]
+    struct CountRow {
+        count: i64,
+    }
 
     let (total, customers) = if has_search {
-        let count_sql = format!(
-            "SELECT COUNT(*) FROM customers WHERE COALESCE({search_column}, '') LIKE {}",
-            d.p(1)
-        );
-        let total: i64 = d.query_scalar(&count_sql)
-            .bind(&search_pattern)
-            .fetch_one(&*pool)
-            .await?;
+        let total_row = CountRow::find_by_statement(Statement::from_sql_and_values(
+            backend,
+            &count_sql,
+            [search_pattern.clone().into()],
+        ))
+        .one(state.db.as_ref())
+        .await?
+        .map(|r| r.count)
+        .unwrap_or(0);
 
         let customers = if no_limit {
-            let data_sql = format!(
-                "SELECT * FROM customers WHERE COALESCE({search_column}, '') LIKE {} {order_clause}",
-                d.p(1)
-            );
-            d.query_as::<Customer>(&data_sql)
-                .bind(&search_pattern)
-                .fetch_all(&*pool)
-                .await?
+            Customer::find_by_statement(Statement::from_sql_and_values(
+                backend,
+                &data_sql,
+                [search_pattern.into()],
+            ))
+            .all(state.db.as_ref())
+            .await?
         } else {
-            let data_sql = format!(
-                "SELECT * FROM customers WHERE COALESCE({search_column}, '') LIKE {} \
-                 {order_clause} LIMIT {} OFFSET {}",
-                d.p(1), d.p(2), d.p(3)
-            );
-            d.query_as::<Customer>(&data_sql)
-                .bind(&search_pattern)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await?
+            Customer::find_by_statement(Statement::from_sql_and_values(
+                backend,
+                &data_sql,
+                [search_pattern.into(), page_size.into(), offset.into()],
+            ))
+            .all(state.db.as_ref())
+            .await?
         };
 
-        (total, customers)
+        (total_row, customers)
     } else {
-        let total: i64 = d.query_scalar("SELECT COUNT(*) FROM customers")
-            .fetch_one(&*pool)
-            .await?;
+        let total_row = CountRow::find_by_statement(Statement::from_sql_and_values(
+            backend,
+            &count_sql,
+            [],
+        ))
+        .one(state.db.as_ref())
+        .await?
+        .map(|r| r.count)
+        .unwrap_or(0);
 
         let customers = if no_limit {
-            let data_sql = format!("SELECT * FROM customers {order_clause}");
-            d.query_as::<Customer>(&data_sql)
-                .fetch_all(&*pool)
-                .await?
+            Customer::find_by_statement(Statement::from_sql_and_values(
+                backend,
+                &data_sql,
+                [],
+            ))
+            .all(state.db.as_ref())
+            .await?
         } else {
-            let data_sql = format!(
-                "SELECT * FROM customers {order_clause} LIMIT {} OFFSET {}",
-                d.p(1), d.p(2)
-            );
-            d.query_as::<Customer>(&data_sql)
-                .bind(page_size)
-                .bind(offset)
-                .fetch_all(&*pool)
-                .await?
+            Customer::find_by_statement(Statement::from_sql_and_values(
+                backend,
+                &data_sql,
+                [page_size.into(), offset.into()],
+            ))
+            .all(state.db.as_ref())
+            .await?
         };
 
-        (total, customers)
+        (total_row, customers)
     };
 
     let response_page_size = if no_limit { total.max(0) } else { page_size };
@@ -263,14 +295,15 @@ pub async fn get_customers_paginated(
 /// Loads a single customer by id.
 #[instrument(skip(state))]
 pub async fn get_customer(state: Arc<AppState>, id: String) -> AppResult<Customer> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
-    let sql = format!("SELECT * FROM customers WHERE id = {}", d.p(1));
-    let customer = d.query_as::<Customer>(&sql)
-        .bind(&id)
-        .fetch_optional(&*pool)
-        .await?
-        .ok_or_else(|| AppError::not_found("Customer not found"))?;
+    let backend = state.db.as_ref().get_database_backend();
+    let customer = Customer::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at FROM customers WHERE id = $1",
+        [id.into()],
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .ok_or_else(|| AppError::not_found("Customer not found"))?;
 
     Ok(customer)
 }
@@ -282,6 +315,7 @@ pub async fn update_customer(
     state: Arc<AppState>,
     app: &AppHandle,
     id: String,
+    _uuid: Option<String>,
     customer_id: Option<String>,
     name: String,
     phone: Option<String>,
@@ -293,50 +327,45 @@ pub async fn update_customer(
     updated_at: Option<String>,
     deleted_at: Option<String>,
 ) -> AppResult<()> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
+    let backend = state.db.as_ref().get_database_backend();
     let normalized_customer_id = customer_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    let update_sql = format!(
-        "UPDATE customers SET \
-         customer_id = {}, name = {}, phone = {}, address = {}, city = {}, \
-         social_media_url = {}, platform = {}, \
-         created_at = COALESCE({}, created_at), \
-         updated_at = {}, \
-         deleted_at = {} \
-         WHERE id = {}",
-        d.p(1), d.p(2), d.p(3), d.p(4), d.p(5), d.p(6), d.p(7),
-        d.p(8),
-        d.coalesce_or_now(9),
-        d.p(10),
-        d.p(11)
-    );
+    let now = chrono::Utc::now().to_rfc3339();
 
-    d.query(&update_sql)
-        .bind(&normalized_customer_id)
-        .bind(&name)
-        .bind(&phone)
-        .bind(&address)
-        .bind(&city)
-        .bind(&social_media_url)
-        .bind(&platform)
-        .bind(&created_at)
-        .bind(&updated_at)
-        .bind(&deleted_at)
-        .bind(&id)
-        .execute(&*pool)
+    state
+        .db
+        .execute(Statement::from_sql_and_values(
+            backend,
+            "UPDATE customers SET customer_id = $1, name = $2, phone = $3, address = $4, city = $5, social_media_url = $6, platform = $7, created_at = COALESCE($8, created_at), updated_at = COALESCE($9, $10), deleted_at = $11 WHERE id = $12",
+            [
+                normalized_customer_id.into(),
+                name.into(),
+                phone.into(),
+                address.into(),
+                city.into(),
+                social_media_url.into(),
+                platform.into(),
+                created_at.into(),
+                updated_at.into(),
+                now.into(),
+                deleted_at.into(),
+                id.clone().into(),
+            ],
+        ))
         .await?;
 
-    let select_sql = format!("SELECT * FROM customers WHERE id = {}", d.p(1));
-    if let Ok(record) = d.query_as::<Customer>(&select_sql)
-        .bind(&id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(Some(record)) = Customer::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at FROM customers WHERE id = $1",
+        [id.clone().into()],
+    ))
+    .one(state.db.as_ref())
+    .await
     {
         enqueue_sync(
-            &pool,
+            state.db.as_ref(),
             app,
             "customers",
             "UPDATE",
@@ -351,28 +380,33 @@ pub async fn update_customer(
 
 /// Soft-deletes a customer and enqueues sync payload.
 #[instrument(skip(state, app))]
-pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: String) -> AppResult<()> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
+pub async fn delete_customer(
+    state: Arc<AppState>,
+    app: &AppHandle,
+    id: String,
+) -> AppResult<()> {
+    let backend = state.db.as_ref().get_database_backend();
+    let now = chrono::Utc::now().to_rfc3339();
 
-    let delete_sql = format!(
-        "UPDATE customers SET deleted_at = {now}, updated_at = {now} WHERE id = {p1}",
-        now = d.now(),
-        p1 = d.p(1)
-    );
-    d.query(&delete_sql)
-        .bind(&id)
-        .execute(&*pool)
+    state
+        .db
+        .execute(Statement::from_sql_and_values(
+            backend,
+            "UPDATE customers SET deleted_at = $1, updated_at = $2 WHERE id = $3",
+            [now.clone().into(), now.into(), id.clone().into()],
+        ))
         .await?;
 
-    let select_sql = format!("SELECT * FROM customers WHERE id = {}", d.p(1));
-    if let Ok(record) = d.query_as::<Customer>(&select_sql)
-        .bind(&id)
-        .fetch_one(&*pool)
-        .await
+    if let Ok(Some(record)) = Customer::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, customer_id, name, phone, address, city, social_media_url, platform, created_at, updated_at, deleted_at FROM customers WHERE id = $1",
+        [id.clone().into()],
+    ))
+    .one(state.db.as_ref())
+    .await
     {
         enqueue_sync(
-            &pool,
+            state.db.as_ref(),
             app,
             "customers",
             "DELETE",

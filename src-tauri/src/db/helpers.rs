@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use sqlx::AnyPool;
-use tokio::sync::Mutex;
+use sea_orm::{ConnectionTrait, DatabaseConnection, FromQueryResult, Statement};
 
 use crate::error::{AppError, AppResult};
 use crate::sync::SyncConfig;
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, FromQueryResult)]
 struct SyncConfigRow {
     id: i64,
     supabase_url: String,
@@ -17,13 +16,14 @@ struct SyncConfigRow {
 }
 
 /// Loads the active sync configuration from the local database.
-pub async fn load_active_sync_config(db: &Arc<Mutex<AnyPool>>) -> AppResult<SyncConfig> {
-    let pool = db.lock().await;
-
-    let row = sqlx::query_as::<_, SyncConfigRow>(
+pub async fn load_active_sync_config(db: &Arc<DatabaseConnection>) -> AppResult<SyncConfig> {
+    let backend = db.as_ref().get_database_backend();
+    let row = SyncConfigRow::find_by_statement(Statement::from_sql_and_values(
+        backend,
         "SELECT id, supabase_url, supabase_anon_key, supabase_service_key, sync_enabled, COALESCE(sync_interval, 30) as sync_interval FROM sync_config WHERE is_active = 1 ORDER BY id DESC LIMIT 1",
-    )
-    .fetch_optional(&*pool)
+        [],
+    ))
+    .one(db.as_ref())
     .await?;
 
     let row = row.ok_or(AppError::SyncConfigNotFound)?;

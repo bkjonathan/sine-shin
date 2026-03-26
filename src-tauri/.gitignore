@@ -6,3 +6,8 @@
 # will have schema files for capabilities auto-completion
 /gen/schemas
 .env
+DS_Store
+.idea
+.vscode
+*.log
+/.claude

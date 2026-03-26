@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use chrono::NaiveDate;
+use sea_orm::{ConnectionTrait, FromQueryResult, Statement};
 use tracing::instrument;
 
 use crate::error::{AppError, AppResult};
 use crate::models::AccountSummary;
 use crate::state::AppState;
 
-#[derive(Debug, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, FromQueryResult)]
 struct IncomeRow {
     total_income: f64,
     total_orders: i64,
@@ -16,7 +17,7 @@ struct IncomeRow {
     total_cargo_fee: f64,
 }
 
-#[derive(Debug, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, FromQueryResult)]
 struct ExpenseRow {
     total_expenses: f64,
     total_records: i64,
@@ -29,7 +30,7 @@ pub async fn get_account_summary(
     date_from: Option<String>,
     date_to: Option<String>,
 ) -> AppResult<AccountSummary> {
-    let pool = state.db.lock().await;
+    let backend = state.db.as_ref().get_database_backend();
     let date_range = normalize_date_range(date_from, date_to)?;
 
     let mut orders_date_filter = String::new();
@@ -77,9 +78,16 @@ pub async fn get_account_summary(
         orders_date_filter
     );
 
-    let income_all: IncomeRow = sqlx::query_as(&income_all_query).fetch_one(&*pool).await?;
+    let income_all = IncomeRow::find_by_statement(Statement::from_string(
+        backend,
+        income_all_query,
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .ok_or_else(|| AppError::internal("Failed to compute income summary"))?;
 
-    let income_month: IncomeRow = sqlx::query_as(
+    let income_month = IncomeRow::find_by_statement(Statement::from_string(
+        backend,
         r#"
         SELECT
             COALESCE(SUM(
@@ -110,10 +118,11 @@ pub async fn get_account_summary(
         ) agg ON agg.order_id = o.id
         WHERE o.deleted_at IS NULL
           AND strftime('%Y-%m', COALESCE(o.order_date, o.created_at)) = strftime('%Y-%m', 'now')
-        "#,
-    )
-    .fetch_one(&*pool)
-    .await?;
+        "#.to_string(),
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .ok_or_else(|| AppError::internal("Failed to compute monthly income"))?;
 
     let expense_all_query = format!(
         r#"
@@ -126,9 +135,16 @@ pub async fn get_account_summary(
         expenses_date_filter
     );
 
-    let expense_all: ExpenseRow = sqlx::query_as(&expense_all_query).fetch_one(&*pool).await?;
+    let expense_all = ExpenseRow::find_by_statement(Statement::from_string(
+        backend,
+        expense_all_query,
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .ok_or_else(|| AppError::internal("Failed to compute expense summary"))?;
 
-    let expense_month: ExpenseRow = sqlx::query_as(
+    let expense_month = ExpenseRow::find_by_statement(Statement::from_string(
+        backend,
         r#"
         SELECT
             COALESCE(SUM(amount), 0) as total_expenses,
@@ -136,10 +152,11 @@ pub async fn get_account_summary(
         FROM expenses
         WHERE deleted_at IS NULL
           AND strftime('%Y-%m', COALESCE(expense_date, created_at)) = strftime('%Y-%m', 'now')
-        "#,
-    )
-    .fetch_one(&*pool)
-    .await?;
+        "#.to_string(),
+    ))
+    .one(state.db.as_ref())
+    .await?
+    .ok_or_else(|| AppError::internal("Failed to compute monthly expenses"))?;
 
     Ok(AccountSummary {
         total_income: income_all.total_income,

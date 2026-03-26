@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, Statement};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
@@ -10,22 +11,23 @@ use crate::state::AppState;
 /// Registers a user by hashing and storing credentials.
 #[instrument(skip(state, password), fields(username = %name))]
 pub async fn register_user(state: Arc<AppState>, name: String, password: String) -> AppResult<()> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
-    let user_id = Uuid::new_v4().to_string();
+    use crate::entities::users;
+    use sea_orm::{ActiveModelTrait, Set};
+
+    let id = Uuid::new_v4().to_string();
     let password_hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)?;
+    let now = chrono::Utc::now().to_rfc3339();
 
-    let sql = format!(
-        "INSERT INTO users (id, name, password_hash) VALUES ({}, {}, {})",
-        d.p(1), d.p(2), d.p(3)
-    );
-
-    d.query(&sql)
-        .bind(user_id)
-        .bind(name)
-        .bind(password_hash)
-        .execute(&*pool)
-        .await?;
+    users::ActiveModel {
+        id: Set(id),
+        name: Set(name),
+        password_hash: Set(password_hash),
+        role: Set("admin".to_string()),
+        created_at: Set(Some(now)),
+        ..Default::default()
+    }
+    .insert(state.db.as_ref())
+    .await?;
 
     info!("user registered");
     Ok(())
@@ -34,21 +36,22 @@ pub async fn register_user(state: Arc<AppState>, name: String, password: String)
 /// Logs in a user by validating password hash.
 #[instrument(skip(state, password), fields(username = %name))]
 pub async fn login_user(state: Arc<AppState>, name: String, password: String) -> AppResult<User> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
+    use crate::entities::users;
 
-    let sql = format!("SELECT * FROM users WHERE name = {}", d.p(1));
-
-    let user: Option<User> = d.query_as::<User>(&sql)
-        .bind(&name)
-        .fetch_optional(&*pool)
-        .await?;
+    let backend = state.db.as_ref().get_database_backend();
+    let user = User::find_by_statement(Statement::from_sql_and_values(
+        backend,
+        "SELECT id, name, password_hash, role, created_at FROM users WHERE name = $1 LIMIT 1",
+        [name.clone().into()],
+    ))
+    .one(state.db.as_ref())
+    .await?;
 
     match user {
         Some(user) => {
             let valid = bcrypt::verify(password, &user.password_hash)?;
             if valid {
-                info!(user_id = user.id, "user login successful");
+                info!("user login successful");
                 Ok(user)
             } else {
                 Err(AppError::invalid_input("Invalid password"))
@@ -61,15 +64,13 @@ pub async fn login_user(state: Arc<AppState>, name: String, password: String) ->
 /// Checks whether onboarding data exists.
 #[instrument(skip(state))]
 pub async fn check_is_onboarded(state: Arc<AppState>) -> AppResult<bool> {
-    let pool = state.db.lock().await;
-    let d = state.dialect();
+    use crate::entities::{shop_settings, users};
 
-    let shop_count: i64 = d.query_scalar("SELECT COUNT(*) FROM shop_settings")
-        .fetch_one(&*pool)
+    let shop_count = shop_settings::Entity::find()
+        .count(state.db.as_ref())
         .await?;
-
-    let user_count: i64 = d.query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(&*pool)
+    let user_count = users::Entity::find()
+        .count(state.db.as_ref())
         .await?;
 
     Ok(shop_count > 0 && user_count > 0)

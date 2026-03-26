@@ -1,22 +1,21 @@
+use sea_orm::FromQueryResult;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct ShopSettings {
     pub id: String,
     pub shop_name: String,
     pub phone: Option<String>,
     pub address: Option<String>,
     pub logo_path: Option<String>,
-    #[sqlx(default)]
     pub logo_cloud_url: Option<String>,
     pub customer_id_prefix: Option<String>,
     pub order_id_prefix: Option<String>,
     pub created_at: Option<String>,
-    #[sqlx(default)]
     pub updated_at: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct User {
     pub id: String,
     pub name: String,
@@ -25,7 +24,7 @@ pub struct User {
     pub created_at: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct Customer {
     pub id: String,
     pub customer_id: Option<String>,
@@ -36,9 +35,7 @@ pub struct Customer {
     pub social_media_url: Option<String>,
     pub platform: Option<String>,
     pub created_at: Option<String>,
-    #[sqlx(default)]
     pub updated_at: Option<String>,
-    #[sqlx(default)]
     pub deleted_at: Option<String>,
 }
 
@@ -60,7 +57,7 @@ pub struct PaginatedOrders {
     pub total_pages: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct Expense {
     pub id: String,
     pub expense_id: Option<String>,
@@ -71,9 +68,7 @@ pub struct Expense {
     pub notes: Option<String>,
     pub expense_date: Option<String>,
     pub created_at: Option<String>,
-    #[sqlx(default)]
     pub updated_at: Option<String>,
-    #[sqlx(default)]
     pub deleted_at: Option<String>,
 }
 
@@ -86,7 +81,7 @@ pub struct PaginatedExpenses {
     pub total_pages: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct Order {
     pub id: String,
     pub order_id: Option<String>,
@@ -105,21 +100,19 @@ pub struct Order {
     pub service_fee: Option<f64>,
     pub product_discount: Option<f64>,
     pub service_fee_type: Option<String>,
-    pub shipping_fee_paid: Option<bool>,
-    pub delivery_fee_paid: Option<bool>,
-    pub cargo_fee_paid: Option<bool>,
-    pub service_fee_paid: Option<bool>,
-    pub shipping_fee_by_shop: Option<bool>,
-    pub delivery_fee_by_shop: Option<bool>,
-    pub cargo_fee_by_shop: Option<bool>,
-    pub exclude_cargo_fee: Option<bool>,
-    #[sqlx(default)]
+    pub shipping_fee_paid: Option<i32>,
+    pub delivery_fee_paid: Option<i32>,
+    pub cargo_fee_paid: Option<i32>,
+    pub service_fee_paid: Option<i32>,
+    pub shipping_fee_by_shop: Option<i32>,
+    pub delivery_fee_by_shop: Option<i32>,
+    pub cargo_fee_by_shop: Option<i32>,
+    pub exclude_cargo_fee: Option<i32>,
     pub updated_at: Option<String>,
-    #[sqlx(default)]
     pub deleted_at: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct OrderItem {
     pub id: String,
     pub order_id: String,
@@ -128,9 +121,7 @@ pub struct OrderItem {
     pub price: Option<f64>,
     pub product_weight: Option<f64>,
     pub created_at: Option<String>,
-    #[sqlx(default)]
     pub updated_at: Option<String>,
-    #[sqlx(default)]
     pub deleted_at: Option<String>,
 }
 
@@ -142,7 +133,7 @@ pub struct OrderItemPayload {
     pub product_weight: Option<f64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct OrderWithCustomer {
     pub id: String,
     pub order_id: Option<String>,
@@ -162,21 +153,19 @@ pub struct OrderWithCustomer {
     pub service_fee: Option<f64>,
     pub product_discount: Option<f64>,
     pub service_fee_type: Option<String>,
-    pub shipping_fee_paid: Option<bool>,
-    pub delivery_fee_paid: Option<bool>,
-    pub cargo_fee_paid: Option<bool>,
-    pub service_fee_paid: Option<bool>,
+    pub shipping_fee_paid: Option<i32>,
+    pub delivery_fee_paid: Option<i32>,
+    pub cargo_fee_paid: Option<i32>,
+    pub service_fee_paid: Option<i32>,
     pub total_price: Option<f64>,
     pub total_qty: Option<i64>,
     pub total_weight: Option<f64>,
     pub first_product_url: Option<String>,
-    pub shipping_fee_by_shop: Option<bool>,
-    pub delivery_fee_by_shop: Option<bool>,
-    pub cargo_fee_by_shop: Option<bool>,
-    pub exclude_cargo_fee: Option<bool>,
-    #[sqlx(default)]
+    pub shipping_fee_by_shop: Option<i32>,
+    pub delivery_fee_by_shop: Option<i32>,
+    pub cargo_fee_by_shop: Option<i32>,
+    pub exclude_cargo_fee: Option<i32>,
     pub updated_at: Option<String>,
-    #[sqlx(default)]
     pub deleted_at: Option<String>,
 }
 
@@ -198,7 +187,7 @@ pub struct DashboardStats {
     pub recent_orders: Vec<OrderWithCustomer>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct DashboardDetailRecord {
     pub order_id: Option<String>,
     pub customer_name: Option<String>,
@@ -240,7 +229,7 @@ pub struct TableSequenceResetStatus {
     pub sequence_value: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromQueryResult)]
 pub struct OrderExportRow {
     pub order_id: Option<String>,
     pub customer_name: Option<String>,
@@ -262,7 +251,7 @@ pub struct OrderExportRow {
     pub product_price: Option<f64>,
     pub product_weight: Option<f64>,
     pub created_at: Option<String>,
-    pub shipping_fee_by_shop: Option<bool>,
-    pub delivery_fee_by_shop: Option<bool>,
-    pub cargo_fee_by_shop: Option<bool>,
+    pub shipping_fee_by_shop: Option<i32>,
+    pub delivery_fee_by_shop: Option<i32>,
+    pub cargo_fee_by_shop: Option<i32>,
 }

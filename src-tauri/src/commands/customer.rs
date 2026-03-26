@@ -15,6 +15,7 @@ use crate::state::AppState;
 pub async fn create_customer(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
+    uuid: Option<String>,
     name: String,
     phone: Option<String>,
     address: Option<String>,
@@ -30,6 +31,7 @@ pub async fn create_customer(
     customer::create_customer(
         state.inner().clone(),
         &app,
+        uuid,
         name,
         phone,
         address,
@@ -94,6 +96,7 @@ pub async fn update_customer(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     id: String,
+    uuid: Option<String>,
     customer_id: Option<String>,
     name: String,
     phone: Option<String>,
@@ -109,6 +112,7 @@ pub async fn update_customer(
         state.inner().clone(),
         &app,
         id,
+        uuid,
         customer_id,
         name,
         phone,

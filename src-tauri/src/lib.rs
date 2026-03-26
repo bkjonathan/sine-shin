@@ -1,6 +1,8 @@
 mod commands;
 mod db;
+mod entities;
 mod error;
+mod migrator;
 mod models;
 pub mod scheduler;
 mod services;
@@ -13,10 +15,9 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::Client;
-use sqlx::any::AnyPoolOptions;
+use sea_orm::Database;
+use sea_orm_migration::MigratorTrait;
 use tauri::Manager;
-use tauri_plugin_sql::{Migration, MigrationKind};
-use tokio::sync::Mutex;
 
 use crate::commands::account::get_account_summary;
 use crate::commands::auth::{check_is_onboarded, login_user, register_user};
@@ -47,12 +48,12 @@ use crate::commands::staff::{
     create_staff_user, delete_staff_user, get_staff_users, update_staff_user,
 };
 use crate::commands::system::{
-    backup_database, get_db_status, reset_app_data, reset_table_sequence, restore_database,
+    backup_database, get_database_config, get_db_status, reset_app_data, reset_table_sequence,
+    restart_app, restore_database, save_database_config, test_postgres_connection,
 };
-use crate::db::init_db;
+use crate::migrator::Migrator;
 use crate::scheduler::{reload_scheduler, setup_scheduler};
-use crate::services::settings::get_app_settings as read_app_settings;
-use crate::state::{AppDb, AppState};
+use crate::state::AppState;
 use crate::sync::{
     apply_remote_changes, clean_sync_data, clear_synced_items, fetch_remote_changes,
     get_migration_sql, get_sync_config, get_sync_queue_items, get_sync_queue_stats,
@@ -60,62 +61,6 @@ use crate::sync::{
     set_master_password, start_sync_loop, test_sync_connection, trigger_full_sync,
     trigger_sync_now, truncate_and_sync, update_sync_interval, verify_master_password,
 };
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct DatabaseConfig {
-    database_type: String,
-    postgres_url: String,
-}
-
-/// Save database configuration (type + URL) to settings.json.
-/// This must be called before the app restarts so the new DB is used on next launch.
-#[tauri::command]
-fn save_database_config(
-    app: tauri::AppHandle,
-    database_type: String,
-    postgres_url: String,
-) -> Result<(), String> {
-    let mut settings = read_app_settings(app.clone()).map_err(|e| e.to_string())?;
-    settings.database_type = database_type;
-    settings.postgres_url = postgres_url;
-    crate::services::settings::update_app_settings(app, settings).map_err(|e| e.to_string())
-}
-
-/// Get current database configuration from settings.json.
-#[tauri::command]
-fn get_database_config(app: tauri::AppHandle) -> Result<DatabaseConfig, String> {
-    let settings = read_app_settings(app).map_err(|e| e.to_string())?;
-    Ok(DatabaseConfig {
-        database_type: settings.database_type,
-        postgres_url: settings.postgres_url,
-    })
-}
-
-/// Test a PostgreSQL connection URL by attempting to connect.
-#[tauri::command]
-async fn test_postgres_connection(url: String) -> Result<bool, String> {
-    if url.trim().is_empty() {
-        return Err("PostgreSQL URL cannot be empty".to_string());
-    }
-    sqlx::any::install_default_drivers();
-    match AnyPoolOptions::new()
-        .max_connections(1)
-        .connect(&url)
-        .await
-    {
-        Ok(pool) => {
-            pool.close().await;
-            Ok(true)
-        }
-        Err(e) => Err(format!("Connection failed: {}", e)),
-    }
-}
-
-/// Restart the application.
-#[tauri::command]
-fn restart_app(app: tauri::AppHandle) {
-    app.restart();
-}
 
 #[tauri::command]
 fn print_window(window: tauri::WebviewWindow) -> tauri::Result<()> {
@@ -206,23 +151,8 @@ fn print_invoice_direct(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Register AnyPool drivers (SQLite + PostgreSQL) before anything else
-    sqlx::any::install_default_drivers();
-
-    let migrations = vec![Migration {
-        version: 1,
-        description: "init database",
-        sql: include_str!("../migrations/001_init.sql"),
-        kind: MigrationKind::Up,
-    }];
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:shop.db", migrations)
-                .build(),
-        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -242,50 +172,23 @@ pub fn run() {
                 fs::write(&settings_path, settings_json).expect("Failed to write settings.json");
             }
 
-            // Read settings to determine which database to use
-            let settings_content = fs::read_to_string(&settings_path)
-                .expect("Failed to read settings.json");
-            let settings: AppSettings = serde_json::from_str(&settings_content)
-                .unwrap_or_default();
+            let db_path = app_data_dir.join("shop.db");
+            let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
 
-            let db_type = settings.database_type.clone();
-            let postgres_url = settings.postgres_url.clone();
-
-            let is_postgres = db_type == "postgresql" && !postgres_url.trim().is_empty();
-            let db_url = if is_postgres {
-                postgres_url.clone()
-            } else {
-                let db_path = app_data_dir.join("shop.db");
-                format!("sqlite:{}?mode=rwc", db_path.to_string_lossy())
-            };
-
-            let active_db_type = if is_postgres {
-                "postgresql".to_string()
-            } else {
-                "sqlite".to_string()
-            };
-
-            let pool = tauri::async_runtime::block_on(async {
-                let pool = AnyPoolOptions::new()
-                    .max_connections(5)
-                    .connect(&db_url)
+            let db = tauri::async_runtime::block_on(async {
+                let db = Database::connect(&db_url)
                     .await
-                    .expect("Failed to create database pool");
+                    .expect("Failed to connect to database");
 
-                init_db(&pool, &active_db_type)
+                Migrator::up(&db, None)
                     .await
-                    .expect("Failed to initialize database");
+                    .expect("Failed to run migrations");
 
-                pool
+                db
             });
 
-            let shared_pool = Arc::new(Mutex::new(pool));
-            app.manage(AppDb(shared_pool.clone()));
-            app.manage(Arc::new(AppState::new(
-                shared_pool,
-                active_db_type,
-                Client::new(),
-            )));
+            let shared_db = Arc::new(db);
+            app.manage(Arc::new(AppState::new(shared_db, Client::new())));
 
             let app_handle = app.handle().clone();
             let scheduler_state =
@@ -311,6 +214,10 @@ pub fn run() {
             reset_app_data,
             backup_database,
             restore_database,
+            test_postgres_connection,
+            save_database_config,
+            get_database_config,
+            restart_app,
             register_user,
             login_user,
             get_db_status,
@@ -371,11 +278,7 @@ pub fn run() {
             update_staff_user,
             delete_staff_user,
             fetch_remote_changes,
-            apply_remote_changes,
-            save_database_config,
-            get_database_config,
-            test_postgres_connection,
-            restart_app,
+            apply_remote_changes
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
