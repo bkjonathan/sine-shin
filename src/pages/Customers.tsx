@@ -306,6 +306,111 @@ export default function Customers() {
     fetchCustomers(currentPage);
   }, [currentPage, pageSize, searchKey, searchTerm, sortBy, sortOrder]);
 
+  const getLocalPaginatedCustomers = (
+    allCustomers: Customer[],
+    page: number,
+  ): { customers: Customer[]; total: number; total_pages: number } => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
+    const filteredCustomers = allCustomers
+      .filter((customer) => !customer.deleted_at)
+      .filter((customer) => {
+        if (!normalizedSearchTerm) {
+          return true;
+        }
+
+        let searchableValue = "";
+        switch (searchKey) {
+          case "customerId":
+            searchableValue = customer.customer_id ?? "";
+            break;
+          case "phone":
+            searchableValue = customer.phone ?? "";
+            break;
+          default:
+            searchableValue = customer.name ?? "";
+            break;
+        }
+
+        return searchableValue.toLowerCase().includes(normalizedSearchTerm);
+      });
+
+    const sortedCustomers = [...filteredCustomers].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortBy === "name") {
+        comparison = (a.name ?? "").localeCompare(b.name ?? "", undefined, {
+          sensitivity: "base",
+        });
+      } else if (sortBy === "created_at") {
+        const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+        comparison = aDate - bDate;
+      } else {
+        comparison = (a.customer_id ?? "").localeCompare(
+          b.customer_id ?? "",
+          undefined,
+          { sensitivity: "base" },
+        );
+      }
+
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+
+    const total = sortedCustomers.length;
+    const noLimit = pageSize === "all";
+
+    if (noLimit) {
+      return {
+        customers: sortedCustomers,
+        total,
+        total_pages: total > 0 ? 1 : 0,
+      };
+    }
+
+    const requestedPageSize =
+      typeof pageSize === "number"
+        ? pageSize
+        : CUSTOMER_PAGE_SIZE_LIMITS.default;
+    const resolvedPageSize = Math.max(
+      CUSTOMER_PAGE_SIZE_LIMITS.min,
+      Math.min(CUSTOMER_PAGE_SIZE_LIMITS.max, requestedPageSize),
+    );
+    const totalPages = total > 0 ? Math.ceil(total / resolvedPageSize) : 0;
+    const safePage = Math.max(1, page);
+    const start = (safePage - 1) * resolvedPageSize;
+
+    return {
+      customers: sortedCustomers.slice(start, start + resolvedPageSize),
+      total,
+      total_pages: totalPages,
+    };
+  };
+
+  const fetchCustomersFromLocal = async (page: number, fetchId: number) => {
+    const allCustomers = await getCustomers();
+    const data = getLocalPaginatedCustomers(allCustomers, page);
+
+    if (fetchId !== latestFetchIdRef.current) {
+      return;
+    }
+
+    if (page > 1 && data.total_pages > 0 && page > data.total_pages) {
+      setCurrentPage(data.total_pages);
+      return;
+    }
+    if (page > 1 && data.total_pages === 0) {
+      setCurrentPage(1);
+      return;
+    }
+
+    setCustomers(data.customers);
+    setTotalCustomers(data.total);
+    setTotalPages(data.total_pages);
+    setHasLoadedOnce(true);
+    setPageTransitionKey((prev) => prev + 1);
+  };
+
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -534,8 +639,17 @@ export default function Customers() {
       setTotalPages(data.total_pages);
       setHasLoadedOnce(true);
       setPageTransitionKey((prev) => prev + 1);
+
+      if (data.total === 0 && data.customers.length === 0) {
+        await fetchCustomersFromLocal(page, fetchId);
+      }
     } catch (error) {
       console.error("Failed to fetch customers:", error);
+      try {
+        await fetchCustomersFromLocal(page, fetchId);
+      } catch (fallbackError) {
+        console.error("Fallback customers fetch failed:", fallbackError);
+      }
     } finally {
       if (fetchId === latestFetchIdRef.current) {
         setLoading(false);

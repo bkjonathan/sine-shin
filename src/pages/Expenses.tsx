@@ -287,6 +287,182 @@ export default function Expenses() {
     sortOrder,
   ]);
 
+  const getExpenseEffectiveDate = (expense: Expense): number => {
+    const raw = expense.expense_date || expense.created_at;
+    if (!raw) {
+      return 0;
+    }
+
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+  };
+
+  const getLocalPaginatedExpenses = (
+    allExpenses: Expense[],
+    page: number,
+  ): {
+    expenses: Expense[];
+    total: number;
+    total_pages: number;
+    filteredExpenses: Expense[];
+  } => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+    const dateFromValue = dateFrom ? new Date(toDateOnlyString(dateFrom)!).getTime() : null;
+    const dateToValue = dateTo ? new Date(toDateOnlyString(dateTo)!).getTime() : null;
+
+    const filteredExpenses = allExpenses.filter((expense) => {
+      let searchableValue = "";
+      switch (searchKey) {
+        case "expenseId":
+          searchableValue = expense.expense_id ?? "";
+          break;
+        case "category":
+          searchableValue = expense.category ?? "";
+          break;
+        case "paymentMethod":
+          searchableValue = expense.payment_method ?? "";
+          break;
+        default:
+          searchableValue = expense.title ?? "";
+          break;
+      }
+
+      if (
+        normalizedSearchTerm &&
+        !searchableValue.toLowerCase().includes(normalizedSearchTerm)
+      ) {
+        return false;
+      }
+
+      if (
+        categoryFilter !== "all" &&
+        (expense.category ?? "").toLowerCase() !== categoryFilter.toLowerCase()
+      ) {
+        return false;
+      }
+
+      const effectiveDate = getExpenseEffectiveDate(expense);
+      if (dateFromValue !== null && effectiveDate < dateFromValue) {
+        return false;
+      }
+      if (dateToValue !== null && effectiveDate > dateToValue + 86_399_999) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const sortedExpenses = [...filteredExpenses].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortBy === "title") {
+        comparison = a.title.localeCompare(b.title, undefined, {
+          sensitivity: "base",
+        });
+      } else if (sortBy === "amount") {
+        comparison = (a.amount ?? 0) - (b.amount ?? 0);
+      } else if (sortBy === "created_at") {
+        const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+        comparison = aDate - bDate;
+      } else if (sortBy === "expense_id") {
+        comparison = (a.expense_id ?? "").localeCompare(b.expense_id ?? "", undefined, {
+          sensitivity: "base",
+        });
+      } else {
+        comparison = getExpenseEffectiveDate(a) - getExpenseEffectiveDate(b);
+      }
+
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+
+    const total = sortedExpenses.length;
+    const noLimit = pageSize === "all";
+
+    if (noLimit) {
+      return {
+        expenses: sortedExpenses,
+        total,
+        total_pages: total > 0 ? 1 : 0,
+        filteredExpenses: sortedExpenses,
+      };
+    }
+
+    const requestedPageSize =
+      typeof pageSize === "number" ? pageSize : EXPENSE_PAGE_SIZE_LIMITS.default;
+    const resolvedPageSize = Math.max(
+      EXPENSE_PAGE_SIZE_LIMITS.min,
+      Math.min(EXPENSE_PAGE_SIZE_LIMITS.max, requestedPageSize),
+    );
+    const totalPages = total > 0 ? Math.ceil(total / resolvedPageSize) : 0;
+    const safePage = Math.max(1, page);
+    const start = (safePage - 1) * resolvedPageSize;
+
+    return {
+      expenses: sortedExpenses.slice(start, start + resolvedPageSize),
+      total,
+      total_pages: totalPages,
+      filteredExpenses: sortedExpenses,
+    };
+  };
+
+  const fetchExpensesFromLocal = async (page: number, fetchId: number) => {
+    const allExpenses = await getExpenses();
+    const data = getLocalPaginatedExpenses(allExpenses, page);
+
+    if (fetchId !== latestFetchIdRef.current) {
+      return;
+    }
+
+    if (page > 1 && data.total_pages > 0 && page > data.total_pages) {
+      setCurrentPage(data.total_pages);
+      return;
+    }
+    if (page > 1 && data.total_pages === 0) {
+      setCurrentPage(1);
+      return;
+    }
+
+    setExpenses(data.expenses);
+    setTotalExpenses(data.total);
+    setTotalPages(data.total_pages);
+
+    const totalAmount = data.filteredExpenses.reduce((sum, expense) => {
+      return sum + (expense.amount || 0);
+    }, 0);
+
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const monthAmount = data.filteredExpenses.reduce((sum, expense) => {
+      const dateValue = expense.expense_date || expense.created_at;
+      if (!dateValue) {
+        return sum;
+      }
+
+      const date = new Date(dateValue);
+      if (Number.isNaN(date.getTime())) {
+        return sum;
+      }
+
+      if (date.getMonth() === month && date.getFullYear() === year) {
+        return sum + (expense.amount || 0);
+      }
+
+      return sum;
+    }, 0);
+
+    setSummaryTotal(totalAmount);
+    setSummaryMonthTotal(monthAmount);
+    setSummaryAverage(
+      data.filteredExpenses.length > 0
+        ? totalAmount / data.filteredExpenses.length
+        : 0,
+    );
+    setHasLoadedOnce(true);
+    setPageTransitionKey((prev) => prev + 1);
+  };
+
   const fetchExpenses = async (page: number) => {
     const fetchId = ++latestFetchIdRef.current;
     const shouldShowInitialLoader = !hasLoadedOnce;
@@ -380,8 +556,21 @@ export default function Expenses() {
 
       setHasLoadedOnce(true);
       setPageTransitionKey((prev) => prev + 1);
+
+      if (
+        pagedData.total === 0 &&
+        pagedData.expenses.length === 0 &&
+        summaryData.total === 0
+      ) {
+        await fetchExpensesFromLocal(page, fetchId);
+      }
     } catch (error) {
       console.error("Failed to fetch expenses:", error);
+      try {
+        await fetchExpensesFromLocal(page, fetchId);
+      } catch (fallbackError) {
+        console.error("Fallback expenses fetch failed:", fallbackError);
+      }
     } finally {
       if (fetchId === latestFetchIdRef.current) {
         setLoading(false);

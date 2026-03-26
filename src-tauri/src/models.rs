@@ -122,7 +122,7 @@ pub struct OrderItem {
     pub id: String,
     pub order_id: String,
     pub product_url: Option<String>,
-    pub product_qty: Option<i64>,
+    pub product_qty: Option<i32>,
     pub price: Option<f64>,
     pub product_weight: Option<f64>,
     pub created_at: Option<DateTimeUtc>,
@@ -133,7 +133,7 @@ pub struct OrderItem {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemPayload {
     pub product_url: Option<String>,
-    pub product_qty: Option<i64>,
+    pub product_qty: Option<i32>,
     pub price: Option<f64>,
     pub product_weight: Option<f64>,
 }
@@ -253,7 +253,7 @@ pub struct OrderExportRow {
     pub delivery_fee: Option<f64>,
     pub cargo_fee: Option<f64>,
     pub product_url: Option<String>,
-    pub product_qty: Option<i64>,
+    pub product_qty: Option<i32>,
     pub product_price: Option<f64>,
     pub product_weight: Option<f64>,
     pub created_at: Option<DateTimeUtc>,

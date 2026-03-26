@@ -1,6 +1,6 @@
 use chrono::{DateTime, NaiveDate, NaiveDateTime};
 use sea_orm::prelude::{Date, DateTimeUtc};
-use sea_orm::{ConnectionTrait, FromQueryResult, Statement, TransactionTrait};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, FromQueryResult, QueryFilter, QueryOrder, Statement, TransactionTrait};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -9,9 +9,10 @@ use tauri::AppHandle;
 use uuid::Uuid;
 
 use crate::db::{
-    current_timestamp_utc, parse_optional_date, DEFAULT_ORDER_ID_PREFIX,
+    current_timestamp_utc, parse_optional_date, sql_statement_with_values, DEFAULT_ORDER_ID_PREFIX,
     ORDER_WITH_CUSTOMER_GROUP_BY, ORDER_WITH_CUSTOMER_SELECT,
 };
+use crate::entities::{customers, order_items, orders};
 use crate::error::{AppError, AppResult};
 use crate::models::{
     DashboardDetailRecord, DashboardStats, OrderDetail, OrderExportRow, OrderItem,
@@ -262,7 +263,7 @@ pub async fn create_order(
 
     let txn = db.begin().await?;
 
-    txn.execute(Statement::from_sql_and_values(
+    txn.execute(sql_statement_with_values(
         backend,
         "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, \
              shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, \
@@ -300,7 +301,7 @@ pub async fn create_order(
 
     for item in items {
         let item_id = Uuid::new_v4().to_string();
-        txn.execute(Statement::from_sql_and_values(
+        txn.execute(sql_statement_with_values(
             backend,
             "INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) \
              VALUES (?, ?, ?, ?, ?, ?)",
@@ -318,7 +319,7 @@ pub async fn create_order(
 
     if let Some(oid) = order_id {
         let _ = txn
-            .execute(Statement::from_sql_and_values(
+            .execute(sql_statement_with_values(
                 backend,
                 "UPDATE orders SET order_id = ? WHERE id = ?",
                 [oid.into(), record_id.clone().into()],
@@ -340,7 +341,7 @@ pub async fn create_order(
             .unwrap_or_else(|| DEFAULT_ORDER_ID_PREFIX.to_string());
 
         let like_pattern = format!("{}%", prefix_str);
-        let next_seq = NextSeqRow::find_by_statement(Statement::from_sql_and_values(
+        let next_seq = NextSeqRow::find_by_statement(sql_statement_with_values(
             backend,
             "SELECT COALESCE(MAX(CAST(REPLACE(order_id, ?, '') AS INTEGER)), 0) + 1 AS next_seq \
              FROM orders WHERE order_id LIKE ?",
@@ -354,7 +355,7 @@ pub async fn create_order(
 
         let new_order_id = format!("{}{:05}", prefix_str, next_seq);
         let _ = txn
-            .execute(Statement::from_sql_and_values(
+            .execute(sql_statement_with_values(
                 backend,
                 "UPDATE orders SET order_id = ? WHERE id = ?",
                 [new_order_id.into(), record_id.clone().into()],
@@ -365,7 +366,7 @@ pub async fn create_order(
     txn.commit().await?;
 
     if let Ok(Some(order)) =
-        crate::models::Order::find_by_statement(Statement::from_sql_and_values(
+        crate::models::Order::find_by_statement(sql_statement_with_values(
             backend,
             "SELECT * FROM orders WHERE id = ?",
             [record_id.clone().into()],
@@ -384,7 +385,7 @@ pub async fn create_order(
         .await;
     }
 
-    if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
+    if let Ok(items_db) = OrderItem::find_by_statement(sql_statement_with_values(
         backend,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
         [record_id.clone().into()],
@@ -500,7 +501,7 @@ pub async fn get_orders_paginated(
         "SELECT COUNT(*) as cnt FROM orders o LEFT JOIN customers c ON o.customer_id = c.id {}",
         where_clause
     );
-    let total = CountRow::find_by_statement(Statement::from_sql_and_values(
+    let total = CountRow::find_by_statement(sql_statement_with_values(
         backend,
         &count_sql,
         params.clone(),
@@ -531,7 +532,7 @@ pub async fn get_orders_paginated(
         p
     };
 
-    let orders = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
+    let orders = OrderWithCustomer::find_by_statement(sql_statement_with_values(
         backend,
         &data_sql,
         data_params,
@@ -568,7 +569,7 @@ pub async fn get_customer_orders(
         "{} WHERE o.customer_id = ? {} ORDER BY o.created_at DESC",
         ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
     );
-    let orders = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
+    let orders = OrderWithCustomer::find_by_statement(sql_statement_with_values(
         backend,
         &query,
         [customer_id.into()],
@@ -581,28 +582,90 @@ pub async fn get_customer_orders(
 
 pub async fn get_order(state: Arc<AppState>, id: String) -> AppResult<OrderDetail> {
     let db = state.db.lock().await.clone();
-    let backend = db.get_database_backend();
+    let order_record = orders::Entity::find_by_id(id.clone())
+        .filter(orders::Column::DeletedAt.is_null())
+        .one(&db)
+        .await?
+        .ok_or_else(|| AppError::not_found("Order not found"))?;
 
-    let query = format!(
-        "{} WHERE o.id = ? {}",
-        ORDER_WITH_CUSTOMER_SELECT, ORDER_WITH_CUSTOMER_GROUP_BY
-    );
-    let order = OrderWithCustomer::find_by_statement(Statement::from_sql_and_values(
-        backend,
-        &query,
-        [id.clone().into()],
-    ))
-    .one(&db)
-    .await?
-    .ok_or_else(|| AppError::not_found("Order not found"))?;
+    let item_records = order_items::Entity::find()
+        .filter(order_items::Column::OrderId.eq(id.clone()))
+        .filter(order_items::Column::DeletedAt.is_null())
+        .order_by_asc(order_items::Column::CreatedAt)
+        .all(&db)
+        .await?;
 
-    let items = OrderItem::find_by_statement(Statement::from_sql_and_values(
-        backend,
-        "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
-        [id.into()],
-    ))
-    .all(&db)
-    .await?;
+    let customer_name = match order_record.customer_id.as_ref() {
+        Some(customer_id) => customers::Entity::find_by_id(customer_id.clone())
+            .one(&db)
+            .await?
+            .map(|customer| customer.name),
+        None => None,
+    };
+
+    let total_price = item_records
+        .iter()
+        .map(|item| item.price.unwrap_or(0.0) * f64::from(item.product_qty.unwrap_or(0)))
+        .sum::<f64>();
+    let total_qty = item_records
+        .iter()
+        .map(|item| i64::from(item.product_qty.unwrap_or(0)))
+        .sum::<i64>();
+    let total_weight = item_records
+        .iter()
+        .map(|item| item.product_weight.unwrap_or(0.0))
+        .sum::<f64>();
+    let first_product_url = item_records.iter().find_map(|item| item.product_url.clone());
+
+    let items = item_records
+        .into_iter()
+        .map(|item| OrderItem {
+            id: item.id,
+            order_id: item.order_id.unwrap_or_else(|| id.clone()),
+            product_url: item.product_url,
+            product_qty: item.product_qty,
+            price: item.price,
+            product_weight: item.product_weight,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+            deleted_at: item.deleted_at,
+        })
+        .collect::<Vec<_>>();
+
+    let order = OrderWithCustomer {
+        id: order_record.id,
+        order_id: order_record.order_id,
+        customer_id: order_record.customer_id,
+        status: order_record.status,
+        customer_name,
+        order_from: order_record.order_from,
+        exchange_rate: order_record.exchange_rate,
+        shipping_fee: order_record.shipping_fee,
+        delivery_fee: order_record.delivery_fee,
+        cargo_fee: order_record.cargo_fee,
+        order_date: order_record.order_date,
+        arrived_date: order_record.arrived_date,
+        shipment_date: order_record.shipment_date,
+        user_withdraw_date: order_record.user_withdraw_date,
+        created_at: order_record.created_at,
+        service_fee: order_record.service_fee,
+        product_discount: order_record.product_discount,
+        service_fee_type: order_record.service_fee_type,
+        shipping_fee_paid: order_record.shipping_fee_paid,
+        delivery_fee_paid: order_record.delivery_fee_paid,
+        cargo_fee_paid: order_record.cargo_fee_paid,
+        service_fee_paid: order_record.service_fee_paid,
+        total_price: Some(total_price),
+        total_qty: Some(total_qty),
+        total_weight: Some(total_weight),
+        first_product_url,
+        shipping_fee_by_shop: order_record.shipping_fee_by_shop,
+        delivery_fee_by_shop: order_record.delivery_fee_by_shop,
+        cargo_fee_by_shop: order_record.cargo_fee_by_shop,
+        exclude_cargo_fee: order_record.exclude_cargo_fee,
+        updated_at: order_record.updated_at,
+        deleted_at: order_record.deleted_at,
+    };
 
     Ok(OrderDetail { order, items })
 }
@@ -647,7 +710,7 @@ pub async fn update_order(
 
     let txn = db.begin().await?;
 
-    let old_items = OrderItem::find_by_statement(Statement::from_sql_and_values(
+    let old_items = OrderItem::find_by_statement(sql_statement_with_values(
         backend,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
         [id.clone().into()],
@@ -655,7 +718,7 @@ pub async fn update_order(
     .all(&txn)
     .await?;
 
-    txn.execute(Statement::from_sql_and_values(
+    txn.execute(sql_statement_with_values(
         backend,
         "UPDATE orders SET customer_id = ?, status = ?, order_from = ?, exchange_rate = ?, \
          shipping_fee = ?, delivery_fee = ?, cargo_fee = ?, order_date = ?, arrived_date = ?, \
@@ -693,7 +756,7 @@ pub async fn update_order(
     ))
     .await?;
 
-    txn.execute(Statement::from_sql_and_values(
+    txn.execute(sql_statement_with_values(
         backend,
         "UPDATE order_items SET deleted_at = ?, updated_at = ? \
          WHERE order_id = ? AND deleted_at IS NULL",
@@ -703,7 +766,7 @@ pub async fn update_order(
 
     for item in items {
         let item_id = Uuid::new_v4().to_string();
-        txn.execute(Statement::from_sql_and_values(
+        txn.execute(sql_statement_with_values(
             backend,
             "INSERT INTO order_items (id, order_id, product_url, product_qty, price, product_weight) \
              VALUES (?, ?, ?, ?, ?, ?)",
@@ -722,7 +785,7 @@ pub async fn update_order(
     txn.commit().await?;
 
     if let Ok(Some(order)) =
-        crate::models::Order::find_by_statement(Statement::from_sql_and_values(
+        crate::models::Order::find_by_statement(sql_statement_with_values(
             backend,
             "SELECT * FROM orders WHERE id = ?",
             [id.clone().into()],
@@ -756,7 +819,7 @@ pub async fn update_order(
         .await;
     }
 
-    if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
+    if let Ok(items_db) = OrderItem::find_by_statement(sql_statement_with_values(
         backend,
         "SELECT * FROM order_items WHERE order_id = ? AND deleted_at IS NULL",
         [id.clone().into()],
@@ -786,14 +849,14 @@ pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> 
     let backend = db.get_database_backend();
     let now = current_timestamp_utc();
 
-    db.execute(Statement::from_sql_and_values(
+    db.execute(sql_statement_with_values(
         backend,
         "UPDATE orders SET deleted_at = ?, updated_at = ? WHERE id = ?",
         [now.clone().into(), now.clone().into(), id.clone().into()],
     ))
     .await?;
 
-    db.execute(Statement::from_sql_and_values(
+    db.execute(sql_statement_with_values(
         backend,
         "UPDATE order_items SET deleted_at = ?, updated_at = ? WHERE order_id = ?",
         [now.clone().into(), now.into(), id.clone().into()],
@@ -801,7 +864,7 @@ pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> 
     .await?;
 
     if let Ok(Some(order)) =
-        crate::models::Order::find_by_statement(Statement::from_sql_and_values(
+        crate::models::Order::find_by_statement(sql_statement_with_values(
             backend,
             "SELECT * FROM orders WHERE id = ?",
             [id.clone().into()],
@@ -820,7 +883,7 @@ pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> 
         .await;
     }
 
-    if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
+    if let Ok(items_db) = OrderItem::find_by_statement(sql_statement_with_values(
         backend,
         "SELECT * FROM order_items WHERE order_id = ?",
         [id.clone().into()],

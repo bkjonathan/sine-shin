@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use sea_orm::prelude::{Date, DateTimeUtc};
-use sea_orm::{ConnectionTrait, Database, DatabaseConnection, SqlxSqliteConnector};
+use sea_orm::{
+    ConnectionTrait, Database, DatabaseBackend, DatabaseConnection, SqlxSqliteConnector,
+    Statement, Value,
+};
 use sea_orm_migration::MigratorTrait;
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::{Pool, Sqlite};
@@ -29,9 +32,9 @@ pub const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
     SELECT
         o.*,
         c.name as customer_name,
-        CAST(COALESCE(SUM(oi.price * oi.product_qty), 0) AS REAL) as total_price,
-        CAST(COALESCE(SUM(oi.product_qty), 0) AS INTEGER) as total_qty,
-        CAST(COALESCE(SUM(oi.product_weight), 0) AS REAL) as total_weight,
+        CAST(COALESCE(SUM(oi.price * oi.product_qty), 0) AS DOUBLE PRECISION) as total_price,
+        CAST(COALESCE(SUM(oi.product_qty), 0) AS BIGINT) as total_qty,
+        CAST(COALESCE(SUM(oi.product_weight), 0) AS DOUBLE PRECISION) as total_weight,
         (SELECT product_url FROM order_items WHERE order_id = o.id AND deleted_at IS NULL LIMIT 1) as first_product_url
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.id
@@ -39,6 +42,32 @@ pub const ORDER_WITH_CUSTOMER_SELECT: &str = r#"
 "#;
 
 pub const ORDER_WITH_CUSTOMER_GROUP_BY: &str = " GROUP BY o.id, c.name ";
+
+pub fn sql_statement_with_values<I>(
+    backend: DatabaseBackend,
+    sql: &str,
+    values: I,
+) -> Statement
+where
+    I: IntoIterator<Item = Value>,
+{
+    if backend == DatabaseBackend::Postgres {
+        let mut normalized = String::with_capacity(sql.len() + 16);
+        let mut index = 1;
+        for ch in sql.chars() {
+            if ch == '?' {
+                normalized.push('$');
+                normalized.push_str(&index.to_string());
+                index += 1;
+            } else {
+                normalized.push(ch);
+            }
+        }
+        Statement::from_sql_and_values(backend, &normalized, values)
+    } else {
+        Statement::from_sql_and_values(backend, sql, values)
+    }
+}
 
 pub fn current_timestamp_utc() -> DateTimeUtc {
     Utc::now()

@@ -232,13 +232,19 @@ export default function OrderDetail({ id }: OrderDetailProps) {
   const loadData = async (orderId: string) => {
     try {
       setLoading(true);
+      setError(null);
       setCustomerDetail(null);
-      const [orderData, settingsData] = await Promise.all([
-        getOrderById(orderId),
-        getShopSettings(),
-      ]);
+      const orderData = await getOrderById(orderId);
       setOrderDetail(orderData);
-      setShopSettings(settingsData);
+
+      let settingsData: ShopSettings | null = null;
+      try {
+        settingsData = await getShopSettings();
+        setShopSettings(settingsData);
+      } catch (settingsErr) {
+        console.error("Failed to fetch shop settings:", settingsErr);
+        setShopSettings(null);
+      }
 
       // Pre-load shop logo as a base64 data URL so we never have asset:// URLs
       // in the invoice DOM when html-to-image tries to capture (XHR can't fetch them).

@@ -421,6 +421,30 @@ export default function Orders() {
     };
   };
 
+  const fetchOrdersFromLocal = async (page: number, fetchId: number) => {
+    const allOrders = await getOrders();
+    const data = getLocalPaginatedOrders(allOrders, page);
+
+    if (fetchId !== latestFetchIdRef.current) {
+      return;
+    }
+
+    if (page > 1 && data.total_pages > 0 && page > data.total_pages) {
+      setCurrentPage(data.total_pages);
+      return;
+    }
+    if (page > 1 && data.total_pages === 0) {
+      setCurrentPage(1);
+      return;
+    }
+
+    setOrders(data.orders);
+    setTotalOrders(data.total);
+    setTotalPages(data.total_pages);
+    setHasLoadedOnce(true);
+    setPageTransitionKey((prev) => prev + 1);
+  };
+
   useEffect(() => {
     fetchOrders(currentPage);
   }, [
@@ -472,31 +496,15 @@ export default function Orders() {
       setTotalPages(data.total_pages);
       setHasLoadedOnce(true);
       setPageTransitionKey((prev) => prev + 1);
+
+      if (data.total === 0 && data.orders.length === 0) {
+        await fetchOrdersFromLocal(page, fetchId);
+      }
     } catch (error) {
       console.error("Failed to fetch paginated orders:", error);
 
       try {
-        const allOrders = await getOrders();
-        const data = getLocalPaginatedOrders(allOrders, page);
-
-        if (fetchId !== latestFetchIdRef.current) {
-          return;
-        }
-
-        if (page > 1 && data.total_pages > 0 && page > data.total_pages) {
-          setCurrentPage(data.total_pages);
-          return;
-        }
-        if (page > 1 && data.total_pages === 0) {
-          setCurrentPage(1);
-          return;
-        }
-
-        setOrders(data.orders);
-        setTotalOrders(data.total);
-        setTotalPages(data.total_pages);
-        setHasLoadedOnce(true);
-        setPageTransitionKey((prev) => prev + 1);
+        await fetchOrdersFromLocal(page, fetchId);
       } catch (fallbackError) {
         console.error("Fallback orders fetch failed:", fallbackError);
       }

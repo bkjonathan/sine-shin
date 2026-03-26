@@ -5,7 +5,9 @@ use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::{current_timestamp_utc, parse_optional_date, DEFAULT_EXPENSE_ID_PREFIX};
+use crate::db::{
+    current_timestamp_utc, parse_optional_date, sql_statement_with_values, DEFAULT_EXPENSE_ID_PREFIX,
+};
 use crate::entities::expenses;
 use crate::error::{AppError, AppResult};
 use crate::models::{Expense, PaginatedExpenses};
@@ -81,7 +83,7 @@ pub async fn create_expense(
         eid
     } else {
         let like_pattern = format!("{}%", DEFAULT_EXPENSE_ID_PREFIX);
-        let next_seq = NextSeqRow::find_by_statement(Statement::from_sql_and_values(
+        let next_seq = NextSeqRow::find_by_statement(sql_statement_with_values(
             backend,
             "SELECT COALESCE(MAX(CAST(REPLACE(expense_id, ?, '') AS INTEGER)), 0) + 1 AS next_seq \
              FROM expenses WHERE expense_id LIKE ?",
@@ -94,7 +96,7 @@ pub async fn create_expense(
         .unwrap_or(1);
         format!("{}{:05}", DEFAULT_EXPENSE_ID_PREFIX, next_seq)
     };
-    db.execute(Statement::from_sql_and_values(
+    db.execute(sql_statement_with_values(
         backend,
         "UPDATE expenses SET expense_id = ? WHERE id = ?",
         [final_expense_id.into(), record_id.clone().into()],
@@ -228,7 +230,7 @@ pub async fn get_expenses_paginated(
     };
 
     let count_sql = format!("SELECT COUNT(*) as cnt FROM expenses {}", where_clause);
-    let total = CountRow::find_by_statement(Statement::from_sql_and_values(
+    let total = CountRow::find_by_statement(sql_statement_with_values(
         backend,
         &count_sql,
         params.clone(),
@@ -261,7 +263,7 @@ pub async fn get_expenses_paginated(
         p
     };
 
-    let expenses = Expense::find_by_statement(Statement::from_sql_and_values(
+    let expenses = Expense::find_by_statement(sql_statement_with_values(
         backend,
         &data_sql,
         query_params,
@@ -292,7 +294,7 @@ pub async fn get_expenses_paginated(
 pub async fn get_expense(state: Arc<AppState>, id: String) -> AppResult<Expense> {
     let db = state.db.lock().await.clone();
     let backend = db.get_database_backend();
-    Expense::find_by_statement(Statement::from_sql_and_values(
+    Expense::find_by_statement(sql_statement_with_values(
         backend,
         "SELECT id, expense_id, title, amount, category, payment_method, notes, expense_date, \
          created_at, updated_at, deleted_at FROM expenses WHERE id = ? AND deleted_at IS NULL",
@@ -332,7 +334,7 @@ pub async fn update_expense(
     let now = current_timestamp_utc();
     let parsed_expense_date = parse_optional_date(sanitize_optional(expense_date))?;
 
-    db.execute(Statement::from_sql_and_values(
+    db.execute(sql_statement_with_values(
         backend,
         "UPDATE expenses SET title = ?, amount = ?, category = ?, expense_date = ?, \
          payment_method = ?, notes = ?, updated_at = ? WHERE id = ?",
@@ -375,7 +377,7 @@ pub async fn delete_expense(state: Arc<AppState>, app: &AppHandle, id: String) -
     let backend = db.get_database_backend();
     let now = current_timestamp_utc();
 
-    db.execute(Statement::from_sql_and_values(
+    db.execute(sql_statement_with_values(
         backend,
         "UPDATE expenses SET deleted_at = ?, updated_at = ? WHERE id = ?",
         [now.clone().into(), now.into(), id.clone().into()],
