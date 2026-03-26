@@ -194,25 +194,94 @@ fn extract_record_uuid(payload: &serde_json::Value) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+fn nullable_timestamp_fields_for_table(table: &str) -> &'static [&'static str] {
+    match table {
+        "shop_settings" => &["created_at", "updated_at", "synced_from_device_at"],
+        "users" => &["created_at", "updated_at", "synced_from_device_at"],
+        "customers" => &[
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "synced_from_device_at",
+        ],
+        "orders" => &[
+            "order_date",
+            "arrived_date",
+            "shipment_date",
+            "user_withdraw_date",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "synced_from_device_at",
+        ],
+        "order_items" => &[
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "synced_from_device_at",
+        ],
+        "expenses" => &[
+            "expense_date",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "synced_from_device_at",
+        ],
+        _ => &[],
+    }
+}
+
+fn normalize_nullable_timestamps(
+    table: &str,
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+) {
+    for field in nullable_timestamp_fields_for_table(table) {
+        let should_clear = obj
+            .get(*field)
+            .and_then(|value| value.as_str())
+            .map(|value| value.trim().is_empty())
+            .unwrap_or(false);
+
+        if should_clear {
+            obj.insert((*field).to_string(), serde_json::Value::Null);
+        }
+    }
+}
+
+fn sync_table_priority(table: &str) -> i32 {
+    match table {
+        "shop_settings" => 0,
+        "users" => 1,
+        "customers" => 2,
+        "orders" => 3,
+        "expenses" => 4,
+        "order_items" => 5,
+        _ => 10,
+    }
+}
+
 fn build_supabase_payload(
     table: &str,
     record_id: &str,
     payload: &str,
 ) -> Result<serde_json::Value, String> {
-    let mut value: serde_json::Value = serde_json::from_str(payload)
-        .map_err(|e| format!("Invalid payload JSON for {}: {}", table, e))?;
+    let mut value: serde_json::Value =
+        serde_json::from_str(payload).map_err(|e| format!("Invalid payload JSON: {}", e))?;
     let obj = value
         .as_object_mut()
-        .ok_or_else(|| format!("Payload for {} must be a JSON object", table))?;
+        .ok_or_else(|| "Payload must be a JSON object".to_string())?;
 
-    let local_id = obj
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or(record_id)
-        .to_string();
-    obj.insert("local_id".to_string(), serde_json::json!(local_id));
-    obj.remove("id");
+    // Ensure id is set (local id IS the remote id — same UUID string)
+    if !obj.contains_key("id") || obj["id"].is_null() {
+        obj.insert("id".to_string(), serde_json::json!(record_id));
+    }
+
+    // Strip local-only fields that don't exist in Supabase
     obj.remove("synced");
+
+    // SQLite stores optional timestamps as empty strings in some legacy rows.
+    // Supabase TIMESTAMPTZ columns reject "", so send JSON null instead.
+    normalize_nullable_timestamps(table, obj);
 
     obj.insert(
         "synced_from_device_at".to_string(),
@@ -232,10 +301,7 @@ async fn mark_local_synced(
         return;
     }
 
-    let query = format!(
-        "UPDATE {} SET synced = 1, updated_at = datetime('now') WHERE id = ?",
-        table
-    );
+    let query = format!("UPDATE {} SET synced = 1 WHERE id = ?", table);
 
     let _ = sqlx::query(&query).bind(record_id).execute(pool).await;
 }
@@ -259,7 +325,7 @@ async fn push_sync_item(
     // so Supabase row count matches local SQLite for active items.
     if op == "DELETE" && table == "order_items" {
         let url = format!(
-            "{}/rest/v1/{}?local_id=eq.{}",
+            "{}/rest/v1/{}?id=eq.{}",
             config.supabase_url, table, record_id
         );
 
@@ -289,7 +355,7 @@ async fn push_sync_item(
             .ok()
             .and_then(|v| v.as_array().cloned())
             .and_then(|rows| rows.into_iter().next())
-            .and_then(|row| row.get("uuid").cloned())
+            .and_then(|row| row.get("id").cloned())
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .or_else(|| record_uuid.map(|v| v.to_string()));
 
@@ -297,10 +363,7 @@ async fn push_sync_item(
     }
 
     let body_value = build_supabase_payload(table, record_id, payload)?;
-    let url = format!(
-        "{}/rest/v1/{}?on_conflict=local_id",
-        config.supabase_url, table
-    );
+    let url = format!("{}/rest/v1/{}?on_conflict=id", config.supabase_url, table);
 
     let response = client
         .post(&url)
@@ -336,7 +399,7 @@ async fn push_sync_item(
         .ok()
         .and_then(|v| v.as_array().cloned())
         .and_then(|rows| rows.into_iter().next())
-        .and_then(|row| row.get("uuid").cloned())
+        .and_then(|row| row.get("id").cloned())
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .or_else(|| record_uuid.map(|v| v.to_string()));
 
@@ -463,12 +526,19 @@ pub async fn process_sync_queue(app: &AppHandle) {
     };
 
     // Fetch items to sync first
-    let items: Vec<SyncQueueItem> = sqlx::query_as(
-        "SELECT * FROM sync_queue WHERE status = 'pending' OR (status = 'failed' AND retry_count < 5) ORDER BY created_at ASC"
+    let mut items: Vec<SyncQueueItem> = sqlx::query_as(
+        "SELECT * FROM sync_queue WHERE status = 'pending' OR (status = 'failed' AND retry_count < 5) ORDER BY created_at ASC, id ASC"
     )
     .fetch_all(&*pool)
     .await
     .unwrap_or_default();
+
+    items.sort_by(|a, b| {
+        sync_table_priority(&a.table_name)
+            .cmp(&sync_table_priority(&b.table_name))
+            .then_with(|| a.created_at.cmp(&b.created_at))
+            .then_with(|| a.id.cmp(&b.id))
+    });
 
     if items.is_empty() {
         return; // Nothing to sync, don't create empty session
@@ -1104,17 +1174,18 @@ pub async fn truncate_and_sync(app: AppHandle) -> Result<String, String> {
         .ok_or("No sync configuration found. Please save your Supabase config first.")?;
 
     let client = reqwest::Client::new();
+    // Delete in reverse FK dependency order: children first, then parents
     let tables = vec![
-        "shop_settings",
-        "customers",
-        "orders",
         "order_items",
+        "orders",
+        "customers",
         "expenses",
+        "shop_settings",
     ];
 
     // Truncate tables on Supabase
     for table in &tables {
-        let url = format!("{}/rest/v1/{}?uuid=not.is.null", config.supabase_url, table);
+        let url = format!("{}/rest/v1/{}?id=not.is.null", config.supabase_url, table);
         let res = client
             .delete(&url)
             .header("apikey", &config.supabase_service_key)
@@ -1211,17 +1282,15 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                         std::collections::HashMap::new();
                     for row in rows {
                         let key = row
-                            .get("uuid")
+                            .get("id")
                             .and_then(|v| v.as_str())
-                            .map(|s| s.to_lowercase())
-                            .or_else(|| row.get("id").and_then(|v| v.as_str()).map(|s| s.to_lowercase()));
+                            .map(|s| s.to_lowercase());
 
                         let Some(uuid_key) = key else {
                             continue;
                         };
 
-                        let should_replace = if let Some(existing) = deduped_rows.get(&uuid_key)
-                        {
+                        let should_replace = if let Some(existing) = deduped_rows.get(&uuid_key) {
                             let existing_ts = remote_row_timestamp_millis(existing);
                             let current_ts = remote_row_timestamp_millis(&row);
                             if current_ts > existing_ts {
@@ -1255,9 +1324,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                 remote_order_item_signature(&row).unwrap_or_else(|| {
                                     format!(
                                         "raw:{}",
-                                        row.get("id")
-                                            .and_then(|v| v.as_str())
-                                            .unwrap_or_default()
+                                        row.get("id").and_then(|v| v.as_str()).unwrap_or_default()
                                     )
                                 });
 
@@ -1280,18 +1347,12 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                     };
 
                     for row in rows_to_process {
-                        // The remote record's uuid is what matches our local id (TEXT UUID PK)
+                        // Remote id is the same UUID string as local id — match directly.
                         let record_id_str = row
-                            .get("uuid")
+                            .get("id")
                             .and_then(|v| v.as_str())
                             .map(|v| v.trim().to_string())
-                            .filter(|v| !v.is_empty())
-                            .or_else(|| {
-                                row.get("id")
-                                    .and_then(|v| v.as_str())
-                                    .map(|v| v.trim().to_string())
-                                    .filter(|v| !v.is_empty())
-                            });
+                            .filter(|v| !v.is_empty());
                         let remote_deleted_at = row
                             .get("deleted_at")
                             .and_then(|v| v.as_str())
@@ -1333,8 +1394,11 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                     // Prevent duplicate order_items when remote has stale item rows that
                                     // match an existing active local item for the same order.
                                     if table == "order_items" {
-                                        let remote_order_id =
-                                            row.get("order_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                        // order_id is TEXT (UUID) matching local orders.id
+                                        let remote_order_id = row
+                                            .get("order_id")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s.to_string());
                                         let remote_created_at = row
                                             .get("created_at")
                                             .and_then(|v| v.as_str())
@@ -1711,10 +1775,8 @@ pub async fn apply_remote_changes(
                 let mut keys = Vec::new();
                 let mut vals = Vec::new();
                 for (k, v) in obj {
+                    // "local_id" was the old remote field name for the local UUID PK; map it to "id"
                     let mapped_key = if k == "local_id" { "id" } else { k.as_str() };
-                    if k == "id" {
-                        continue;
-                    }
                     if let Some(cols) = valid_cols {
                         if !cols.contains(mapped_key) {
                             continue;
@@ -1785,10 +1847,7 @@ pub async fn apply_remote_changes(
                 }
 
                 let update_str = updates.join(", ");
-                let query_str = format!(
-                    "UPDATE {} SET {} WHERE id = ?",
-                    table, update_str
-                );
+                let query_str = format!("UPDATE {} SET {} WHERE id = ?", table, update_str);
 
                 let mut q = sqlx::query(&query_str);
 

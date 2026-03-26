@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, Set, Statement};
+use sea_orm::{
+    ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, Set,
+    Statement,
+};
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
@@ -121,8 +124,15 @@ pub async fn create_customer(
     .await
     {
         let pool = state.pool.lock().await;
-        enqueue_sync(&pool, app, "customers", "INSERT", &record_id, serde_json::json!(record))
-            .await;
+        enqueue_sync(
+            &pool,
+            app,
+            "customers",
+            "INSERT",
+            &record_id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(record_id)
@@ -199,7 +209,10 @@ pub async fn get_customers_paginated(
     let (total, customers) = if has_search {
         let count = CountRow::find_by_statement(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
-            &format!("SELECT COUNT(*) as cnt FROM customers WHERE COALESCE({}, '') LIKE ?", search_column),
+            &format!(
+                "SELECT COUNT(*) as cnt FROM customers WHERE COALESCE({}, '') LIKE ?",
+                search_column
+            ),
             [search_pattern.clone().into()],
         ))
         .one(&db)
@@ -208,9 +221,15 @@ pub async fn get_customers_paginated(
         .cnt;
 
         let data_sql = if no_limit {
-            format!("{} WHERE COALESCE({}, '') LIKE ? ORDER BY {} {}", base_select, search_column, sort_column, sort_dir)
+            format!(
+                "{} WHERE COALESCE({}, '') LIKE ? ORDER BY {} {}",
+                base_select, search_column, sort_column, sort_dir
+            )
         } else {
-            format!("{} WHERE COALESCE({}, '') LIKE ? ORDER BY {} {} LIMIT ? OFFSET ?", base_select, search_column, sort_column, sort_dir)
+            format!(
+                "{} WHERE COALESCE({}, '') LIKE ? ORDER BY {} {} LIMIT ? OFFSET ?",
+                base_select, search_column, sort_column, sort_dir
+            )
         };
 
         let rows = if no_limit {
@@ -244,7 +263,10 @@ pub async fn get_customers_paginated(
         let data_sql = if no_limit {
             format!("{} ORDER BY {} {}", base_select, sort_column, sort_dir)
         } else {
-            format!("{} ORDER BY {} {} LIMIT ? OFFSET ?", base_select, sort_column, sort_dir)
+            format!(
+                "{} ORDER BY {} {} LIMIT ? OFFSET ?",
+                base_select, sort_column, sort_dir
+            )
         };
 
         let rows = if no_limit {
@@ -344,7 +366,15 @@ pub async fn update_customer(
         .await
     {
         let pool = state.pool.lock().await;
-        enqueue_sync(&pool, app, "customers", "UPDATE", &id, serde_json::json!(record)).await;
+        enqueue_sync(
+            &pool,
+            app,
+            "customers",
+            "UPDATE",
+            &id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(())
@@ -368,7 +398,15 @@ pub async fn delete_customer(state: Arc<AppState>, app: &AppHandle, id: String) 
         .await
     {
         let pool = state.pool.lock().await;
-        enqueue_sync(&pool, app, "customers", "DELETE", &id, serde_json::json!(record)).await;
+        enqueue_sync(
+            &pool,
+            app,
+            "customers",
+            "DELETE",
+            &id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(())

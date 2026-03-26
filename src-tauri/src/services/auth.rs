@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use sea_orm::{
-    ActiveModelTrait, DatabaseBackend, EntityTrait, FromQueryResult, PaginatorTrait, Set,
-    Statement,
+    ActiveModelTrait, DatabaseBackend, EntityTrait, FromQueryResult, PaginatorTrait, Set, Statement,
 };
 use tracing::{info, instrument};
 use uuid::Uuid;

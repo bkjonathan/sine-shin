@@ -57,10 +57,7 @@ impl MigrationTrait for Migration {
                 table, col
             );
             let exists = db
-                .query_one(Statement::from_string(
-                    DatabaseBackend::Sqlite,
-                    check_sql,
-                ))
+                .query_one(Statement::from_string(DatabaseBackend::Sqlite, check_sql))
                 .await?
                 .is_some();
 
@@ -74,7 +71,13 @@ impl MigrationTrait for Migration {
         }
 
         // Backfill updated_at for rows that have NULL
-        for table in &["customers", "orders", "order_items", "expenses", "shop_settings"] {
+        for table in &[
+            "customers",
+            "orders",
+            "order_items",
+            "expenses",
+            "shop_settings",
+        ] {
             db.execute(Statement::from_string(
                 DatabaseBackend::Sqlite,
                 format!(
@@ -88,7 +91,8 @@ impl MigrationTrait for Migration {
         // Ensure orders have a status
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "UPDATE orders SET status = 'pending' WHERE status IS NULL OR TRIM(status) = ''".to_string(),
+            "UPDATE orders SET status = 'pending' WHERE status IS NULL OR TRIM(status) = ''"
+                .to_string(),
         ))
         .await?;
 

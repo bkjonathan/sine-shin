@@ -2,8 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sea_orm::{ConnectionTrait, DatabaseBackend, FromQueryResult, Statement};
 use sea_orm::SqlxSqliteConnector;
+use sea_orm::{ConnectionTrait, DatabaseBackend, FromQueryResult, Statement};
 use sea_orm_migration::MigratorTrait;
 use sqlx::sqlite::SqlitePoolOptions;
 use tauri::{AppHandle, Manager};
@@ -204,7 +204,10 @@ pub async fn reset_table_sequence(
 
     let max_id_result = MaxIdRow::find_by_statement(Statement::from_string(
         DatabaseBackend::Sqlite,
-        format!("SELECT COALESCE(MAX(id), 0) as max_id FROM {}", quoted_table),
+        format!(
+            "SELECT COALESCE(MAX(id), 0) as max_id FROM {}",
+            quoted_table
+        ),
     ))
     .one(&db)
     .await;

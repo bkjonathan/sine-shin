@@ -1,10 +1,12 @@
 -- =============================================================
--- Supabase Migration: UUID primary keys + local_id sync mapping
+-- Supabase Migration: shared UUID primary keys with local SQLite
+-- Local id (TEXT UUID) is used directly as the remote primary key.
+-- No dual-key mapping needed.
 -- =============================================================
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- Rebuild schema so UUID primary keys are guaranteed even on existing projects.
+-- =============================================================
+-- DROP existing tables (clean slate)
+-- =============================================================
 DROP TABLE IF EXISTS sync_log CASCADE;
 DROP TABLE IF EXISTS order_items CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;
@@ -17,8 +19,7 @@ DROP TABLE IF EXISTS shop_settings CASCADE;
 -- TABLES
 -- =============================================================
 CREATE TABLE IF NOT EXISTS shop_settings (
-  uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  local_id BIGINT UNIQUE NOT NULL,
+  id TEXT PRIMARY KEY,
   shop_name TEXT NOT NULL,
   phone TEXT,
   address TEXT,
@@ -32,8 +33,7 @@ CREATE TABLE IF NOT EXISTS shop_settings (
 );
 
 CREATE TABLE IF NOT EXISTS users (
-  uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  local_id BIGINT UNIQUE NOT NULL,
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT DEFAULT 'owner',
@@ -43,8 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS customers (
-  uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  local_id BIGINT UNIQUE NOT NULL,
+  id TEXT PRIMARY KEY,
   customer_id TEXT,
   name TEXT NOT NULL,
   phone TEXT,
@@ -59,10 +58,9 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 
 CREATE TABLE IF NOT EXISTS orders (
-  uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  local_id BIGINT UNIQUE NOT NULL,
+  id TEXT PRIMARY KEY,
   order_id TEXT,
-  customer_id BIGINT,
+  customer_id TEXT REFERENCES customers(id),
   status TEXT DEFAULT 'pending',
   order_from TEXT,
   exchange_rate DOUBLE PRECISION,
@@ -87,16 +85,12 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
-  synced_from_device_at TIMESTAMPTZ,
-  CONSTRAINT orders_customer_id_fkey
-    FOREIGN KEY (customer_id)
-    REFERENCES customers(local_id)
+  synced_from_device_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
-  uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  local_id BIGINT UNIQUE NOT NULL,
-  order_id BIGINT,
+  id TEXT PRIMARY KEY,
+  order_id TEXT REFERENCES orders(id) ON DELETE CASCADE,
   product_url TEXT,
   product_qty INTEGER,
   price DOUBLE PRECISION,
@@ -104,16 +98,11 @@ CREATE TABLE IF NOT EXISTS order_items (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ,
-  synced_from_device_at TIMESTAMPTZ,
-  CONSTRAINT order_items_order_id_fkey
-    FOREIGN KEY (order_id)
-    REFERENCES orders(local_id)
-    ON DELETE CASCADE
+  synced_from_device_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS expenses (
-  uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  local_id BIGINT UNIQUE NOT NULL,
+  id TEXT PRIMARY KEY,
   expense_id TEXT,
   title TEXT NOT NULL,
   amount DOUBLE PRECISION NOT NULL CHECK(amount >= 0),
@@ -128,11 +117,10 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 
 CREATE TABLE IF NOT EXISTS sync_log (
-  uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   table_name TEXT NOT NULL,
   operation TEXT NOT NULL,
-  record_uuid UUID,
-  local_id BIGINT,
+  record_id TEXT,
   payload JSONB,
   received_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -140,13 +128,6 @@ CREATE TABLE IF NOT EXISTS sync_log (
 -- =============================================================
 -- INDEXES
 -- =============================================================
-CREATE INDEX IF NOT EXISTS idx_shop_settings_local_id ON shop_settings(local_id);
-CREATE INDEX IF NOT EXISTS idx_users_local_id ON users(local_id);
-CREATE INDEX IF NOT EXISTS idx_customers_local_id ON customers(local_id);
-CREATE INDEX IF NOT EXISTS idx_orders_local_id ON orders(local_id);
-CREATE INDEX IF NOT EXISTS idx_order_items_local_id ON order_items(local_id);
-CREATE INDEX IF NOT EXISTS idx_expenses_local_id ON expenses(local_id);
-
 CREATE INDEX IF NOT EXISTS idx_customers_customer_id ON customers(customer_id);
 CREATE INDEX IF NOT EXISTS idx_customers_created_at ON customers(created_at);
 CREATE INDEX IF NOT EXISTS idx_customers_updated_at ON customers(updated_at);
@@ -196,6 +177,14 @@ DROP POLICY IF EXISTS "Service role manage order_items" ON order_items;
 DROP POLICY IF EXISTS "Service role manage expenses" ON expenses;
 DROP POLICY IF EXISTS "Service role manage sync_log" ON sync_log;
 
+DROP POLICY IF EXISTS "Authenticated manage shop_settings" ON shop_settings;
+DROP POLICY IF EXISTS "Authenticated manage users" ON users;
+DROP POLICY IF EXISTS "Authenticated manage customers" ON customers;
+DROP POLICY IF EXISTS "Authenticated manage orders" ON orders;
+DROP POLICY IF EXISTS "Authenticated manage order_items" ON order_items;
+DROP POLICY IF EXISTS "Authenticated manage expenses" ON expenses;
+DROP POLICY IF EXISTS "Authenticated manage sync_log" ON sync_log;
+
 DROP POLICY IF EXISTS "Anon manage shop_settings" ON shop_settings;
 DROP POLICY IF EXISTS "Anon manage users" ON users;
 DROP POLICY IF EXISTS "Anon manage customers" ON customers;
@@ -219,6 +208,14 @@ CREATE POLICY "Service role manage orders" ON orders FOR ALL TO service_role USI
 CREATE POLICY "Service role manage order_items" ON order_items FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "Service role manage expenses" ON expenses FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "Service role manage sync_log" ON sync_log FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Authenticated manage shop_settings" ON shop_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated manage users" ON users FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated manage customers" ON customers FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated manage orders" ON orders FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated manage order_items" ON order_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated manage expenses" ON expenses FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated manage sync_log" ON sync_log FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 CREATE POLICY "Anon manage shop_settings" ON shop_settings FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Anon manage users" ON users FOR ALL TO anon USING (true) WITH CHECK (true);

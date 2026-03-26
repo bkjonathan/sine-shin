@@ -7,7 +7,10 @@ use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
-use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, QueryOrder, Set, Statement};
+use sea_orm::{
+    ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, QueryOrder,
+    Set, Statement,
+};
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
@@ -289,7 +292,11 @@ pub async fn upload_shop_logo_to_s3(
         db.execute(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
             "UPDATE shop_settings SET logo_path = ?, logo_cloud_url = ? WHERE id = ?",
-            [local_path.into(), cloud_url.clone().into(), latest.id.clone().into()],
+            [
+                local_path.into(),
+                cloud_url.clone().into(),
+                latest.id.clone().into(),
+            ],
         ))
         .await?;
     } else {

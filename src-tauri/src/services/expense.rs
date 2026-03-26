@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, Set, Statement};
+use sea_orm::{
+    ActiveModelTrait, ConnectionTrait, DatabaseBackend, EntityTrait, FromQueryResult, Set,
+    Statement,
+};
 use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
@@ -105,8 +108,15 @@ pub async fn create_expense(
         .await
     {
         let pool = state.pool.lock().await;
-        enqueue_sync(&pool, app, "expenses", "INSERT", &record_id, serde_json::json!(record))
-            .await;
+        enqueue_sync(
+            &pool,
+            app,
+            "expenses",
+            "INSERT",
+            &record_id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(record_id)
@@ -163,8 +173,8 @@ pub async fn get_expenses_paginated(
     let has_search = !raw_search.is_empty();
     let search_pattern = format!("%{}%", raw_search);
 
-    let normalized_category = sanitize_optional(category_filter)
-        .filter(|v| v.to_lowercase() != "all");
+    let normalized_category =
+        sanitize_optional(category_filter).filter(|v| v.to_lowercase() != "all");
     let normalized_date_from = sanitize_optional(date_from);
     let normalized_date_to = sanitize_optional(date_to);
 
@@ -340,7 +350,15 @@ pub async fn update_expense(
         .await
     {
         let pool = state.pool.lock().await;
-        enqueue_sync(&pool, app, "expenses", "UPDATE", &id, serde_json::json!(record)).await;
+        enqueue_sync(
+            &pool,
+            app,
+            "expenses",
+            "UPDATE",
+            &id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(())
@@ -364,7 +382,15 @@ pub async fn delete_expense(state: Arc<AppState>, app: &AppHandle, id: String) -
         .await
     {
         let pool = state.pool.lock().await;
-        enqueue_sync(&pool, app, "expenses", "DELETE", &id, serde_json::json!(record)).await;
+        enqueue_sync(
+            &pool,
+            app,
+            "expenses",
+            "DELETE",
+            &id,
+            serde_json::json!(record),
+        )
+        .await;
     }
 
     Ok(())

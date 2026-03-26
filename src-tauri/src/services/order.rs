@@ -241,42 +241,41 @@ pub async fn create_order(
 
     let txn = db.begin().await?;
 
-    txn
-        .execute(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
-            "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, \
+    txn.execute(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "INSERT INTO orders (id, customer_id, status, order_from, exchange_rate, \
              shipping_fee, delivery_fee, cargo_fee, order_date, arrived_date, shipment_date, \
              user_withdraw_date, service_fee, product_discount, service_fee_type, \
              shipping_fee_paid, delivery_fee_paid, cargo_fee_paid, service_fee_paid, \
              shipping_fee_by_shop, delivery_fee_by_shop, cargo_fee_by_shop, exclude_cargo_fee) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-                record_id.clone().into(),
-                customer_id.into(),
-                normalized_status.into(),
-                order_from.into(),
-                exchange_rate.into(),
-                shipping_fee.into(),
-                delivery_fee.into(),
-                cargo_fee.into(),
-                order_date.into(),
-                arrived_date.into(),
-                shipment_date.into(),
-                user_withdraw_date.into(),
-                service_fee.into(),
-                product_discount.into(),
-                service_fee_type.into(),
-                shipping_fee_paid.unwrap_or(false).into(),
-                delivery_fee_paid.unwrap_or(false).into(),
-                cargo_fee_paid.unwrap_or(false).into(),
-                service_fee_paid.unwrap_or(false).into(),
-                shipping_fee_by_shop.unwrap_or(false).into(),
-                delivery_fee_by_shop.unwrap_or(false).into(),
-                cargo_fee_by_shop.unwrap_or(false).into(),
-                exclude_cargo_fee.unwrap_or(false).into(),
-            ],
-        ))
-        .await?;
+        [
+            record_id.clone().into(),
+            customer_id.into(),
+            normalized_status.into(),
+            order_from.into(),
+            exchange_rate.into(),
+            shipping_fee.into(),
+            delivery_fee.into(),
+            cargo_fee.into(),
+            order_date.into(),
+            arrived_date.into(),
+            shipment_date.into(),
+            user_withdraw_date.into(),
+            service_fee.into(),
+            product_discount.into(),
+            service_fee_type.into(),
+            shipping_fee_paid.unwrap_or(false).into(),
+            delivery_fee_paid.unwrap_or(false).into(),
+            cargo_fee_paid.unwrap_or(false).into(),
+            service_fee_paid.unwrap_or(false).into(),
+            shipping_fee_by_shop.unwrap_or(false).into(),
+            delivery_fee_by_shop.unwrap_or(false).into(),
+            cargo_fee_by_shop.unwrap_or(false).into(),
+            exclude_cargo_fee.unwrap_or(false).into(),
+        ],
+    ))
+    .await?;
 
     for item in items {
         let item_id = Uuid::new_v4().to_string();
@@ -346,17 +345,24 @@ pub async fn create_order(
 
     let pool = state.pool.lock().await;
 
-    if let Ok(Some(order)) = crate::models::Order::find_by_statement(
-        Statement::from_sql_and_values(
+    if let Ok(Some(order)) =
+        crate::models::Order::find_by_statement(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
             "SELECT * FROM orders WHERE id = ?",
             [record_id.clone().into()],
-        ),
-    )
-    .one(&db)
-    .await
+        ))
+        .one(&db)
+        .await
     {
-        enqueue_sync(&*pool, app, "orders", "INSERT", &record_id, serde_json::json!(order)).await;
+        enqueue_sync(
+            &*pool,
+            app,
+            "orders",
+            "INSERT",
+            &record_id,
+            serde_json::json!(order),
+        )
+        .await;
     }
 
     if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(
@@ -689,17 +695,24 @@ pub async fn update_order(
 
     let pool = state.pool.lock().await;
 
-    if let Ok(Some(order)) = crate::models::Order::find_by_statement(
-        Statement::from_sql_and_values(
+    if let Ok(Some(order)) =
+        crate::models::Order::find_by_statement(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
             "SELECT * FROM orders WHERE id = ?",
             [id.clone().into()],
-        ),
-    )
-    .one(&db)
-    .await
+        ))
+        .one(&db)
+        .await
     {
-        enqueue_sync(&*pool, app, "orders", "UPDATE", &id, serde_json::json!(order)).await;
+        enqueue_sync(
+            &*pool,
+            app,
+            "orders",
+            "UPDATE",
+            &id,
+            serde_json::json!(order),
+        )
+        .await;
     }
 
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -762,17 +775,24 @@ pub async fn delete_order(state: Arc<AppState>, app: &AppHandle, id: String) -> 
 
     let pool = state.pool.lock().await;
 
-    if let Ok(Some(order)) = crate::models::Order::find_by_statement(
-        Statement::from_sql_and_values(
+    if let Ok(Some(order)) =
+        crate::models::Order::find_by_statement(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
             "SELECT * FROM orders WHERE id = ?",
             [id.clone().into()],
-        ),
-    )
-    .one(&db)
-    .await
+        ))
+        .one(&db)
+        .await
     {
-        enqueue_sync(&*pool, app, "orders", "DELETE", &id, serde_json::json!(order)).await;
+        enqueue_sync(
+            &*pool,
+            app,
+            "orders",
+            "DELETE",
+            &id,
+            serde_json::json!(order),
+        )
+        .await;
     }
 
     if let Ok(items_db) = OrderItem::find_by_statement(Statement::from_sql_and_values(

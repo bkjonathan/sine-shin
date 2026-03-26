@@ -80,10 +80,7 @@ pub async fn get_expenses_paginated(
 /// Loads one expense by id.
 #[tauri::command]
 #[instrument(skip(state))]
-pub async fn get_expense(
-    state: State<'_, Arc<AppState>>,
-    id: String,
-) -> Result<Expense, AppError> {
+pub async fn get_expense(state: State<'_, Arc<AppState>>, id: String) -> Result<Expense, AppError> {
     expense::get_expense(state.inner().clone(), id).await
 }
 

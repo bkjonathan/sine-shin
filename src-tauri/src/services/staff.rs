@@ -141,7 +141,12 @@ pub async fn create_staff_user(
 
     let response: StaffUserApiResponse = state
         .supabase_client
-        .post_json(&url, &config.supabase_service_key, &payload, "create_staff_user")
+        .post_json(
+            &url,
+            &config.supabase_service_key,
+            &payload,
+            "create_staff_user",
+        )
         .await?;
 
     let user = unpack_user(response);
@@ -179,7 +184,12 @@ pub async fn update_staff_user(
 
     let response: StaffUserApiResponse = state
         .supabase_client
-        .put_json(&url, &config.supabase_service_key, &payload, "update_staff_user")
+        .put_json(
+            &url,
+            &config.supabase_service_key,
+            &payload,
+            "update_staff_user",
+        )
         .await?;
 
     let user = unpack_user(response);
