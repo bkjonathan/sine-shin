@@ -138,7 +138,7 @@ pub async fn get_account_summary(
     let expense_all = ExpenseRow::find_by_statement(Statement::from_string(
         DatabaseBackend::Sqlite,
         format!(
-            "SELECT COALESCE(SUM(amount), 0) as total_expenses, COUNT(*) as total_records \
+            "SELECT CAST(COALESCE(SUM(amount), 0) AS REAL) as total_expenses, COUNT(*) as total_records \
              FROM expenses WHERE deleted_at IS NULL{}",
             expenses_date_filter
         ),
@@ -152,7 +152,7 @@ pub async fn get_account_summary(
 
     let expense_month = ExpenseRow::find_by_statement(Statement::from_string(
         DatabaseBackend::Sqlite,
-        "SELECT COALESCE(SUM(amount), 0) as total_expenses, COUNT(*) as total_records \
+        "SELECT CAST(COALESCE(SUM(amount), 0) AS REAL) as total_expenses, COUNT(*) as total_records \
          FROM expenses WHERE deleted_at IS NULL \
          AND strftime('%Y-%m', COALESCE(expense_date, created_at)) = strftime('%Y-%m', 'now')"
             .to_string(),

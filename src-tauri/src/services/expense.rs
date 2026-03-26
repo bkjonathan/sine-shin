@@ -116,10 +116,15 @@ pub async fn create_expense(
 #[instrument(skip(state))]
 pub async fn get_expenses(state: Arc<AppState>) -> AppResult<Vec<Expense>> {
     let db = state.db.lock().await.clone();
-    let expenses = expenses::Entity::find()
-        .into_model::<Expense>()
-        .all(&db)
-        .await?;
+    let expenses = Expense::find_by_statement(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "SELECT id, expense_id, title, amount, category, payment_method, notes, expense_date, \
+         created_at, updated_at, deleted_at FROM expenses WHERE deleted_at IS NULL \
+         ORDER BY COALESCE(expense_date, created_at) DESC"
+            .to_string(),
+    ))
+    .all(&db)
+    .await?;
     Ok(expenses)
 }
 
@@ -186,7 +191,7 @@ pub async fn get_expenses_paginated(
     };
 
     // Build WHERE conditions and parameter list
-    let mut conditions: Vec<String> = vec![];
+    let mut conditions: Vec<String> = vec!["deleted_at IS NULL".to_string()];
     let mut params: Vec<sea_orm::Value> = vec![];
 
     if has_search {
@@ -276,11 +281,15 @@ pub async fn get_expenses_paginated(
 #[instrument(skip(state))]
 pub async fn get_expense(state: Arc<AppState>, id: String) -> AppResult<Expense> {
     let db = state.db.lock().await.clone();
-    expenses::Entity::find_by_id(id)
-        .into_model::<Expense>()
-        .one(&db)
-        .await?
-        .ok_or_else(|| AppError::not_found("Expense not found"))
+    Expense::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        "SELECT id, expense_id, title, amount, category, payment_method, notes, expense_date, \
+         created_at, updated_at, deleted_at FROM expenses WHERE id = ? AND deleted_at IS NULL",
+        [id.into()],
+    ))
+    .one(&db)
+    .await?
+    .ok_or_else(|| AppError::not_found("Expense not found"))
 }
 
 /// Updates expense row and enqueues sync payload.

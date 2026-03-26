@@ -22,6 +22,7 @@ import { useSound } from "../../../context/SoundContext";
 import { useAppSettings } from "../../../context/AppSettingsContext";
 import { useIsTabPanelActive } from "../../../context/TabPanelActivityContext";
 import { formatDate } from "../../../utils/date";
+import { createCSVContent, parseCSV } from "../../../utils/csvUtils";
 import { Button, Select } from "../../ui";
 import ExpenseDeleteModal from "../expenses/ExpenseDeleteModal";
 import ExpenseFormModal from "../expenses/ExpenseFormModal";
@@ -34,6 +35,7 @@ import {
   IconSortAsc,
   IconSortDesc,
   IconTrash,
+  IconUpload,
   IconLayoutGrid,
   IconList,
 } from "../../icons";
@@ -132,6 +134,58 @@ const getCategoryBadgeClass = (category?: string | null) => {
 const MAX_EXPENSE_TITLE_LENGTH = 150;
 const MAX_EXPENSE_NOTES_LENGTH = 1000;
 
+const EXPENSE_CSV_HEADERS = [
+  "ID",
+  "Expense ID",
+  "Title",
+  "Amount",
+  "Category",
+  "Payment Method",
+  "Expense Date",
+  "Notes",
+  "Created At",
+];
+
+const CATEGORY_ALIASES: Record<string, string> = {
+  operation: "operation",
+  transport: "transport",
+  rent: "rent",
+  salary: "salary",
+  utilities: "utilities",
+  marketing: "marketing",
+  other: "other",
+  Operation: "operation",
+  Transport: "transport",
+  Rent: "rent",
+  Salary: "salary",
+  Utilities: "utilities",
+  Marketing: "marketing",
+  Other: "other",
+};
+
+const PAYMENT_METHOD_ALIASES: Record<string, string> = {
+  cash: "cash",
+  bank_transfer: "bank_transfer",
+  mobile_wallet: "mobile_wallet",
+  credit: "credit",
+  other: "other",
+  Cash: "cash",
+  "Bank Transfer": "bank_transfer",
+  "Mobile Wallet": "mobile_wallet",
+  Credit: "credit",
+  Other: "other",
+};
+
+const getCsvField = (
+  record: Record<string, string>,
+  aliases: string[],
+): string | undefined => {
+  const key = Object.keys(record).find((k) =>
+    aliases.includes(k.trim().toLowerCase()),
+  );
+  return key ? record[key] : undefined;
+};
+
 const hasExpenseFormErrors = (errors: ExpenseFormErrors): boolean => {
   return Object.values(errors).some(Boolean);
 };
@@ -204,6 +258,9 @@ export default function AccountBookExpenseTab({
 
   const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -533,53 +590,29 @@ export default function AccountBookExpenseTab({
         return;
       }
 
-      const headers = [
-        "ID",
-        "Expense ID",
-        "Title",
-        "Amount",
-        "Category",
-        "Payment Method",
-        "Expense Date",
-        "Notes",
-        "Created At",
-      ];
-
-      const escapeCsv = (value: string | number | null | undefined) => {
-        const stringValue = String(value ?? "");
-        return `"${stringValue.replace(/"/g, '""')}"`;
-      };
-
-      const rows = [...allExpenses]
+      const csvRows = [...allExpenses]
         .sort((a, b) => a.id.localeCompare(b.id))
-        .map((expense) => {
-          return [
-            expense.id,
-            expense.expense_id || "",
-            expense.title,
-            expense.amount,
-            getCategoryLabel(expense.category),
-            getPaymentMethodLabel(expense.payment_method),
-            expense.expense_date || "",
-            expense.notes || "",
-            expense.created_at || "",
-          ]
-            .map((cell) => escapeCsv(cell))
-            .join(",");
-        });
+        .map((expense) => [
+          expense.id,
+          expense.expense_id || "",
+          expense.title,
+          expense.amount,
+          expense.category || "",
+          expense.payment_method || "",
+          expense.expense_date || "",
+          expense.notes || "",
+          expense.created_at || "",
+        ]);
 
-      const csvContent = [
-        headers.map((value) => `"${value}"`).join(","),
-        ...rows,
-      ].join("\n");
+      const csvContent = createCSVContent(EXPENSE_CSV_HEADERS, csvRows);
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-
-      const date = new Date().toISOString().split("T")[0];
-      link.setAttribute("download", `expenses_export_${date}.csv`);
-
+      link.setAttribute(
+        "download",
+        `expenses_export_${new Date().toISOString().split("T")[0]}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -588,6 +621,154 @@ export default function AccountBookExpenseTab({
     } catch (error) {
       console.error("Failed to export expenses:", error);
       playSound("error");
+    }
+  };
+
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+
+    try {
+      setIsImporting(true);
+      const text = await file.text();
+      const records = parseCSV(text);
+
+      if (records.length === 0) {
+        playSound("error");
+        alert(t("expenses.import.no_records_found"));
+        return;
+      }
+
+      const existingExpenses = await getExpenses();
+      const expensesById = new Map<string, Expense>(
+        existingExpenses.map((e) => [e.id, e]),
+      );
+
+      let createdCount = 0;
+      let updatedCount = 0;
+      let errorCount = 0;
+      const errorDetails: string[] = [];
+
+      for (const [index, record] of records.entries()) {
+        const rowNumber = index + 2;
+        const title = (getCsvField(record, ["title"]) ?? "").trim();
+        if (!title) {
+          errorCount++;
+          errorDetails.push(
+            t("expenses.import.missing_title", { row: rowNumber }),
+          );
+          continue;
+        }
+
+        const amountRaw = getCsvField(record, ["amount"]) ?? "";
+        const amount = Number.parseFloat(amountRaw);
+        if (Number.isNaN(amount) || amount < 0) {
+          errorCount++;
+          errorDetails.push(
+            t("expenses.import.invalid_amount", { row: rowNumber }),
+          );
+          continue;
+        }
+
+        const rawCategory = getCsvField(record, ["category"]) ?? "";
+        const category =
+          CATEGORY_ALIASES[rawCategory] ||
+          (EXPENSE_CATEGORIES.includes(
+            rawCategory.toLowerCase() as (typeof EXPENSE_CATEGORIES)[number],
+          )
+            ? rawCategory.toLowerCase()
+            : rawCategory || undefined) ||
+          undefined;
+
+        const rawPayment =
+          getCsvField(record, ["payment method", "payment_method"]) ?? "";
+        const paymentMethod =
+          PAYMENT_METHOD_ALIASES[rawPayment] ||
+          (PAYMENT_METHODS.includes(
+            rawPayment.toLowerCase() as (typeof PAYMENT_METHODS)[number],
+          )
+            ? rawPayment.toLowerCase()
+            : rawPayment || undefined) ||
+          undefined;
+
+        const expenseDate =
+          (getCsvField(record, ["expense date", "expense_date"]) ?? "").trim() ||
+          undefined;
+        const notes =
+          (getCsvField(record, ["notes"]) ?? "").trim() || undefined;
+        const importedId =
+          (getCsvField(record, ["id", "uuid"]) ?? "").trim() || undefined;
+        const expenseId =
+          (getCsvField(record, ["expense id", "expense_id"]) ?? "").trim() ||
+          undefined;
+
+        const existing = importedId ? expensesById.get(importedId) : undefined;
+
+        try {
+          if (existing) {
+            await updateExpense({
+              id: existing.id,
+              title,
+              amount,
+              category: category ?? existing.category ?? undefined,
+              expense_date: expenseDate ?? existing.expense_date ?? undefined,
+              payment_method:
+                paymentMethod ?? existing.payment_method ?? undefined,
+              notes: notes ?? existing.notes ?? undefined,
+            });
+            updatedCount++;
+          } else {
+            const createdId = await createExpense({
+              id: importedId,
+              expense_id: expenseId,
+              title,
+              amount,
+              category,
+              expense_date: expenseDate,
+              payment_method: paymentMethod,
+              notes,
+            });
+            expensesById.set(createdId, {
+              id: createdId,
+              title,
+              amount,
+              category,
+              expense_date: expenseDate,
+              payment_method: paymentMethod,
+              notes,
+            });
+            createdCount++;
+          }
+        } catch (error) {
+          errorCount++;
+          errorDetails.push(
+            `Row ${rowNumber} (${title}): ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
+      playSound(createdCount + updatedCount > 0 ? "success" : "error");
+      await fetchExpenses(currentPage);
+
+      let message = t("expenses.import.complete", {
+        created: createdCount,
+        updated: updatedCount,
+        failed: errorCount,
+      });
+      if (errorCount > 0) {
+        message += t("expenses.import.check_console");
+        console.error("Import Errors:", errorDetails);
+      }
+      alert(message);
+    } catch (error) {
+      console.error("Failed to parse CSV:", error);
+      playSound("error");
+      alert(t("expenses.import.parse_error"));
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -635,6 +816,26 @@ export default function AccountBookExpenseTab({
               <IconList size={16} strokeWidth={2} />
             </button>
           </div>
+          <input
+            type="file"
+            accept=".csv"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
+          >
+            {isImporting ? (
+              <div className="w-4 h-4 border-2 border-text-secondary border-t-text-primary rounded-full animate-spin" />
+            ) : (
+              <IconUpload size={16} strokeWidth={2} />
+            )}
+            {t("expenses.import_csv")}
+          </Button>
           <Button
             onClick={handleExport}
             variant="ghost"

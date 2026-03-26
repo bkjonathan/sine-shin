@@ -381,6 +381,7 @@
   "expenses": {
     "title": "Expenses",
     "manage_expenses": "Track and manage your business expenses",
+    "import_csv": "Import CSV",
     "export_csv": "Export CSV",
     "add_expense": "Add Expense",
     "search_by": "Search by",
@@ -448,6 +449,14 @@
       "message_part1": "Are you sure you want to delete ",
       "message_part2": "? This action cannot be undone.",
       "delete": "Delete"
+    },
+    "import": {
+      "no_records_found": "No records found in CSV file.",
+      "missing_title": "Row {{row}}: Title is required.",
+      "invalid_amount": "Row {{row}}: Amount must be a valid non-negative number.",
+      "complete": "Import complete: {{created}} created, {{updated}} updated, {{failed}} failed.",
+      "check_console": " Check the console for error details.",
+      "parse_error": "Failed to parse CSV file. Please check the file format."
     }
   },
   "customers": {
