@@ -18,7 +18,7 @@ use crate::state::AppState;
 pub async fn create_order(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    customer_id: i64,
+    customer_id: String,
     status: Option<String>,
     order_from: Option<String>,
     exchange_rate: Option<f64>,
@@ -33,7 +33,7 @@ pub async fn create_order(
     product_discount: Option<f64>,
     service_fee_type: Option<String>,
     items: Vec<OrderItemPayload>,
-    id: Option<i64>,
+    id: Option<String>,
     order_id: Option<String>,
     shipping_fee_paid: Option<bool>,
     delivery_fee_paid: Option<bool>,
@@ -43,7 +43,7 @@ pub async fn create_order(
     delivery_fee_by_shop: Option<bool>,
     cargo_fee_by_shop: Option<bool>,
     exclude_cargo_fee: Option<bool>,
-) -> Result<i64, AppError> {
+) -> Result<String, AppError> {
     order::create_order(
         state.inner().clone(),
         &app,
@@ -116,7 +116,7 @@ pub async fn get_orders_paginated(
 #[instrument(skip(state))]
 pub async fn get_customer_orders(
     state: State<'_, Arc<AppState>>,
-    customer_id: i64,
+    customer_id: String,
 ) -> Result<Vec<OrderWithCustomer>, AppError> {
     order::get_customer_orders(state.inner().clone(), customer_id).await
 }
@@ -124,7 +124,10 @@ pub async fn get_customer_orders(
 /// Loads one order with its items.
 #[tauri::command]
 #[instrument(skip(state))]
-pub async fn get_order(state: State<'_, Arc<AppState>>, id: i64) -> Result<OrderDetail, AppError> {
+pub async fn get_order(
+    state: State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<OrderDetail, AppError> {
     order::get_order(state.inner().clone(), id).await
 }
 
@@ -135,8 +138,8 @@ pub async fn get_order(state: State<'_, Arc<AppState>>, id: i64) -> Result<Order
 pub async fn update_order(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    id: i64,
-    customer_id: i64,
+    id: String,
+    customer_id: String,
     status: Option<String>,
     order_from: Option<String>,
     exchange_rate: Option<f64>,
@@ -197,7 +200,7 @@ pub async fn update_order(
 pub async fn delete_order(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    id: i64,
+    id: String,
 ) -> Result<(), AppError> {
     order::delete_order(state.inner().clone(), &app, id).await
 }

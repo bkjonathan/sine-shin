@@ -62,16 +62,16 @@ export const getOrdersPaginated = async (
   });
 };
 
-export const getOrderById = async (id: number): Promise<OrderDetail> => {
+export const getOrderById = async (id: string): Promise<OrderDetail> => {
   return await invoke("get_order", { id });
 };
 
 export const createOrder = async (
   order: Omit<Order, "id" | "created_at"> & {
     items: OrderItemPayload[];
-    id?: number;
+    id?: string;
   },
-): Promise<number> => {
+): Promise<string> => {
   return await invoke("create_order", {
     customerId: order.customer_id,
     status: order.status,
@@ -132,7 +132,7 @@ export const updateOrder = async (
   });
 };
 
-export const deleteOrder = async (id: number): Promise<void> => {
+export const deleteOrder = async (id: string): Promise<void> => {
   return await invoke("delete_order", { id });
 };
 

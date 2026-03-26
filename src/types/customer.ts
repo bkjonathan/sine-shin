@@ -1,6 +1,5 @@
 export interface Customer {
-  id: number;
-  uuid?: string | null;
+  id: string;
   customer_id?: string | null;
   name: string;
   phone?: string | null;
@@ -14,8 +13,7 @@ export interface Customer {
 }
 
 export interface CustomerMutationInput {
-  id?: number;
-  uuid?: string | null;
+  id?: string;
   customer_id?: string | null;
   name: string;
   phone?: string | null;

@@ -21,9 +21,9 @@ pub async fn create_expense(
     expense_date: Option<String>,
     payment_method: Option<String>,
     notes: Option<String>,
-    id: Option<i64>,
+    id: Option<String>,
     expense_id: Option<String>,
-) -> Result<i64, AppError> {
+) -> Result<String, AppError> {
     expense::create_expense(
         state.inner().clone(),
         &app,
@@ -80,7 +80,10 @@ pub async fn get_expenses_paginated(
 /// Loads one expense by id.
 #[tauri::command]
 #[instrument(skip(state))]
-pub async fn get_expense(state: State<'_, Arc<AppState>>, id: i64) -> Result<Expense, AppError> {
+pub async fn get_expense(
+    state: State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<Expense, AppError> {
     expense::get_expense(state.inner().clone(), id).await
 }
 
@@ -91,7 +94,7 @@ pub async fn get_expense(state: State<'_, Arc<AppState>>, id: i64) -> Result<Exp
 pub async fn update_expense(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    id: i64,
+    id: String,
     title: String,
     amount: f64,
     category: Option<String>,
@@ -119,7 +122,7 @@ pub async fn update_expense(
 pub async fn delete_expense(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    id: i64,
+    id: String,
 ) -> Result<(), AppError> {
     expense::delete_expense(state.inner().clone(), &app, id).await
 }

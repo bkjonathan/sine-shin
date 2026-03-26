@@ -68,13 +68,13 @@ export const getExpensesPaginated = async (
   });
 };
 
-export const getExpenseById = async (id: number): Promise<Expense> => {
+export const getExpenseById = async (id: string): Promise<Expense> => {
   return await invoke("get_expense", { id });
 };
 
 export const createExpense = async (
-  expense: Omit<Expense, "id" | "created_at"> & { id?: number },
-): Promise<number> => {
+  expense: Omit<Expense, "id" | "created_at"> & { id?: string },
+): Promise<string> => {
   return await invoke("create_expense", {
     title: expense.title,
     amount: expense.amount,
@@ -101,6 +101,6 @@ export const updateExpense = async (
   });
 };
 
-export const deleteExpense = async (id: number): Promise<void> => {
+export const deleteExpense = async (id: string): Promise<void> => {
   return await invoke("delete_expense", { id });
 };

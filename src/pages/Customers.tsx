@@ -132,22 +132,6 @@ const parseCsvOptionalString = (
   return trimmed;
 };
 
-const parseCsvOptionalNumber = (
-  record: Record<string, string>,
-  aliases: string[],
-): number | undefined => {
-  const raw = parseCsvOptionalString(record, aliases);
-  if (raw === undefined || raw === null) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(raw, 10);
-  if (Number.isNaN(parsed)) {
-    return undefined;
-  }
-
-  return parsed;
-};
 
 const toTitleCase = (value: string) => {
   return value.replace(
@@ -343,7 +327,7 @@ export default function Customers() {
       }
 
       const existingCustomers = await getCustomers();
-      const customersById = new Map<number, Customer>(
+      const customersById = new Map<string, Customer>(
         existingCustomers.map((customer) => [customer.id, customer]),
       );
       const customersByCustomerId = new Map<string, Customer>(
@@ -369,8 +353,7 @@ export default function Customers() {
         }
 
         const importedCustomer: CustomerMutationInput = {
-          id: parseCsvOptionalNumber(record, ["id", "local_id"]),
-          uuid: parseCsvOptionalString(record, ["uuid"]),
+          id: parseCsvOptionalString(record, ["id", "local_id", "uuid"]) ?? undefined,
           customer_id: parseCsvOptionalString(record, [
             "customer id",
             "customer_id",
@@ -410,12 +393,8 @@ export default function Customers() {
             const previousCustomerIdKey = targetCustomer.customer_id
               ?.trim()
               .toLowerCase();
-            const mergedPayload: CustomerMutationInput & { id: number } = {
+            const mergedPayload: CustomerMutationInput & { id: string } = {
               id: targetCustomer.id,
-              uuid:
-                importedCustomer.uuid === undefined
-                  ? targetCustomer.uuid
-                  : importedCustomer.uuid,
               customer_id:
                 importedCustomer.customer_id === undefined
                   ? targetCustomer.customer_id
@@ -647,7 +626,7 @@ export default function Customers() {
     }
   };
 
-  const openLabelPrintPage = (customerId?: number) => {
+  const openLabelPrintPage = (customerId?: string) => {
     const params = new URLSearchParams({ source: "customers" });
     if (customerId) {
       params.set("ids", String(customerId));
@@ -705,11 +684,11 @@ export default function Customers() {
                 }
 
                 const sortedCustomers = [...allCustomers].sort(
-                  (a, b) => a.id - b.id,
+                  (a, b) => a.id.localeCompare(b.id),
                 );
                 const csvRows = sortedCustomers.map((customer) => [
                   customer.id,
-                  customer.uuid,
+                  customer.id,
                   customer.customer_id,
                   customer.name,
                   customer.phone,

@@ -24,9 +24,7 @@ pub struct SyncQueueItem {
     pub id: i64,
     pub table_name: String,
     pub operation: String,
-    pub record_id: i64,
-    #[sqlx(default)]
-    pub record_uuid: Option<String>,
+    pub record_id: String,
     pub payload: String,
     pub status: String,
     pub retry_count: i32,
@@ -138,7 +136,7 @@ fn remote_row_timestamp_millis(row: &serde_json::Value) -> i64 {
 }
 
 fn remote_order_item_signature(row: &serde_json::Value) -> Option<String> {
-    let order_id = row.get("order_id").and_then(|v| v.as_i64())?;
+    let order_id = row.get("order_id").and_then(|v| v.as_str())?;
     let product_url = row
         .get("product_url")
         .and_then(|v| v.as_str())
@@ -158,7 +156,7 @@ fn remote_order_item_signature(row: &serde_json::Value) -> Option<String> {
     ))
 }
 
-async fn local_record_is_active(pool: &Pool<Sqlite>, table: &str, record_id: i64) -> bool {
+async fn local_record_is_active(pool: &Pool<Sqlite>, table: &str, record_id: &str) -> bool {
     let exists = match table {
         "shop_settings" => {
             sqlx::query_scalar::<_, i64>("SELECT 1 FROM shop_settings WHERE id = ? LIMIT 1")
@@ -190,7 +188,7 @@ async fn local_record_is_active(pool: &Pool<Sqlite>, table: &str, record_id: i64
 
 fn extract_record_uuid(payload: &serde_json::Value) -> Option<String> {
     payload
-        .get("uuid")
+        .get("id")
         .and_then(|v| v.as_str())
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -198,7 +196,7 @@ fn extract_record_uuid(payload: &serde_json::Value) -> Option<String> {
 
 fn build_supabase_payload(
     table: &str,
-    record_id: i64,
+    record_id: &str,
     payload: &str,
 ) -> Result<serde_json::Value, String> {
     let mut value: serde_json::Value = serde_json::from_str(payload)
@@ -207,21 +205,14 @@ fn build_supabase_payload(
         .as_object_mut()
         .ok_or_else(|| format!("Payload for {} must be a JSON object", table))?;
 
-    let local_id = obj.get("id").and_then(|v| v.as_i64()).unwrap_or(record_id);
+    let local_id = obj
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(record_id)
+        .to_string();
     obj.insert("local_id".to_string(), serde_json::json!(local_id));
     obj.remove("id");
     obj.remove("synced");
-    // Preserve local UUID when present so truncate/full-sync keeps the same PK mapping.
-    let normalized_uuid = obj
-        .get("uuid")
-        .and_then(|v| v.as_str())
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
-    if let Some(uuid) = normalized_uuid {
-        obj.insert("uuid".to_string(), serde_json::json!(uuid));
-    } else {
-        obj.remove("uuid");
-    }
 
     obj.insert(
         "synced_from_device_at".to_string(),
@@ -234,30 +225,19 @@ fn build_supabase_payload(
 async fn mark_local_synced(
     pool: &Pool<Sqlite>,
     table: &str,
-    record_id: i64,
-    remote_uuid: Option<&str>,
+    record_id: &str,
+    _remote_uuid: Option<&str>,
 ) {
     if !supports_synced_marker(table) {
         return;
     }
 
-    let query = if remote_uuid.is_some() {
-        format!(
-            "UPDATE {} SET synced = 1, uuid = COALESCE(?, uuid), updated_at = datetime('now') WHERE id = ?",
-            table
-        )
-    } else {
-        format!(
-            "UPDATE {} SET synced = 1, updated_at = datetime('now') WHERE id = ?",
-            table
-        )
-    };
+    let query = format!(
+        "UPDATE {} SET synced = 1, updated_at = datetime('now') WHERE id = ?",
+        table
+    );
 
-    let mut q = sqlx::query(&query);
-    if let Some(uuid) = remote_uuid {
-        q = q.bind(uuid.to_string());
-    }
-    let _ = q.bind(record_id).execute(pool).await;
+    let _ = sqlx::query(&query).bind(record_id).execute(pool).await;
 }
 
 /// Push one record to Supabase. Returns remote uuid when available.
@@ -265,7 +245,7 @@ async fn push_sync_item(
     config: &SyncConfig,
     table: &str,
     op: &str,
-    record_id: i64,
+    record_id: &str,
     record_uuid: Option<&str>,
     payload: &str,
 ) -> Result<PushSyncResult, String> {
@@ -369,12 +349,13 @@ pub async fn enqueue_sync(
     _app: &AppHandle,
     table: &str,
     op: &str,
-    record_id: i64,
+    record_id: &str,
     payload: serde_json::Value,
 ) {
     let pool_clone = pool.clone();
     let table_name = table.to_string();
     let operation = op.to_string();
+    let record_id_owned = record_id.to_string();
     let record_uuid = extract_record_uuid(&payload);
     let payload_str = payload.to_string();
 
@@ -397,7 +378,7 @@ pub async fn enqueue_sync(
                        AND status IN ('pending', 'failed')",
                 )
                 .bind(&table_name)
-                .bind(record_id)
+                .bind(&record_id_owned)
                 .execute(&pool_clone)
                 .await;
             }
@@ -409,7 +390,7 @@ pub async fn enqueue_sync(
                        AND status IN ('pending', 'failed')",
                 )
                 .bind(&table_name)
-                .bind(record_id)
+                .bind(&record_id_owned)
                 .execute(&pool_clone)
                 .await;
             }
@@ -421,7 +402,7 @@ pub async fn enqueue_sync(
             &config,
             &table_name,
             &operation,
-            record_id,
+            &record_id_owned,
             record_uuid.as_deref(),
             &payload_str,
         )
@@ -431,19 +412,18 @@ pub async fn enqueue_sync(
                 mark_local_synced(
                     &pool_clone,
                     &table_name,
-                    record_id,
+                    &record_id_owned,
                     result.remote_uuid.as_deref(),
                 )
                 .await;
             }
             Err(sync_error) => {
                 let _ = sqlx::query(
-                    "INSERT INTO sync_queue (table_name, operation, record_id, record_uuid, payload, status, error_message) VALUES (?, ?, ?, ?, ?, 'pending', ?)"
+                    "INSERT INTO sync_queue (table_name, operation, record_id, payload, status, error_message) VALUES (?, ?, ?, ?, 'pending', ?)"
             )
             .bind(table_name)
             .bind(operation)
-            .bind(record_id)
-                .bind(record_uuid)
+            .bind(record_id_owned)
             .bind(payload_str)
             .bind(sync_error)
             .execute(&pool_clone)
@@ -518,7 +498,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
         // Skip stale queue rows where the local record no longer exists/active.
         // This prevents old order_items INSERTs from resurrecting replaced rows remotely.
         if item.operation != "DELETE"
-            && !local_record_is_active(&pool, &item.table_name, item.record_id).await
+            && !local_record_is_active(&pool, &item.table_name, &item.record_id).await
         {
             let _ = sqlx::query(
                 "UPDATE sync_queue
@@ -543,8 +523,8 @@ pub async fn process_sync_queue(app: &AppHandle) {
             &config,
             &item.table_name,
             &item.operation,
-            item.record_id,
-            item.record_uuid.as_deref(),
+            &item.record_id,
+            None,
             &item.payload,
         )
         .await
@@ -559,7 +539,7 @@ pub async fn process_sync_queue(app: &AppHandle) {
                 mark_local_synced(
                     &*pool,
                     &item.table_name,
-                    item.record_id,
+                    &item.record_id,
                     result.remote_uuid.as_deref(),
                 )
                 .await;
@@ -1055,29 +1035,28 @@ pub async fn trigger_full_sync(app: AppHandle) -> Result<String, String> {
 
     // Table definitions: (table_name, json_object columns SQL)
     let tables: Vec<(&str, &str)> = vec![
-        ("shop_settings", "json_object('id', id, 'uuid', uuid, 'shop_name', shop_name, 'phone', phone, 'address', address, 'logo_path', logo_path, 'logo_cloud_url', logo_cloud_url, 'customer_id_prefix', customer_id_prefix, 'order_id_prefix', order_id_prefix, 'created_at', created_at, 'updated_at', updated_at)"),
-        ("customers", "json_object('id', id, 'uuid', uuid, 'customer_id', customer_id, 'name', name, 'phone', phone, 'address', address, 'city', city, 'social_media_url', social_media_url, 'platform', platform, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
-        ("orders", "json_object('id', id, 'uuid', uuid, 'order_id', order_id, 'customer_id', customer_id, 'status', status, 'order_from', order_from, 'exchange_rate', exchange_rate, 'shipping_fee', shipping_fee, 'delivery_fee', delivery_fee, 'cargo_fee', cargo_fee, 'order_date', order_date, 'arrived_date', arrived_date, 'shipment_date', shipment_date, 'user_withdraw_date', user_withdraw_date, 'service_fee', service_fee, 'product_discount', product_discount, 'service_fee_type', service_fee_type, 'shipping_fee_paid', shipping_fee_paid, 'delivery_fee_paid', delivery_fee_paid, 'cargo_fee_paid', cargo_fee_paid, 'service_fee_paid', service_fee_paid, 'shipping_fee_by_shop', shipping_fee_by_shop, 'delivery_fee_by_shop', delivery_fee_by_shop, 'cargo_fee_by_shop', cargo_fee_by_shop, 'exclude_cargo_fee', exclude_cargo_fee, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
-        ("order_items", "json_object('id', id, 'uuid', uuid, 'order_id', order_id, 'product_url', product_url, 'product_qty', product_qty, 'price', price, 'product_weight', product_weight, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
-        ("expenses", "json_object('id', id, 'uuid', uuid, 'expense_id', expense_id, 'title', title, 'amount', amount, 'category', category, 'payment_method', payment_method, 'notes', notes, 'expense_date', expense_date, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("shop_settings", "json_object('id', id, 'shop_name', shop_name, 'phone', phone, 'address', address, 'logo_path', logo_path, 'logo_cloud_url', logo_cloud_url, 'customer_id_prefix', customer_id_prefix, 'order_id_prefix', order_id_prefix, 'created_at', created_at, 'updated_at', updated_at)"),
+        ("customers", "json_object('id', id, 'customer_id', customer_id, 'name', name, 'phone', phone, 'address', address, 'city', city, 'social_media_url', social_media_url, 'platform', platform, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("orders", "json_object('id', id, 'order_id', order_id, 'customer_id', customer_id, 'status', status, 'order_from', order_from, 'exchange_rate', exchange_rate, 'shipping_fee', shipping_fee, 'delivery_fee', delivery_fee, 'cargo_fee', cargo_fee, 'order_date', order_date, 'arrived_date', arrived_date, 'shipment_date', shipment_date, 'user_withdraw_date', user_withdraw_date, 'service_fee', service_fee, 'product_discount', product_discount, 'service_fee_type', service_fee_type, 'shipping_fee_paid', shipping_fee_paid, 'delivery_fee_paid', delivery_fee_paid, 'cargo_fee_paid', cargo_fee_paid, 'service_fee_paid', service_fee_paid, 'shipping_fee_by_shop', shipping_fee_by_shop, 'delivery_fee_by_shop', delivery_fee_by_shop, 'cargo_fee_by_shop', cargo_fee_by_shop, 'exclude_cargo_fee', exclude_cargo_fee, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("order_items", "json_object('id', id, 'order_id', order_id, 'product_url', product_url, 'product_qty', product_qty, 'price', price, 'product_weight', product_weight, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("expenses", "json_object('id', id, 'expense_id', expense_id, 'title', title, 'amount', amount, 'category', category, 'payment_method', payment_method, 'notes', notes, 'expense_date', expense_date, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
     ];
 
     let mut total: i64 = 0;
 
     for (table, json_expr) in &tables {
-        let query = format!("SELECT id, uuid, {} as payload FROM {}", json_expr, table);
-        let rows: Vec<(i64, Option<String>, String)> = sqlx::query_as(&query)
+        let query = format!("SELECT id, {} as payload FROM {}", json_expr, table);
+        let rows: Vec<(String, String)> = sqlx::query_as(&query)
             .fetch_all(&*pool)
             .await
             .unwrap_or_default();
 
-        for (id, uuid, payload) in &rows {
+        for (id, payload) in &rows {
             let _ = sqlx::query(
-                "INSERT INTO sync_queue (table_name, operation, record_id, record_uuid, payload, status) VALUES (?, 'INSERT', ?, ?, ?, 'pending')"
+                "INSERT INTO sync_queue (table_name, operation, record_id, payload, status) VALUES (?, 'INSERT', ?, ?, 'pending')"
             )
             .bind(table)
             .bind(id)
-            .bind(uuid)
             .bind(payload)
             .execute(&*pool)
             .await;
@@ -1175,8 +1154,7 @@ pub async fn truncate_and_sync(app: AppHandle) -> Result<String, String> {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RemoteChange {
     pub table_name: String,
-    pub record_id: i64,
-    pub record_uuid: Option<String>,
+    pub record_id: String,
     pub change_type: String, // "new" | "modified" | "deleted"
     pub payload: serde_json::Value,
 }
@@ -1201,11 +1179,11 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
     ];
 
     let table_json_fields: std::collections::HashMap<&str, &str> = [
-        ("shop_settings", "json_object('id', id, 'uuid', uuid, 'shop_name', shop_name, 'phone', phone, 'address', address, 'logo_path', logo_path, 'logo_cloud_url', logo_cloud_url, 'customer_id_prefix', customer_id_prefix, 'order_id_prefix', order_id_prefix, 'created_at', created_at, 'updated_at', updated_at)"),
-        ("customers", "json_object('id', id, 'uuid', uuid, 'customer_id', customer_id, 'name', name, 'phone', phone, 'address', address, 'city', city, 'social_media_url', social_media_url, 'platform', platform, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
-        ("orders", "json_object('id', id, 'uuid', uuid, 'order_id', order_id, 'customer_id', customer_id, 'status', status, 'order_from', order_from, 'exchange_rate', exchange_rate, 'shipping_fee', shipping_fee, 'delivery_fee', delivery_fee, 'cargo_fee', cargo_fee, 'order_date', order_date, 'arrived_date', arrived_date, 'shipment_date', shipment_date, 'user_withdraw_date', user_withdraw_date, 'service_fee', service_fee, 'product_discount', product_discount, 'service_fee_type', service_fee_type, 'shipping_fee_paid', shipping_fee_paid, 'delivery_fee_paid', delivery_fee_paid, 'cargo_fee_paid', cargo_fee_paid, 'service_fee_paid', service_fee_paid, 'shipping_fee_by_shop', shipping_fee_by_shop, 'delivery_fee_by_shop', delivery_fee_by_shop, 'cargo_fee_by_shop', cargo_fee_by_shop, 'exclude_cargo_fee', exclude_cargo_fee, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
-        ("order_items", "json_object('id', id, 'uuid', uuid, 'order_id', order_id, 'product_url', product_url, 'product_qty', product_qty, 'price', price, 'product_weight', product_weight, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
-        ("expenses", "json_object('id', id, 'uuid', uuid, 'expense_id', expense_id, 'title', title, 'amount', amount, 'category', category, 'payment_method', payment_method, 'notes', notes, 'expense_date', expense_date, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("shop_settings", "json_object('id', id, 'shop_name', shop_name, 'phone', phone, 'address', address, 'logo_path', logo_path, 'logo_cloud_url', logo_cloud_url, 'customer_id_prefix', customer_id_prefix, 'order_id_prefix', order_id_prefix, 'created_at', created_at, 'updated_at', updated_at)"),
+        ("customers", "json_object('id', id, 'customer_id', customer_id, 'name', name, 'phone', phone, 'address', address, 'city', city, 'social_media_url', social_media_url, 'platform', platform, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("orders", "json_object('id', id, 'order_id', order_id, 'customer_id', customer_id, 'status', status, 'order_from', order_from, 'exchange_rate', exchange_rate, 'shipping_fee', shipping_fee, 'delivery_fee', delivery_fee, 'cargo_fee', cargo_fee, 'order_date', order_date, 'arrived_date', arrived_date, 'shipment_date', shipment_date, 'user_withdraw_date', user_withdraw_date, 'service_fee', service_fee, 'product_discount', product_discount, 'service_fee_type', service_fee_type, 'shipping_fee_paid', shipping_fee_paid, 'delivery_fee_paid', delivery_fee_paid, 'cargo_fee_paid', cargo_fee_paid, 'service_fee_paid', service_fee_paid, 'shipping_fee_by_shop', shipping_fee_by_shop, 'delivery_fee_by_shop', delivery_fee_by_shop, 'cargo_fee_by_shop', cargo_fee_by_shop, 'exclude_cargo_fee', exclude_cargo_fee, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("order_items", "json_object('id', id, 'order_id', order_id, 'product_url', product_url, 'product_qty', product_qty, 'price', price, 'product_weight', product_weight, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
+        ("expenses", "json_object('id', id, 'expense_id', expense_id, 'title', title, 'amount', amount, 'category', category, 'payment_method', payment_method, 'notes', notes, 'expense_date', expense_date, 'created_at', created_at, 'updated_at', updated_at, 'deleted_at', deleted_at)"),
     ]
     .into_iter()
     .collect();
@@ -1227,21 +1205,22 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
         if let Ok(res) = resp {
             if res.status().is_success() {
                 if let Ok(rows) = res.json::<Vec<serde_json::Value>>().await {
-                    // Keep a single remote row per local_id. If remote contains duplicate
-                    // local_id records, prefer the newest updated_at/created_at row.
-                    let mut deduped_rows: std::collections::HashMap<i64, serde_json::Value> =
+                    // Keep a single remote row per uuid. If remote contains duplicate
+                    // uuid records, prefer the newest updated_at/created_at row.
+                    let mut deduped_rows: std::collections::HashMap<String, serde_json::Value> =
                         std::collections::HashMap::new();
                     for row in rows {
                         let key = row
-                            .get("local_id")
-                            .and_then(|v| v.as_i64())
-                            .or_else(|| row.get("id").and_then(|v| v.as_i64()));
+                            .get("uuid")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_lowercase())
+                            .or_else(|| row.get("id").and_then(|v| v.as_str()).map(|s| s.to_lowercase()));
 
-                        let Some(local_id_key) = key else {
+                        let Some(uuid_key) = key else {
                             continue;
                         };
 
-                        let should_replace = if let Some(existing) = deduped_rows.get(&local_id_key)
+                        let should_replace = if let Some(existing) = deduped_rows.get(&uuid_key)
                         {
                             let existing_ts = remote_row_timestamp_millis(existing);
                             let current_ts = remote_row_timestamp_millis(&row);
@@ -1260,7 +1239,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                         };
 
                         if should_replace {
-                            deduped_rows.insert(local_id_key, row);
+                            deduped_rows.insert(uuid_key, row);
                         }
                     }
 
@@ -1276,7 +1255,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                 remote_order_item_signature(&row).unwrap_or_else(|| {
                                     format!(
                                         "raw:{}",
-                                        row.get("uuid")
+                                        row.get("id")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or_default()
                                     )
@@ -1301,15 +1280,18 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                     };
 
                     for row in rows_to_process {
-                        let local_id = row
-                            .get("local_id")
-                            .and_then(|v| v.as_i64())
-                            .or_else(|| row.get("id").and_then(|v| v.as_i64()));
-                        let remote_uuid = row
+                        // The remote record's uuid is what matches our local id (TEXT UUID PK)
+                        let record_id_str = row
                             .get("uuid")
                             .and_then(|v| v.as_str())
                             .map(|v| v.trim().to_string())
-                            .filter(|v| !v.is_empty());
+                            .filter(|v| !v.is_empty())
+                            .or_else(|| {
+                                row.get("id")
+                                    .and_then(|v| v.as_str())
+                                    .map(|v| v.trim().to_string())
+                                    .filter(|v| !v.is_empty())
+                            });
                         let remote_deleted_at = row
                             .get("deleted_at")
                             .and_then(|v| v.as_str())
@@ -1320,24 +1302,23 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                         let remote_updated_at =
                             row.get("updated_at").and_then(|v| v.as_str()).unwrap_or("");
 
-                        if let Some(local_id) = local_id {
+                        if let Some(ref record_id_str) = record_id_str {
                             // Check local DB
                             let json_expr = table_json_fields
                                 .get(table)
-                                .unwrap_or(&"json_object('id', id, 'uuid', uuid)");
+                                .unwrap_or(&"json_object('id', id)");
                             let deleted_at_expr = if supports_deleted_at(table) {
                                 "deleted_at".to_string()
                             } else {
                                 "NULL as deleted_at".to_string()
                             };
                             let query = format!(
-                                "SELECT updated_at, {}, {} as payload FROM {} WHERE (uuid = ? OR id = ?) LIMIT 1",
+                                "SELECT updated_at, {}, {} as payload FROM {} WHERE id = ? LIMIT 1",
                                 deleted_at_expr, json_expr, table
                             );
                             let local_row: Option<(Option<String>, Option<String>, String)> =
                                 sqlx::query_as(&query)
-                                    .bind(remote_uuid.clone())
-                                    .bind(local_id)
+                                    .bind(record_id_str.as_str())
                                     .fetch_optional(&*pool)
                                     .await
                                     .unwrap_or(None);
@@ -1353,7 +1334,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                     // match an existing active local item for the same order.
                                     if table == "order_items" {
                                         let remote_order_id =
-                                            row.get("order_id").and_then(|v| v.as_i64());
+                                            row.get("order_id").and_then(|v| v.as_str()).map(|s| s.to_string());
                                         let remote_created_at = row
                                             .get("created_at")
                                             .and_then(|v| v.as_str())
@@ -1377,14 +1358,14 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                             .and_then(|v| v.as_f64())
                                             .unwrap_or(0.0);
 
-                                        if let Some(order_id) = remote_order_id {
+                                        if let Some(ref order_id) = remote_order_id {
                                             // If local order was updated after this remote row was created,
                                             // this remote item is stale and should not be re-imported.
                                             let local_order_updated_at: Option<String> =
                                                 sqlx::query_scalar(
                                                     "SELECT updated_at FROM orders WHERE id = ? AND deleted_at IS NULL LIMIT 1",
                                                 )
-                                                .bind(order_id)
+                                                .bind(order_id.as_str())
                                                 .fetch_optional(&*pool)
                                                 .await
                                                 .unwrap_or(None);
@@ -1408,9 +1389,9 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                 }
                                             }
 
-                                            let existing_match: Option<(i64, Option<String>)> =
+                                            let existing_match: Option<(String,)> =
                                                 sqlx::query_as(
-                                                    "SELECT id, uuid FROM order_items
+                                                    "SELECT id FROM order_items
                                                      WHERE deleted_at IS NULL
                                                        AND order_id = ?
                                                        AND COALESCE(product_url, '') = ?
@@ -1419,7 +1400,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                        AND ABS(COALESCE(product_weight, 0) - ?) < 0.000001
                                                      LIMIT 1",
                                                 )
-                                                .bind(order_id)
+                                                .bind(order_id.as_str())
                                                 .bind(remote_product_url)
                                                 .bind(remote_product_qty)
                                                 .bind(remote_price)
@@ -1428,25 +1409,19 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                 .await
                                                 .unwrap_or(None);
 
-                                            if let Some((existing_id, existing_uuid)) =
-                                                existing_match
-                                            {
-                                                if existing_uuid.is_none()
-                                                    || !remote_updated_at.is_empty()
-                                                {
+                                            if let Some((existing_id,)) = existing_match {
+                                                if !remote_updated_at.is_empty() {
                                                     let _ = sqlx::query(
                                                         "UPDATE order_items
-                                                         SET uuid = COALESCE(uuid, ?),
-                                                             updated_at = COALESCE(?, updated_at)
+                                                         SET updated_at = COALESCE(?, updated_at)
                                                          WHERE id = ?",
                                                     )
-                                                    .bind(remote_uuid.clone())
                                                     .bind(if remote_updated_at.is_empty() {
                                                         None::<String>
                                                     } else {
                                                         Some(remote_updated_at.to_string())
                                                     })
-                                                    .bind(existing_id)
+                                                    .bind(&existing_id)
                                                     .execute(&*pool)
                                                     .await;
                                                 }
@@ -1457,8 +1432,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
 
                                     changes.push(RemoteChange {
                                         table_name: table.to_string(),
-                                        record_id: local_id,
-                                        record_uuid: remote_uuid.clone(),
+                                        record_id: record_id_str.clone(),
                                         change_type: "new".to_string(),
                                         payload: row,
                                     });
@@ -1473,8 +1447,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                         if !local_is_deleted {
                                             changes.push(RemoteChange {
                                                 table_name: table.to_string(),
-                                                record_id: local_id,
-                                                record_uuid: remote_uuid.clone(),
+                                                record_id: record_id_str.clone(),
                                                 change_type: "deleted".to_string(),
                                                 payload: row,
                                             });
@@ -1601,8 +1574,7 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                         if actual_change {
                                             changes.push(RemoteChange {
                                                 table_name: table.to_string(),
-                                                record_id: local_id,
-                                                record_uuid: remote_uuid.clone(),
+                                                record_id: record_id_str.clone(),
                                                 change_type: "modified".to_string(),
                                                 payload: row,
                                             });
@@ -1617,12 +1589,11 @@ pub async fn fetch_remote_changes(app: AppHandle) -> Result<Vec<RemoteChange>, S
                                                     .format("%Y-%m-%d %H:%M:%S")
                                                     .to_string();
                                                 let _ = sqlx::query(&format!(
-                                                    "UPDATE {} SET updated_at = ? WHERE (uuid = ? OR id = ?)",
+                                                    "UPDATE {} SET updated_at = ? WHERE id = ?",
                                                     table
                                                 ))
                                                 .bind(sqlite_time)
-                                                .bind(remote_uuid.clone())
-                                                .bind(local_id)
+                                                .bind(record_id_str.as_str())
                                                 .execute(&*pool)
                                                 .await;
                                             }
@@ -1675,9 +1646,8 @@ pub async fn apply_remote_changes(
         if let Some(obj) = payload.as_object() {
             if change.change_type == "deleted" {
                 if table == "order_items" {
-                    let res = sqlx::query("DELETE FROM order_items WHERE (uuid = ? OR id = ?)")
-                        .bind(change.record_uuid.clone())
-                        .bind(change.record_id)
+                    let res = sqlx::query("DELETE FROM order_items WHERE id = ?")
+                        .bind(&change.record_id)
                         .execute(&*pool)
                         .await;
 
@@ -1710,14 +1680,13 @@ pub async fn apply_remote_changes(
                             .filter(|v| !v.is_empty());
 
                         let query_str = format!(
-                            "UPDATE {} SET deleted_at = COALESCE(?, deleted_at, datetime('now')), updated_at = COALESCE(?, updated_at, datetime('now')) WHERE (uuid = ? OR id = ?)",
+                            "UPDATE {} SET deleted_at = COALESCE(?, deleted_at, datetime('now')), updated_at = COALESCE(?, updated_at, datetime('now')) WHERE id = ?",
                             table
                         );
                         let res = sqlx::query(&query_str)
                             .bind(deleted_at)
                             .bind(updated_at)
-                            .bind(change.record_uuid.clone())
-                            .bind(change.record_id)
+                            .bind(&change.record_id)
                             .execute(&*pool)
                             .await;
 
@@ -1817,7 +1786,7 @@ pub async fn apply_remote_changes(
 
                 let update_str = updates.join(", ");
                 let query_str = format!(
-                    "UPDATE {} SET {} WHERE (uuid = ? OR id = ?)",
+                    "UPDATE {} SET {} WHERE id = ?",
                     table, update_str
                 );
 
@@ -1839,7 +1808,7 @@ pub async fn apply_remote_changes(
                     }
                 }
 
-                q = q.bind(change.record_uuid.clone()).bind(change.record_id);
+                q = q.bind(&change.record_id);
 
                 let res = q.execute(&*pool).await;
                 if res.is_ok() {

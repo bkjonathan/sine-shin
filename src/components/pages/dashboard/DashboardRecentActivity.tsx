@@ -6,7 +6,7 @@ interface DashboardRecentActivityProps {
   orders: DashboardOrder[];
   formatPrice: (value: number) => string;
   onViewAll: () => void;
-  onSelectOrder: (id: number) => void;
+  onSelectOrder: (id: string) => void;
 }
 
 function getInitials(name: string | null): string {

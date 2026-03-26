@@ -5,8 +5,8 @@ import { Customer } from "../../../types/customer";
 import { IconSearch, IconX, IconCheck } from "../../icons";
 
 interface CustomerAutocompleteProps {
-  value: number | null;
-  onChange: (customerId: number | null, customer: Customer | null) => void;
+  value: string | null;
+  onChange: (customerId: string | null, customer: Customer | null) => void;
   label?: string;
   required?: boolean;
   error?: string;

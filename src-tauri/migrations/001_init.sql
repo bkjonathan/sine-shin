@@ -1,7 +1,6 @@
 -- Create shop_settings table
 CREATE TABLE IF NOT EXISTS shop_settings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uuid TEXT,
+  id TEXT PRIMARY KEY,
   shop_name TEXT NOT NULL,
   phone TEXT,
   address TEXT,
@@ -14,8 +13,7 @@ CREATE TABLE IF NOT EXISTS shop_settings (
 
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uuid TEXT,
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT DEFAULT 'owner',
@@ -24,8 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Create customers table
 CREATE TABLE IF NOT EXISTS customers (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uuid TEXT,
+  id TEXT PRIMARY KEY,
   customer_id TEXT,
   name TEXT NOT NULL,
   phone TEXT,
@@ -37,12 +34,10 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 
 -- Create orders table
--- Create orders table
 CREATE TABLE IF NOT EXISTS orders (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uuid TEXT,
+  id TEXT PRIMARY KEY,
   order_id TEXT,
-  customer_id INTEGER,
+  customer_id TEXT,
   status TEXT DEFAULT 'pending',
   order_from TEXT,
   exchange_rate REAL,
@@ -62,9 +57,8 @@ CREATE TABLE IF NOT EXISTS orders (
 
 -- Create order_items table
 CREATE TABLE IF NOT EXISTS order_items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uuid TEXT,
-  order_id INTEGER,
+  id TEXT PRIMARY KEY,
+  order_id TEXT,
   product_url TEXT,
   product_qty INTEGER,
   price REAL,
@@ -75,8 +69,7 @@ CREATE TABLE IF NOT EXISTS order_items (
 
 -- Create expenses table
 CREATE TABLE IF NOT EXISTS expenses (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uuid TEXT,
+  id TEXT PRIMARY KEY,
   expense_id TEXT,
   title TEXT NOT NULL,
   amount REAL NOT NULL CHECK(amount >= 0),

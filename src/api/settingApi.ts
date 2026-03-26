@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export interface ShopSettings {
-  id: number;
+  id: string;
   shop_name: string;
   phone: string | null;
   address: string | null;

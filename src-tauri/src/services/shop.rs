@@ -10,6 +10,8 @@ use chrono::Utc;
 use tauri::AppHandle;
 use tracing::instrument;
 
+use uuid::Uuid;
+
 use crate::db::copy_logo_to_app_data;
 use crate::error::{AppError, AppResult};
 use crate::models::ShopSettings;
@@ -30,9 +32,11 @@ pub async fn save_shop_setup(
     let internal_logo_path = copy_logo_to_app_data(app, &logo_file_path)?;
     let pool = state.db.lock().await;
 
+    let shop_id = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO shop_settings (shop_name, phone, address, logo_path) VALUES (?, ?, ?, ?)",
+        "INSERT INTO shop_settings (id, shop_name, phone, address, logo_path) VALUES (?, ?, ?, ?, ?)",
     )
+    .bind(&shop_id)
     .bind(&name)
     .bind(&phone)
     .bind(&address)
@@ -41,16 +45,17 @@ pub async fn save_shop_setup(
     .await?;
 
     if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await
     {
+        let record_id = record.id.clone();
         enqueue_sync(
             &pool,
             app,
             "shop_settings",
             "INSERT",
-            record.id,
+            &record_id,
             serde_json::json!(record),
         )
         .await;
@@ -64,7 +69,7 @@ pub async fn save_shop_setup(
 pub async fn get_shop_settings(state: Arc<AppState>) -> AppResult<ShopSettings> {
     let pool = state.db.lock().await;
     let settings: ShopSettings =
-        sqlx::query_as("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+        sqlx::query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await?;
     Ok(settings)
@@ -84,8 +89,8 @@ pub async fn update_shop_settings(
 ) -> AppResult<()> {
     let pool = state.db.lock().await;
 
-    let latest_id: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM shop_settings ORDER BY id DESC LIMIT 1")
+    let latest_id: Option<String> =
+        sqlx::query_scalar("SELECT id FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_optional(&*pool)
             .await?;
 
@@ -122,16 +127,17 @@ pub async fn update_shop_settings(
     }
 
     if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await
     {
+        let record_id = record.id.clone();
         enqueue_sync(
             &pool,
             app,
             "shop_settings",
             "UPDATE",
-            record.id,
+            &record_id,
             serde_json::json!(record),
         )
         .await;
@@ -194,7 +200,7 @@ pub async fn upload_shop_logo_to_s3(
 
     let pool = state.db.lock().await;
     let latest: ShopSettings =
-        sqlx::query_as("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+        sqlx::query_as("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await?;
     drop(pool);
@@ -264,28 +270,29 @@ pub async fn upload_shop_logo_to_s3(
         sqlx::query("UPDATE shop_settings SET logo_path = ?, logo_cloud_url = ? WHERE id = ?")
             .bind(local_logo_path)
             .bind(&cloud_url)
-            .bind(latest.id)
+            .bind(&latest.id)
             .execute(&*pool)
             .await?;
     } else {
         sqlx::query("UPDATE shop_settings SET logo_cloud_url = ? WHERE id = ?")
             .bind(&cloud_url)
-            .bind(latest.id)
+            .bind(&latest.id)
             .execute(&*pool)
             .await?;
     }
 
     if let Ok(record) =
-        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY id DESC LIMIT 1")
+        sqlx::query_as::<_, ShopSettings>("SELECT * FROM shop_settings ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&*pool)
             .await
     {
+        let record_id = record.id.clone();
         enqueue_sync(
             &pool,
             app,
             "shop_settings",
             "UPDATE",
-            record.id,
+            &record_id,
             serde_json::json!(record),
         )
         .await;

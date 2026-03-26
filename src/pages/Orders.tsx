@@ -256,11 +256,11 @@ export default function Orders() {
   };
 
   // Parcel Printing State
-  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
     new Set(),
   );
 
-  const handleToggleOrderSelection = (id: number) => {
+  const handleToggleOrderSelection = (id: string) => {
     setSelectedOrderIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -387,7 +387,7 @@ export default function Orders() {
         const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
         comparison = aDate - bDate;
       } else {
-        comparison = a.id - b.id;
+        comparison = a.id.localeCompare(b.id);
       }
 
       return sortOrder === "asc" ? comparison : -comparison;
@@ -800,7 +800,7 @@ export default function Orders() {
       setIsSubmitting(true);
 
       const payload = {
-        customer_id: parseInt(formData.customer_id, 10),
+        customer_id: formData.customer_id,
         status: formData.status || "pending",
         order_from: formData.order_from || undefined,
         items: formData.items.map((item) => ({
@@ -902,13 +902,8 @@ export default function Orders() {
       }
 
       const existingOrders = await getOrders();
-      const ordersById = new Map<number, OrderWithCustomer>(
+      const ordersById = new Map<string, OrderWithCustomer>(
         existingOrders.map((order) => [order.id, order]),
-      );
-      const ordersByUuid = new Map<string, OrderWithCustomer>(
-        existingOrders
-          .filter((order) => order.uuid?.trim())
-          .map((order) => [order.uuid!.trim().toLowerCase(), order]),
       );
       const ordersByOrderId = new Map<string, OrderWithCustomer>(
         existingOrders
@@ -923,15 +918,11 @@ export default function Orders() {
 
       for (const order of validOrders) {
         try {
-          const normalizedUuidKey = order.uuid?.trim().toLowerCase();
           const normalizedOrderIdKey = order.order_id?.trim().toLowerCase();
 
           let targetOrder: OrderWithCustomer | undefined;
           if (order.id !== undefined) {
             targetOrder = ordersById.get(order.id);
-          }
-          if (!targetOrder && normalizedUuidKey) {
-            targetOrder = ordersByUuid.get(normalizedUuidKey);
           }
           if (!targetOrder && normalizedOrderIdKey) {
             targetOrder = ordersByOrderId.get(normalizedOrderIdKey);
@@ -1018,7 +1009,6 @@ export default function Orders() {
 
             const createdOrder: OrderWithCustomer = {
               id: createdId,
-              uuid: order.uuid,
               order_id: order.order_id ?? undefined,
               customer_id: order.customer_id,
               status: order.status,
@@ -1045,9 +1035,6 @@ export default function Orders() {
             };
 
             ordersById.set(createdId, createdOrder);
-            if (normalizedUuidKey) {
-              ordersByUuid.set(normalizedUuidKey, createdOrder);
-            }
             if (normalizedOrderIdKey) {
               ordersByOrderId.set(normalizedOrderIdKey, createdOrder);
             }
@@ -1055,8 +1042,7 @@ export default function Orders() {
         } catch (err) {
           const orderRef =
             order.order_id ??
-            order.id?.toString() ??
-            order.uuid ??
+            order.id ??
             "unidentified-order";
           importErrors.push(
             `${orderRef}: ${err instanceof Error ? err.message : String(err)}`,
@@ -1108,10 +1094,10 @@ export default function Orders() {
         return;
       }
 
-      const customersById = new Map<number, Customer>(
+      const customersById = new Map<string, Customer>(
         allCustomers.map((customer) => [customer.id, customer]),
       );
-      const sortedOrderIds = [...allOrders].sort((a, b) => a.id - b.id);
+      const sortedOrderIds = [...allOrders].sort((a, b) => a.id.localeCompare(b.id));
       const orderDetails = await Promise.all(
         sortedOrderIds.map((order) => getOrderById(order.id)),
       );
@@ -1127,10 +1113,10 @@ export default function Orders() {
         for (const item of itemRows) {
           csvRows.push([
             order.id,
-            order.uuid ?? "",
+            order.id,
             order.order_id ?? "",
             customer?.id ?? order.customer_id ?? "",
-            customer?.uuid ?? "",
+            customer?.id ?? "",
             customer?.customer_id ?? "",
             customer?.name ?? order.customer_name ?? "",
             order.status ?? "",
@@ -1158,7 +1144,7 @@ export default function Orders() {
             order.updated_at ?? "",
             order.deleted_at ?? "",
             item?.id ?? "",
-            item?.uuid ?? "",
+            item?.id ?? "",
             item?.product_url ?? "",
             item?.product_qty ?? "",
             item?.price ?? "",

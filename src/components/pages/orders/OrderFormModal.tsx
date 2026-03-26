@@ -128,15 +128,11 @@ export default function OrderFormModal({
                     <CustomerAutocomplete
                       label={t("orders.form.customer")}
                       required
-                      value={
-                        formData.customer_id
-                          ? parseInt(formData.customer_id, 10)
-                          : null
-                      }
+                      value={formData.customer_id || null}
                       onChange={(customerId) =>
                         onFieldChange(
                           "customer_id",
-                          customerId ? String(customerId) : "",
+                          customerId ?? "",
                         )
                       }
                       placeholder={t("orders.form.select_customer")}

@@ -533,7 +533,7 @@ export default function Expenses() {
       };
 
       const rows = [...allExpenses]
-        .sort((a, b) => a.id - b.id)
+        .sort((a, b) => a.id.localeCompare(b.id))
         .map((expense) => {
           return [
             expense.id,

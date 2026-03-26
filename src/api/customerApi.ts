@@ -59,9 +59,8 @@ export const getCustomersPaginated = async (
 
 export const createCustomer = async (
   customer: CustomerMutationInput,
-): Promise<number> => {
+): Promise<string> => {
   return await invoke("create_customer", {
-    uuid: customer.uuid,
     name: customer.name,
     phone: customer.phone,
     address: customer.address,
@@ -77,11 +76,10 @@ export const createCustomer = async (
 };
 
 export const updateCustomer = async (
-  customer: CustomerMutationInput & { id: number },
+  customer: CustomerMutationInput & { id: string },
 ): Promise<void> => {
   return await invoke("update_customer", {
     id: customer.id,
-    uuid: customer.uuid,
     customerId: customer.customer_id,
     name: customer.name,
     phone: customer.phone,
@@ -95,18 +93,18 @@ export const updateCustomer = async (
   });
 };
 
-export const deleteCustomer = async (id: number): Promise<void> => {
+export const deleteCustomer = async (id: string): Promise<void> => {
   return await invoke("delete_customer", { id });
 };
 
-export const getCustomerById = async (id: number): Promise<Customer> => {
+export const getCustomerById = async (id: string): Promise<Customer> => {
   return await invoke("get_customer", { id });
 };
 
 import { Order } from "../types/order";
 
 export const getCustomerOrders = async (
-  customerId: number,
+  customerId: string,
 ): Promise<Order[]> => {
   return await invoke("get_customer_orders", { customerId });
 };

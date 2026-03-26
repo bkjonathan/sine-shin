@@ -93,7 +93,7 @@ export default function AccountBookIncomeTab({
         if (aTime !== bTime) {
           return bTime - aTime;
         }
-        return b.id - a.id;
+        return b.id.localeCompare(a.id);
       })
       .map((order) => {
         const serviceFeeAmount = calculateServiceFeeAmount(order);

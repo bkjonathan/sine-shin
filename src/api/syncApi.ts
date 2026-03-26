@@ -32,8 +32,7 @@ export interface SyncQueueItem {
   id: number;
   table_name: string;
   operation: string;
-  record_id: number;
-  record_uuid?: string | null;
+  record_id: string;
   payload: string;
   status: string;
   retry_count: number;
@@ -148,8 +147,7 @@ export async function migrateToNewDatabase(
 
 export interface RemoteChange {
   table_name: string;
-  record_id: number;
-  record_uuid?: string | null;
+  record_id: string;
   change_type: "new" | "modified" | "deleted";
   payload: Record<string, unknown>;
 }

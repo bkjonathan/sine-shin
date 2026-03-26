@@ -6,7 +6,7 @@ import { EnrichedOrder } from "../../../types/report";
 interface ReportTopOrdersTableProps {
   orders: EnrichedOrder[];
   formatPrice: (amount: number) => string;
-  onViewOrder: (orderId: number) => void;
+  onViewOrder: (orderId: string) => void;
 }
 
 export default function ReportTopOrdersTable({
