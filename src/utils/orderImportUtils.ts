@@ -3,7 +3,8 @@ import { OrderItemPayload, OrderStatus } from "../types/order";
 
 const ORDER_STATUS_VALUES: readonly OrderStatus[] = [
   "pending",
-  "confirmed",
+  "ordered",
+  "arrived",
   "shipping",
   "completed",
   "cancelled",

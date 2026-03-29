@@ -50,10 +50,15 @@ export default function AccountBookTable({
           className:
             "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20",
         };
-      case "confirmed":
+      case "ordered":
         return {
-          labelKey: "orders.status_confirmed",
+          labelKey: "orders.status_ordered",
           className: "bg-sky-500/10 text-sky-500 border border-sky-500/20",
+        };
+      case "arrived":
+        return {
+          labelKey: "orders.status_arrived",
+          className: "bg-orange-500/10 text-orange-500 border border-orange-500/20",
         };
       case "shipping":
         return {

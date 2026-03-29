@@ -53,7 +53,8 @@ import {
 
 const ORDER_STATUS_OPTIONS: Array<{ value: OrderStatus; labelKey: string }> = [
   { value: "pending", labelKey: "orders.status_pending" },
-  { value: "confirmed", labelKey: "orders.status_confirmed" },
+  { value: "ordered", labelKey: "orders.status_ordered" },
+  { value: "arrived", labelKey: "orders.status_arrived" },
   { value: "shipping", labelKey: "orders.status_shipping" },
   { value: "completed", labelKey: "orders.status_completed" },
   { value: "cancelled", labelKey: "orders.status_cancelled" },
@@ -77,10 +78,15 @@ const getOrderStatusDisplay = (
         className:
           "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20",
       };
-    case "confirmed":
+    case "ordered":
       return {
-        labelKey: "orders.status_confirmed",
+        labelKey: "orders.status_ordered",
         className: "bg-sky-500/10 text-sky-500 border border-sky-500/20",
+      };
+    case "arrived":
+      return {
+        labelKey: "orders.status_arrived",
+        className: "bg-orange-500/10 text-orange-500 border border-orange-500/20",
       };
     case "shipping":
       return {

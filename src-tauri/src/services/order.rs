@@ -47,7 +47,7 @@ fn normalize_order_status(status: Option<String>) -> AppResult<Option<String>> {
 
     match normalized.as_deref() {
         None => Ok(None),
-        Some("pending" | "confirmed" | "shipping" | "completed" | "cancelled") => Ok(normalized),
+        Some("pending" | "ordered" | "arrived" | "shipping" | "completed" | "cancelled") => Ok(normalized),
         Some(_) => Err("Invalid order status".into()),
     }
 }

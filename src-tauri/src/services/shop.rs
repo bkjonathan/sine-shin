@@ -14,7 +14,7 @@ use tauri::AppHandle;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::{copy_logo_to_app_data, current_timestamp_utc};
+use crate::db::{copy_logo_to_app_data, current_timestamp_utc, sql_statement_with_values};
 use crate::entities::shop_settings;
 use crate::error::{AppError, AppResult};
 use crate::models::ShopSettings;
@@ -116,7 +116,7 @@ pub async fn update_shop_settings(
     };
 
     if let Some(internal_path) = new_internal_logo_path {
-        db.execute(Statement::from_sql_and_values(
+        db.execute(sql_statement_with_values(
             backend,
             "UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, logo_path = ?, \
              customer_id_prefix = ?, order_id_prefix = ?, updated_at = ? WHERE id = ?",
@@ -133,7 +133,7 @@ pub async fn update_shop_settings(
         ))
         .await?;
     } else {
-        db.execute(Statement::from_sql_and_values(
+        db.execute(sql_statement_with_values(
             backend,
             "UPDATE shop_settings SET shop_name = ?, phone = ?, address = ?, \
              customer_id_prefix = ?, order_id_prefix = ?, updated_at = ? WHERE id = ?",
@@ -291,7 +291,7 @@ pub async fn upload_shop_logo_to_s3(
     };
 
     if let Some(local_path) = new_internal_logo_path {
-        db.execute(Statement::from_sql_and_values(
+        db.execute(sql_statement_with_values(
             backend,
             "UPDATE shop_settings SET logo_path = ?, logo_cloud_url = ? WHERE id = ?",
             [
@@ -302,7 +302,7 @@ pub async fn upload_shop_logo_to_s3(
         ))
         .await?;
     } else {
-        db.execute(Statement::from_sql_and_values(
+        db.execute(sql_statement_with_values(
             backend,
             "UPDATE shop_settings SET logo_cloud_url = ? WHERE id = ?",
             [cloud_url.clone().into(), latest.id.clone().into()],

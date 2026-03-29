@@ -47,7 +47,8 @@ const DEFAULT_FILTER: DateFilterValue = {
 
 const STATUS_COLORS: Record<OrderStatus | "unknown", string> = {
   pending: "#fbbf24",
-  confirmed: "#38bdf8",
+  ordered: "#38bdf8",
+  arrived: "#fb923c",
   shipping: "#818cf8",
   completed: "#34d399",
   cancelled: "#f87171",
@@ -58,8 +59,10 @@ const getStatusLabelKey = (status: OrderStatus | "unknown") => {
   switch (status) {
     case "pending":
       return "orders.status_pending";
-    case "confirmed":
-      return "orders.status_confirmed";
+    case "ordered":
+      return "orders.status_ordered";
+    case "arrived":
+      return "orders.status_arrived";
     case "shipping":
       return "orders.status_shipping";
     case "completed":
@@ -132,7 +135,8 @@ const calculateServiceFeeAmount = (order: OrderWithCustomer): number => {
 const normalizeStatus = (status?: OrderStatus): OrderStatus | "unknown" => {
   if (
     status === "pending" ||
-    status === "confirmed" ||
+    status === "ordered" ||
+    status === "arrived" ||
     status === "shipping" ||
     status === "completed" ||
     status === "cancelled"
@@ -418,7 +422,8 @@ export default function Reports() {
     return (
       [
         "pending",
-        "confirmed",
+        "ordered",
+        "arrived",
         "shipping",
         "completed",
         "cancelled",
