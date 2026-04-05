@@ -11,6 +11,7 @@ import {
   IconTable,
   IconTrash,
   IconEdit,
+  IconRefresh,
 } from "../components/icons";
 import { StaffUser, getStaffUsers, deleteStaffUser } from "../api/staffApi";
 import StaffFormModal from "../components/pages/staff/StaffFormModal";
@@ -125,6 +126,15 @@ export default function Staff() {
           </p>
         </div>
         <div className="flex gap-3">
+          <Button
+            onClick={() => loadUsers()}
+            disabled={loading}
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <IconRefresh size={16} strokeWidth={2} className={loading ? "animate-spin" : ""} />
+            {t("common.reload_data")}
+          </Button>
           <Button
             onClick={() => handleOpenForm()}
             variant="primary"

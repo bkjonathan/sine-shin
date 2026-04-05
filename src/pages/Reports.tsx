@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import {
   BarChart3,
+  RefreshCw,
   ShoppingBag,
   TrendingUp,
   Truck,
@@ -27,6 +28,7 @@ import ReportTopCustomersTable from "../components/pages/reports/ReportTopCustom
 import ReportTopOrdersTable from "../components/pages/reports/ReportTopOrdersTable";
 import ReportTopSummaryCards from "../components/pages/reports/ReportTopSummaryCards";
 import ReportTrendChart from "../components/pages/reports/ReportTrendChart";
+import { Button } from "../components/ui";
 import { useTabNavigation } from "../hooks/useTabNavigation";
 import DashboardDateFilter, {
   computeRange,
@@ -162,25 +164,25 @@ export default function Reports() {
     setFilter(newFilter);
   }, []);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [orderData, customerData] = await Promise.all([
-          getOrders(),
-          getCustomers(),
-        ]);
-        setOrders(orderData);
-        setCustomers(customerData);
-      } catch (error) {
-        console.error("Failed to load reports data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [orderData, customerData] = await Promise.all([
+        getOrders(),
+        getCustomers(),
+      ]);
+      setOrders(orderData);
+      setCustomers(customerData);
+    } catch (error) {
+      console.error("Failed to load reports data:", error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const customerIndex = useMemo(() => {
     const map = new Map<string, Customer>();
@@ -503,6 +505,15 @@ export default function Reports() {
             {t("reports.subtitle")}
           </p>
         </div>
+        <Button
+          onClick={() => loadData()}
+          disabled={loading}
+          variant="ghost"
+          className="px-4 py-2 text-sm flex items-center gap-2"
+        >
+          <RefreshCw size={16} strokeWidth={2} className={loading ? "animate-spin" : ""} />
+          {t("common.reload_data")}
+        </Button>
       </motion.div>
 
       <motion.div variants={pageItemSoftVariants}>

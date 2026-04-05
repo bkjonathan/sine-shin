@@ -23,6 +23,7 @@ const calculateServiceFeeAmount = (order: OrderWithCustomer) => {
 interface AccountBookIncomeTabProps {
   dateFrom: Date | null;
   dateTo: Date | null;
+  refreshKey?: number;
 }
 
 const toDateOnlyString = (value: Date | null): string | undefined => {
@@ -38,6 +39,7 @@ const toDateOnlyString = (value: Date | null): string | undefined => {
 export default function AccountBookIncomeTab({
   dateFrom,
   dateTo,
+  refreshKey,
 }: AccountBookIncomeTabProps) {
   const { navigateInTab } = useTabNavigation();
   const { formatPrice } = useAppSettings();
@@ -59,7 +61,7 @@ export default function AccountBookIncomeTab({
     };
 
     loadOrders();
-  }, []);
+  }, [refreshKey]);
 
   const rows = useMemo<AccountBookRow[]>(() => {
     const searchTerm = search.trim().toLowerCase();

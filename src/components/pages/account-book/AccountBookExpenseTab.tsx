@@ -193,11 +193,13 @@ const hasExpenseFormErrors = (errors: ExpenseFormErrors): boolean => {
 interface AccountBookExpenseTabProps {
   dateFrom: Date | null;
   dateTo: Date | null;
+  refreshKey?: number;
 }
 
 export default function AccountBookExpenseTab({
   dateFrom,
   dateTo,
+  refreshKey,
 }: AccountBookExpenseTabProps) {
   const pageSizeOptions: Array<number | "all"> = [5, 10, 20, 50, 100, "all"];
   const isTabPanelActive = useIsTabPanelActive();
@@ -301,6 +303,7 @@ export default function AccountBookExpenseTab({
     dateTo,
     sortBy,
     sortOrder,
+    refreshKey,
   ]);
 
   const fetchExpenses = async (page: number) => {

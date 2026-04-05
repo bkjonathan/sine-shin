@@ -38,6 +38,7 @@ import {
   IconSortDesc,
   IconTable,
   IconTrash,
+  IconRefresh,
   IconUpload,
   IconUsers,
 } from "../components/icons";
@@ -768,6 +769,15 @@ export default function Customers() {
           </p>
         </div>
         <div className="flex gap-3">
+          <Button
+            onClick={() => fetchCustomers(currentPage)}
+            disabled={loading}
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <IconRefresh size={16} strokeWidth={2} className={loading ? "animate-spin" : ""} />
+            {t("common.reload_data")}
+          </Button>
           <input
             type="file"
             accept=".csv"

@@ -27,6 +27,7 @@ const SectionHeader = ({
 interface AccountBookSummaryTabProps {
   dateFrom: Date | null;
   dateTo: Date | null;
+  refreshKey?: number;
 }
 
 const toDateOnlyString = (value: Date | null): string | undefined => {
@@ -42,6 +43,7 @@ const toDateOnlyString = (value: Date | null): string | undefined => {
 export default function AccountBookSummaryTab({
   dateFrom,
   dateTo,
+  refreshKey,
 }: AccountBookSummaryTabProps) {
   const { t } = useTranslation();
   const { formatPrice } = useAppSettings();
@@ -63,7 +65,7 @@ export default function AccountBookSummaryTab({
       }
     };
     fetchSummary();
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, refreshKey]);
 
   if (loading) {
     return (

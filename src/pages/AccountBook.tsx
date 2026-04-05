@@ -8,7 +8,9 @@ import AccountBookExpenseTab from "../components/pages/account-book/AccountBookE
 import AccountBookSummaryTab from "../components/pages/account-book/AccountBookSummaryTab";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useIsTabPanelActive } from "../context/TabPanelActivityContext";
+import { Button } from "../components/ui";
 import DatePicker from "../components/ui/DatePicker";
+import { IconRefresh } from "../components/icons";
 import {
   pageContainerVariants,
   pageItemSoftVariants,
@@ -22,6 +24,7 @@ export default function AccountBook() {
 
   const [dateFrom, setDateFrom] = useState<Date | null>(null);
   const [dateTo, setDateTo] = useState<Date | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [activeTab, setActiveTab] = useState<AccountTabType>(() => {
     const tabUrlParam = searchParams.get("tab");
@@ -81,6 +84,14 @@ export default function AccountBook() {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-3">
+          <Button
+            onClick={() => setRefreshKey((k) => k + 1)}
+            variant="ghost"
+            className="px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <IconRefresh size={16} strokeWidth={2} />
+            {t("common.reload_data")}
+          </Button>
           <DatePicker
             selected={dateFrom}
             onChange={(date: Date | null) => setDateFrom(date)}
@@ -111,13 +122,13 @@ export default function AccountBook() {
         className="flex-1 min-h-0 relative"
       >
         {activeTab === "income" && (
-          <AccountBookIncomeTab dateFrom={dateFrom} dateTo={dateTo} />
+          <AccountBookIncomeTab dateFrom={dateFrom} dateTo={dateTo} refreshKey={refreshKey} />
         )}
         {activeTab === "expenses" && (
-          <AccountBookExpenseTab dateFrom={dateFrom} dateTo={dateTo} />
+          <AccountBookExpenseTab dateFrom={dateFrom} dateTo={dateTo} refreshKey={refreshKey} />
         )}
         {activeTab === "summary" && (
-          <AccountBookSummaryTab dateFrom={dateFrom} dateTo={dateTo} />
+          <AccountBookSummaryTab dateFrom={dateFrom} dateTo={dateTo} refreshKey={refreshKey} />
         )}
       </motion.div>
     </motion.div>

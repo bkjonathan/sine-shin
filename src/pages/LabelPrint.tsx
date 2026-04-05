@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getOrderById, getOrders } from "../api/orderApi";
@@ -12,6 +12,7 @@ import {
   IconPlus,
   IconPrinter,
   IconSearch,
+  IconRefresh,
   IconTrash,
   IconUsers,
 } from "../components/icons";
@@ -187,27 +188,27 @@ export default function LabelPrint() {
     [queue],
   );
 
-  useEffect(() => {
-    const loadCatalog = async () => {
-      try {
-        setIsLoading(true);
-        const [orderData, customerData, shopData] = await Promise.all([
-          getOrders(),
-          getCustomers(),
-          getShopSettings(),
-        ]);
-        setOrders(orderData);
-        setCustomers(customerData);
-        setShopSettings(shopData);
-      } catch (error) {
-        console.error("Failed to load label print data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void loadCatalog();
+  const loadCatalog = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [orderData, customerData, shopData] = await Promise.all([
+        getOrders(),
+        getCustomers(),
+        getShopSettings(),
+      ]);
+      setOrders(orderData);
+      setCustomers(customerData);
+      setShopSettings(shopData);
+    } catch (error) {
+      console.error("Failed to load label print data:", error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadCatalog();
+  }, [loadCatalog]);
 
   const upsertQueueItem = (item: ParcelPrintQueueItem) => {
     setQueue((current) => {
@@ -392,6 +393,15 @@ export default function LabelPrint() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => loadCatalog()}
+              disabled={isLoading}
+              className="px-4 py-2 text-sm flex items-center gap-2"
+            >
+              <IconRefresh size={16} strokeWidth={2} className={isLoading ? "animate-spin" : ""} />
+              {t("common.reload_data")}
+            </Button>
             <Button
               variant="ghost"
               onClick={() => setQueue([])}

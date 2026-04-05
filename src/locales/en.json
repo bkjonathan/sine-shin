@@ -827,7 +827,8 @@
     "per_page": "Per page",
     "previous": "Previous",
     "next": "Next",
-    "actions": "Actions"
+    "actions": "Actions",
+    "reload_data": "Reload"
   },
   "help": {
     "back": "Go Back",

@@ -31,6 +31,7 @@ export interface UseDashboardDataResult {
   setStatusFilter: (value: DashboardStatus) => void;
   closeModal: () => void;
   openDetailsFor: (type: DashboardRecordType) => Promise<void>;
+  reload: () => void;
 }
 
 const EMPTY_DETAILS: DashboardDetailRecord[] = [];
@@ -120,6 +121,10 @@ export function useDashboardData(
     void loadDashboard(filter, statusFilter);
   }, [filter, loadDashboard, statusFilter]);
 
+  const reload = useCallback(() => {
+    void loadDashboard(filter, statusFilter);
+  }, [filter, loadDashboard, statusFilter]);
+
   const closeModal = useCallback(() => {
     setModalType(null);
     setDetailRecords(EMPTY_DETAILS);
@@ -169,5 +174,6 @@ export function useDashboardData(
     setStatusFilter,
     closeModal,
     openDetailsFor,
+    reload,
   };
 }
