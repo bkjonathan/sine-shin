@@ -11,12 +11,16 @@ interface OnboardingStepDetailsProps {
   isTestingPostgresql: boolean;
   postgresqlConnectionOk: boolean | null;
   postgresqlConnectionMessage: string;
+  /** True when the connected PostgreSQL database already has shop + user data. */
+  postgresqlAlreadyOnboarded?: boolean | null;
   onShopNameChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
   onAddressChange: (value: string) => void;
   onDatabaseKindChange: (value: DatabaseKind) => void;
   onPostgresqlUrlChange: (value: string) => void;
   onTestPostgresqlConnection: () => void;
+  /** Called when the user chooses to use an already-configured PostgreSQL database. */
+  onConnectExistingPostgresql?: () => void;
 }
 
 export default function OnboardingStepDetails({
@@ -28,12 +32,14 @@ export default function OnboardingStepDetails({
   isTestingPostgresql,
   postgresqlConnectionOk,
   postgresqlConnectionMessage,
+  postgresqlAlreadyOnboarded,
   onShopNameChange,
   onPhoneChange,
   onAddressChange,
   onDatabaseKindChange,
   onPostgresqlUrlChange,
   onTestPostgresqlConnection,
+  onConnectExistingPostgresql,
 }: OnboardingStepDetailsProps) {
   const { t } = useTranslation();
 
@@ -139,6 +145,28 @@ export default function OnboardingStepDetails({
                   }`}
                 >
                   {postgresqlConnectionMessage}
+                </div>
+              )}
+
+              {postgresqlAlreadyOnboarded === true && (
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-3 space-y-2">
+                  <p className="text-xs text-blue-300 leading-relaxed">
+                    {t(
+                      "auth.onboarding.database_already_onboarded",
+                      "This database already has shop and user data. You can connect to it directly — no need to set up again.",
+                    )}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full px-4 py-2 text-xs font-semibold border border-blue-500/30 text-blue-300 hover:bg-blue-500/10"
+                    onClick={onConnectExistingPostgresql}
+                  >
+                    {t(
+                      "auth.onboarding.database_connect_existing",
+                      "Connect to Existing Database",
+                    )}
+                  </Button>
                 </div>
               )}
             </>

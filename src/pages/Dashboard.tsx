@@ -2,8 +2,6 @@ import { useCallback } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "../components/ui";
-import { IconRefresh } from "../components/icons";
 import DashboardFiltersToolbar from "../components/pages/dashboard/DashboardFiltersToolbar";
 import DashboardHeader from "../components/pages/dashboard/DashboardHeader";
 import DashboardQuickActions from "../components/pages/dashboard/DashboardQuickActions";
@@ -91,21 +89,14 @@ export default function Dashboard() {
       animate="show"
       className="max-w-5xl mx-auto"
     >
-      <motion.div variants={pageItemVariants} className="flex items-center justify-between">
+      <motion.div variants={pageItemVariants}>
         <DashboardHeader
           logoSrc={logoSrc}
           shopName={shop?.shop_name ?? null}
           onLogout={handleLogout}
+          onReload={reload}
+          loading={loading}
         />
-        <Button
-          onClick={reload}
-          disabled={loading}
-          variant="ghost"
-          className="px-4 py-2 text-sm flex items-center gap-2"
-        >
-          <IconRefresh size={16} strokeWidth={2} className={loading ? "animate-spin" : ""} />
-          {t("common.reload_data")}
-        </Button>
       </motion.div>
 
       <motion.div variants={pageItemVariants} className="relative z-20">
@@ -125,7 +116,7 @@ export default function Dashboard() {
         />
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
         <motion.div variants={pageItemVariants} className="lg:col-span-2">
           <DashboardRecentActivity
             orders={recentOrders}

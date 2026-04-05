@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, EntityTrait, FromQueryResult, PaginatorTrait, Set, Statement,
+    ActiveModelTrait, ConnectionTrait, EntityTrait, FromQueryResult, PaginatorTrait, Set,
 };
 use tracing::{info, instrument};
 use uuid::Uuid;
 
+use crate::db::sql_statement_with_values;
 use crate::entities::{shop_settings, users};
 use crate::error::{AppError, AppResult};
 use crate::models::User;
@@ -38,7 +39,7 @@ pub async fn login_user(state: Arc<AppState>, name: String, password: String) ->
     let db = state.db.lock().await.clone();
     let backend = db.get_database_backend();
 
-    let user = User::find_by_statement(Statement::from_sql_and_values(
+    let user = User::find_by_statement(sql_statement_with_values(
         backend,
         "SELECT id, name, password_hash, role, created_at FROM users WHERE name = ?",
         [name.into()],

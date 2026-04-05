@@ -8,7 +8,11 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tracing::instrument;
 
+use sea_orm::{EntityTrait, PaginatorTrait};
+
+use crate::crypto;
 use crate::db;
+use crate::entities::{shop_settings, users};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -247,7 +251,14 @@ pub fn get_app_settings(app: AppHandle) -> AppResult<AppSettings> {
     }
 
     let settings_content = fs::read_to_string(&settings_path)?;
-    let settings: AppSettings = serde_json::from_str(&settings_content).unwrap_or_default();
+    let mut settings: AppSettings = serde_json::from_str(&settings_content).unwrap_or_default();
+
+    // Decrypt sensitive fields — plain-text values (from before encryption was added) pass through unchanged
+    settings.aws_access_key_id = crypto::decrypt_value(&app_data_dir, &settings.aws_access_key_id);
+    settings.aws_secret_access_key =
+        crypto::decrypt_value(&app_data_dir, &settings.aws_secret_access_key);
+    settings.postgresql_url = crypto::decrypt_value(&app_data_dir, &settings.postgresql_url);
+
     Ok(settings)
 }
 
@@ -257,11 +268,23 @@ pub fn update_app_settings(app: AppHandle, settings: AppSettings) -> AppResult<(
     let app_data_dir = app.path().app_data_dir()?;
     let settings_path = app_data_dir.join("settings.json");
 
-    let sanitized_settings = AppSettings {
-        postgresql_url: settings.postgresql_url.trim().to_string(),
+    // Encrypt sensitive fields before persisting to disk
+    let encrypted_settings = AppSettings {
+        postgresql_url: crypto::encrypt_value(
+            &app_data_dir,
+            settings.postgresql_url.trim(),
+        ),
+        aws_access_key_id: crypto::encrypt_value(
+            &app_data_dir,
+            settings.aws_access_key_id.trim(),
+        ),
+        aws_secret_access_key: crypto::encrypt_value(
+            &app_data_dir,
+            settings.aws_secret_access_key.trim(),
+        ),
         ..settings
     };
-    let settings_json = serde_json::to_string_pretty(&sanitized_settings)?;
+    let settings_json = serde_json::to_string_pretty(&encrypted_settings)?;
     fs::write(settings_path, settings_json)?;
     Ok(())
 }
@@ -330,6 +353,23 @@ pub async fn test_postgresql_connection(url: String) -> AppResult<DatabaseConnec
         connected: true,
         message: "PostgreSQL connection and schema initialization successful.".to_string(),
     })
+}
+
+/// Connects to the given PostgreSQL URL and checks whether onboarding data already exists.
+/// Returns `true` when both `shop_settings` and `users` have at least one row — meaning
+/// a previous setup was done on this database and the user should connect directly rather
+/// than go through the full onboarding wizard.
+#[instrument(skip(url))]
+pub async fn check_postgresql_already_onboarded(url: String) -> AppResult<bool> {
+    let normalized_url = url.trim().to_string();
+    if normalized_url.is_empty() {
+        return Err(AppError::invalid_input("PostgreSQL URL is required."));
+    }
+
+    let db = db::connect_postgresql_database(&normalized_url).await?;
+    let shop_count = shop_settings::Entity::find().count(&db).await?;
+    let user_count = users::Entity::find().count(&db).await?;
+    Ok(shop_count > 0 && user_count > 0)
 }
 
 #[instrument(skip(input))]

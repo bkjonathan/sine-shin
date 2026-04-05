@@ -48,6 +48,17 @@ export const testPostgresqlConnection = async (
   return invoke("test_postgresql_connection", { url });
 };
 
+/**
+ * Checks whether the given PostgreSQL URL points to a database that already has
+ * onboarding data (shop + user). When true the onboarding wizard should offer
+ * "Connect to Existing Database" instead of the full setup flow.
+ */
+export const checkPostgresqlAlreadyOnboarded = async (
+  url: string,
+): Promise<boolean> => {
+  return invoke("check_postgresql_already_onboarded", { url });
+};
+
 export const updateAppLanguage = async (language: string): Promise<void> => {
   const settings = await getAppSettings();
   await updateAppSettings({ ...settings, language });

@@ -1,4 +1,5 @@
 mod commands;
+mod crypto;
 mod db;
 mod entities;
 mod error;
@@ -37,8 +38,9 @@ use crate::commands::order::{
     update_order,
 };
 use crate::commands::settings::{
-    configure_database, get_app_settings, get_aws_s3_connection_status, test_aws_s3_connection,
-    test_postgresql_connection, update_app_settings, AppSettings,
+    check_postgresql_already_onboarded, configure_database, get_app_settings,
+    get_aws_s3_connection_status, test_aws_s3_connection, test_postgresql_connection,
+    update_app_settings,
 };
 use crate::commands::shop::{
     get_shop_settings, save_shop_setup, update_shop_settings, upload_shop_logo_to_s3,
@@ -161,19 +163,8 @@ pub fn run() {
                 .expect("Failed to get app data dir");
             fs::create_dir_all(&app_data_dir).expect("Failed to create app data dir");
 
-            // Initialize settings.json if it doesn't exist
-            let settings_path = app_data_dir.join("settings.json");
-            if !settings_path.exists() {
-                let default_settings = AppSettings::default();
-                let settings_json = serde_json::to_string_pretty(&default_settings)
-                    .expect("Failed to serialize default settings");
-                fs::write(&settings_path, settings_json).expect("Failed to write settings.json");
-            }
-
-            let settings: AppSettings = serde_json::from_str(
-                &fs::read_to_string(&settings_path).expect("Failed to read settings.json"),
-            )
-            .unwrap_or_default();
+            let settings = crate::services::settings::get_app_settings(app.handle().clone())
+                .expect("Failed to load settings");
 
             let normalized_postgresql_url = settings.normalized_postgresql_url();
             let app_handle = app.handle().clone();
@@ -251,6 +242,7 @@ pub fn run() {
             get_app_settings,
             update_app_settings,
             configure_database,
+            check_postgresql_already_onboarded,
             test_aws_s3_connection,
             test_postgresql_connection,
             get_aws_s3_connection_status,

@@ -23,13 +23,18 @@ export default function DashboardFiltersToolbar({
   const { t } = useTranslation();
 
   return (
-    <div className="glass-panel p-3.5 mb-4 space-y-2.5 relative z-20">
-      <DashboardDateFilter value={filter} onChange={onFilterChange} />
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider shrink-0">
+    <div className="mb-4 space-y-2 relative z-20">
+      {/* Date filter row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <DashboardDateFilter value={filter} onChange={onFilterChange} />
+      </div>
+
+      {/* Status filter row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] text-text-muted font-semibold uppercase tracking-[0.12em] shrink-0">
           {t("dashboard.order_status")}
         </span>
-        <div className="w-px h-4 bg-glass-border" />
+        <div className="w-px h-3.5 bg-glass-border" />
         <DashboardStatusFilter value={statusFilter} onChange={onStatusFilterChange} />
       </div>
     </div>

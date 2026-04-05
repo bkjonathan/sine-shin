@@ -18,11 +18,16 @@ import {
   getAwsS3ConnectionStatus,
   testAwsS3Connection,
 } from "../../../api/shopApi";
+import {
+  configureDatabase,
+  testPostgresqlConnection,
+} from "../../../api/onboardingApi";
 import { Button, Input, Select } from "../../ui";
 import { useSound } from "../../../context/SoundContext";
 import { RESET_APP_CODE } from "../../../cheapcode";
 import {
   IconCloud,
+  IconDatabase,
   IconDownload,
   IconRefresh,
   IconRotateCcw,
@@ -233,8 +238,76 @@ export default function SettingsDataPanel() {
     aws_bucket_name,
     imagekit_base_url,
     database_kind,
+    postgresql_url: savedPostgresqlUrl,
   } = useAppSettings();
   const isSqliteDatabase = database_kind === "sqlite";
+
+  const [pgUrl, setPgUrl] = useState(savedPostgresqlUrl ?? "");
+  const [testingPg, setTestingPg] = useState(false);
+  const [connectingPg, setConnectingPg] = useState(false);
+  const [pgSuccessMsg, setPgSuccessMsg] = useState<string | null>(null);
+  const [pgErrorMsg, setPgErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPgUrl(savedPostgresqlUrl ?? "");
+  }, [savedPostgresqlUrl]);
+
+  const handleTestPgConnection = async () => {
+    if (!pgUrl.trim()) {
+      setPgErrorMsg(t("settings.data_mgmt.pg.url_required"));
+      setPgSuccessMsg(null);
+      playSound("error");
+      return;
+    }
+    try {
+      setTestingPg(true);
+      setPgErrorMsg(null);
+      setPgSuccessMsg(null);
+      const status = await testPostgresqlConnection(pgUrl.trim());
+      if (status.connected) {
+        setPgSuccessMsg(t("settings.data_mgmt.pg.test_ok"));
+        playSound("success");
+      } else {
+        setPgErrorMsg(status.message || t("settings.data_mgmt.pg.test_fail"));
+        playSound("error");
+      }
+    } catch (err) {
+      setPgErrorMsg(String(err));
+      playSound("error");
+    } finally {
+      setTestingPg(false);
+    }
+  };
+
+  const handleSwitchDatabase = async (kind: "sqlite" | "postgresql") => {
+    if (kind === "postgresql" && !pgUrl.trim()) {
+      setPgErrorMsg(t("settings.data_mgmt.pg.url_required"));
+      setPgSuccessMsg(null);
+      playSound("error");
+      return;
+    }
+    try {
+      setConnectingPg(true);
+      setPgErrorMsg(null);
+      setPgSuccessMsg(null);
+      await configureDatabase(kind, kind === "postgresql" ? pgUrl.trim() : undefined);
+      await updateSettings({
+        database_kind: kind,
+        postgresql_url: kind === "postgresql" ? pgUrl.trim() : "",
+      });
+      setPgSuccessMsg(
+        kind === "postgresql"
+          ? t("settings.data_mgmt.pg.switched_postgresql")
+          : t("settings.data_mgmt.pg.switched_sqlite"),
+      );
+      playSound("success");
+    } catch (err) {
+      setPgErrorMsg(String(err));
+      playSound("error");
+    } finally {
+      setConnectingPg(false);
+    }
+  };
 
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveEmail, setDriveEmail] = useState<string | null>(null);
@@ -779,6 +852,105 @@ export default function SettingsDataPanel() {
           </div>
           </div>
         )}
+
+        <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
+          <div className="flex items-start gap-4">
+            <div className="p-2 rounded-lg bg-violet-500/10 text-violet-500">
+              <IconDatabase size={20} strokeWidth={2} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-text-primary mb-1">
+                {t("settings.data_mgmt.pg.title")}
+              </h3>
+              <p className="text-xs text-text-muted mb-4">
+                {t("settings.data_mgmt.pg.subtitle")}
+              </p>
+
+              <div className="mb-4 p-3 rounded-lg bg-glass-white-hover border border-glass-border flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    {isSqliteDatabase
+                      ? t("settings.data_mgmt.pg.active_sqlite")
+                      : t("settings.data_mgmt.pg.active_postgresql")}
+                  </p>
+                  {!isSqliteDatabase && savedPostgresqlUrl && (
+                    <p className="text-xs text-text-muted mt-0.5 font-mono truncate max-w-xs">
+                      {savedPostgresqlUrl}
+                    </p>
+                  )}
+                </div>
+                {!isSqliteDatabase && (
+                  <Button
+                    onClick={() => handleSwitchDatabase("sqlite")}
+                    variant="ghost"
+                    className="text-xs py-1.5 px-3 shrink-0"
+                    loading={connectingPg}
+                    loadingText={t("settings.data_mgmt.pg.switching")}
+                  >
+                    {t("settings.data_mgmt.pg.switch_sqlite")}
+                  </Button>
+                )}
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-xs text-text-muted mb-1.5">
+                  {t("settings.data_mgmt.pg.url_label")}
+                </label>
+                <Input
+                  type="text"
+                  value={pgUrl}
+                  onChange={(e) => {
+                    setPgUrl(e.target.value);
+                    setPgErrorMsg(null);
+                    setPgSuccessMsg(null);
+                  }}
+                  placeholder={t("settings.data_mgmt.pg.url_placeholder")}
+                  className="w-full input-liquid font-mono text-xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                {isSqliteDatabase ? (
+                  <Button
+                    onClick={() => handleSwitchDatabase("postgresql")}
+                    variant="primary"
+                    className="px-4 py-2 text-xs font-semibold"
+                    loading={connectingPg}
+                    loadingText={t("settings.data_mgmt.pg.switching")}
+                  >
+                    {t("settings.data_mgmt.pg.switch_postgresql")}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => handleSwitchDatabase("postgresql")}
+                    variant="ghost"
+                    className="px-4 py-2 text-xs font-semibold"
+                    loading={connectingPg}
+                    loadingText={t("settings.data_mgmt.pg.switching")}
+                  >
+                    {t("settings.data_mgmt.pg.update_url")}
+                  </Button>
+                )}
+                <Button
+                  onClick={handleTestPgConnection}
+                  variant="ghost"
+                  className="px-4 py-2 text-xs font-semibold"
+                  loading={testingPg}
+                  loadingText={t("settings.data_mgmt.pg.testing")}
+                >
+                  {t("settings.data_mgmt.pg.test_connection")}
+                </Button>
+              </div>
+
+              {pgSuccessMsg && (
+                <p className="text-xs text-green-500 mt-3">{pgSuccessMsg}</p>
+              )}
+              {pgErrorMsg && (
+                <p className="text-xs text-red-500 mt-3">{pgErrorMsg}</p>
+              )}
+            </div>
+          </div>
+        </div>
 
         <div className="p-4 rounded-xl border border-glass-border bg-glass-white">
           <div className="flex items-start gap-4">

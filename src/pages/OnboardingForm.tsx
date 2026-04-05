@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { loginUser, registerUser } from "../api/authApi";
 import {
+  checkPostgresqlAlreadyOnboarded,
   configureDatabase,
   restoreDatabase,
   saveShopSetup,
@@ -57,6 +58,7 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
   const [postgresqlConnectionOk, setPostgresqlConnectionOk] = useState<boolean | null>(null);
   const [postgresqlConnectionMessage, setPostgresqlConnectionMessage] = useState("");
   const [testedPostgresqlUrl, setTestedPostgresqlUrl] = useState("");
+  const [postgresqlAlreadyOnboarded, setPostgresqlAlreadyOnboarded] = useState<boolean | null>(null);
   const [logoPath, setLogoPath] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
 
@@ -199,6 +201,7 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
     setPostgresqlConnectionOk(null);
     setPostgresqlConnectionMessage("");
     setTestedPostgresqlUrl("");
+    setPostgresqlAlreadyOnboarded(null);
   };
 
   const handleDatabaseKindChange = (value: DatabaseKind) => {
@@ -208,6 +211,7 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
       setPostgresqlConnectionOk(null);
       setPostgresqlConnectionMessage("");
       setTestedPostgresqlUrl("");
+      setPostgresqlAlreadyOnboarded(null);
     }
   };
 
@@ -231,6 +235,17 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
       setPostgresqlConnectionOk(result.connected);
       setPostgresqlConnectionMessage(result.message);
       setTestedPostgresqlUrl(trimmedUrl);
+
+      // After a successful connection, check if this DB already has onboarding data.
+      // If so, the user can connect directly instead of going through the full setup.
+      if (result.connected && window.__TAURI_INTERNALS__) {
+        try {
+          const alreadyOnboarded = await checkPostgresqlAlreadyOnboarded(trimmedUrl);
+          setPostgresqlAlreadyOnboarded(alreadyOnboarded);
+        } catch {
+          setPostgresqlAlreadyOnboarded(false);
+        }
+      }
     } catch (err) {
       const message =
         err instanceof Error
@@ -246,6 +261,28 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
       setTestedPostgresqlUrl("");
     } finally {
       setIsTestingPostgresql(false);
+    }
+  };
+
+  // Mirrors the SQLite "restore from file" flow: save the PostgreSQL connection to settings
+  // and reload the app. check_is_onboarded will find existing data and skip onboarding.
+  const handleConnectExistingPostgresql = async () => {
+    try {
+      setIsSubmitting(true);
+      setError("");
+      if (window.__TAURI_INTERNALS__) {
+        await configureDatabase("postgresql", postgresqlUrl);
+      }
+      window.location.reload();
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : t("auth.onboarding.error_failed");
+      setError(message);
+      setIsSubmitting(false);
     }
   };
 
@@ -361,12 +398,14 @@ export default function OnboardingForm({ onComplete }: OnboardingFormProps) {
           isTestingPostgresql={isTestingPostgresql}
           postgresqlConnectionOk={postgresqlConnectionOk}
           postgresqlConnectionMessage={postgresqlConnectionMessage}
+          postgresqlAlreadyOnboarded={postgresqlAlreadyOnboarded}
           onShopNameChange={setShopName}
           onPhoneChange={setPhone}
           onAddressChange={setAddress}
           onDatabaseKindChange={handleDatabaseKindChange}
           onPostgresqlUrlChange={handlePostgresqlUrlChange}
           onTestPostgresqlConnection={handleTestPostgresql}
+          onConnectExistingPostgresql={handleConnectExistingPostgresql}
         />
       );
     }

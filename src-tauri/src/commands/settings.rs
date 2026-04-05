@@ -51,6 +51,15 @@ pub async fn test_postgresql_connection(url: String) -> Result<DatabaseConnectio
     settings::test_postgresql_connection(url).await
 }
 
+/// Checks if the given PostgreSQL URL points to a database that already has onboarding data
+/// (shop settings + at least one user). When true the frontend can skip the full setup wizard
+/// and connect directly, mirroring the SQLite "restore from file" flow.
+#[tauri::command]
+#[instrument(skip(url))]
+pub async fn check_postgresql_already_onboarded(url: String) -> Result<bool, AppError> {
+    settings::check_postgresql_already_onboarded(url).await
+}
+
 /// Switches the active application database and persists the selection.
 #[tauri::command]
 #[instrument(skip(app, state, input))]
